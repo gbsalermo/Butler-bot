@@ -8,6 +8,13 @@
 - Butler já possui scheduler proativo e `chat_id` persistido.
 - Prioridade atual continua sendo funcionalidade antes de suíte de testes.
 
+## Identidade do bot no Telegram
+
+- Nome: `Butler`
+- Username atual: `@ButlerSal_BOT`
+
+Usar esses dados como referência nas próximas etapas, documentação e futura hospedagem.
+
 ## Menu principal
 
 O primeiro item é propositalmente:
