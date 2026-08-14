@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from telegram import ReplyKeyboardMarkup, Update
@@ -168,7 +168,6 @@ async def _save_quick(update: Update, context: ContextTypes.DEFAULT_TYPE, due_da
 
 async def quick_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data = context.user_data.pop("quick_item", None)
-    context.user_data.pop("quick_grocery", None)
     kind = (data or {}).get("kind")
     await update.message.reply_text(
         "Cancelei. Menos burocracia, pelo menos.",
@@ -179,7 +178,9 @@ async def quick_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 async def grocery_quick_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "O que está faltando?\n\nPode mandar só `sal`. Se quiser quantidade, use `café | 2 pacotes`.",
+        "O que está faltando?\n\n"
+        "Pode mandar `sal`, `sal, açúcar, café` ou até `falta sal, açúcar, café`. "
+        "Se quiser quantidade de um item, use `café | 2 pacotes`.",
         parse_mode="Markdown",
         reply_markup=CANCEL_KEYBOARD,
     )
@@ -194,15 +195,40 @@ async def grocery_quick_save(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Me diga o que está faltando.", reply_markup=CANCEL_KEYBOARD)
         return GROCERY_QUICK
 
-    parts = [part.strip() for part in text.split("|", 1)]
-    name = parts[0]
-    quantity = parts[1] if len(parts) == 2 and parts[1] else None
-    add_grocery_item(name, quantity, None)
-    extra = f" ({quantity})" if quantity else ""
-    await update.message.reply_text(
-        f"🛒 Anotado: {name}{extra}. Quando estiver no mercado, eu lembro.",
-        reply_markup=COTIDIANO_KEYBOARD,
-    )
+    lowered = text.lower()
+    if lowered.startswith("falta "):
+        text = text[6:].strip()
+    elif lowered.startswith("faltam "):
+        text = text[7:].strip()
+
+    saved: list[str] = []
+
+    # Quantidade opcional para um único item: "café | 2 pacotes".
+    if "|" in text:
+        parts = [part.strip() for part in text.split("|", 1)]
+        name = parts[0]
+        quantity = parts[1] if len(parts) == 2 and parts[1] else None
+        if not name:
+            await update.message.reply_text("Me diga o nome do item antes da quantidade.")
+            return GROCERY_QUICK
+        add_grocery_item(name, quantity, None)
+        saved.append(f"{name} ({quantity})" if quantity else name)
+    else:
+        # Sem quantidade, vírgula ou ponto e vírgula vira lista rápida de itens.
+        names = [part.strip() for part in text.replace(";", ",").split(",") if part.strip()]
+        if not names:
+            await update.message.reply_text("Me diga pelo menos um item.", reply_markup=CANCEL_KEYBOARD)
+            return GROCERY_QUICK
+        for name in names:
+            add_grocery_item(name, None, None)
+            saved.append(name)
+
+    if len(saved) == 1:
+        response = f"🛒 Anotado: {saved[0]}. Quando estiver no mercado, eu lembro."
+    else:
+        response = "🛒 Anotado: " + ", ".join(saved) + ". Pronto, antes que a memória resolva sabotar a feira de novo."
+
+    await update.message.reply_text(response, reply_markup=COTIDIANO_KEYBOARD)
     return ConversationHandler.END
 
 
