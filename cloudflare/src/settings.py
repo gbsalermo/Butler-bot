@@ -1,7 +1,9 @@
 # Configuração pública da implantação do Butler.
 # O TELEGRAM_BOT_TOKEN continua sendo o único secret obrigatório no Worker.
 
-OWNER_CHAT_ID = 0  # Substituir pelo chat_id numérico do proprietário antes do deploy.
+# Preencher com o chat_id real do proprietário antes de ativar o webhook em produção.
+# Não é secret; fica público por decisão de projeto.
+OWNER_CHAT_ID: int | None = None
 OWNER_PREFERRED_NAME = "Gabriel"
 TIMEZONE_NAME = "America/Bahia"
 
