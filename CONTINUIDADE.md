@@ -3,18 +3,20 @@
 ## Estado atual
 
 - Desenvolvimento concentrado na `main`.
-- Stack: Python, `python-telegram-bot[job-queue]`, SQLite, `python-dotenv` e `pypdf`.
-- Execução local via polling; hospedagem planejada em Cloudflare com persistência migrada para D1.
+- Stack local: Python, `python-telegram-bot[job-queue]`, SQLite, `python-dotenv` e `pypdf`.
+- Execução atual via polling; próxima grande etapa = preparação/migração para Cloudflare + D1.
 - Bot pessoal: `Butler` / `@ButlerSal_BOT`.
-- Prioridade: funcionalidade e experiência de uso antes de suíte de testes ampla.
+- Existe também `src.main_generic`, multiusuário e isolado por `chat_id`.
 
 ## Filosofia
 
-O Butler deve parecer um assistente presente, provocativo e útil, não um conjunto de formulários. O menu prioriza ações rápidas; histórico e comportamento devem refletir fatos realmente registrados.
+O Butler deve parecer um assistente presente, provocativo e útil, não um conjunto de formulários. O menu continua disponível, mas texto natural deve ser o caminho mais confortável para ações comuns. Toda personalidade contextual deve nascer de fatos reais registrados; quando houver ambiguidade, confirmar em vez de inventar.
 
 ## 👥 Multiusuário por chat_id
 
-A versão genérica usa um único bot e isola dados por `chat_id`. No rolling local cada chat usa `data/butler_generic_users/<chat_id>.db`. Na Cloudflare, manter a mesma regra de identidade e trocar o armazenamento por D1/persistência apropriada.
+A versão genérica usa um único bot e isola dados por `chat_id`. No rolling local cada chat usa `data/butler_generic_users/<chat_id>.db`; `user_scope.py` seleciona o banco antes de mensagens e callbacks. Na Cloudflare, preservar essa regra e migrar persistência para D1/armazenamento persistente apropriado.
+
+A inicialização por chat agora inclui matérias, tarefas, cotidiano, finanças e eventos de linguagem natural.
 
 ## ⚡ Menu principal
 
@@ -26,136 +28,159 @@ A versão genérica usa um único bot e isola dados por `chat_id`. No rolling lo
 - `🏠 Cotidiano`
 - `🏋️ Musculação`
 
-Pendência não é tipo próprio: tarefa vencida e não concluída vira pendência automaticamente.
+Pendência não é tipo: tarefa vencida e não concluída vira pendência automaticamente.
 
 ## 🗓️ Agenda e histórico
 
-`src/assistant_views.py` oferece:
+`🗓️ Hoje` oferece amanhã, outra data, próximos 7 dias e histórico. `src/history_handlers.py` permite histórico diário e histórico de tarefas, separando pendentes, concluídas e canceladas. Remover tarefa/compromisso arquiva como `cancelado` em vez de apagar.
 
-- `⏭️ Amanhã`;
-- `📆 Outra data`;
-- `🗓️ Próximos 7 dias`;
-- `📚 Histórico`.
+## 📥 Grade
 
-Novo arquivo: `src/history_handlers.py`.
+Aceita PDF com texto pesquisável e `.txt`, sem OCR/Tesseract. Códigos SIGAA são traduzidos em blocos completos (`M23=08–10`, `M45=10–12`, `T23=14–16`, `T2345=14–18`). Correções manuais têm prioridade.
 
-Dentro de Histórico:
+## 🕴️ Personalidade + comportamento
 
-- `📖 Histórico diário`: aceita `ontem`, `hoje`, `DD/MM` ou `DD/MM/AAAA` e reconstrói aulas previstas, tarefas, compromissos, rotinas registradas e treino registrado naquele dia;
-- `🗂️ Histórico de tarefas`: separa pendentes, concluídas e canceladas.
+- `personality.py` + `behavior_engine.py` usam adiamentos, atrasos, streaks, faltas e evolução de carga.
+- sarcasmo é provocativo sem humilhar;
+- emojis aparecem com moderação;
+- Day-off/contextos sensíveis desligam cobrança.
 
-Aulas históricas são mostradas como **previstas**, nunca como presença confirmada sem registro específico.
+`natural_events` registra eventos úteis para personalidade. Ex.: avisos de atraso. A primeira ocorrência não é tratada como padrão; reincidências permitem provocações baseadas no histórico real.
 
-### Cancelamento de tarefas
+## ☀️ Resumo matinal + semanal
 
-`daily_items` agora possui `cancelled_at`.
+Resumo matinal padrão 07:30 (`BUTLER_MORNING_SUMMARY_TIME`): aulas com horário/local, tarefas, compromissos, academia quando aplicável, mercado e pendências do dia anterior. Não há fechamento automático noturno. Fechamento semanal permanece domingo 20:00 por padrão.
 
-`Remover tarefa/compromisso` deixa de apagar fisicamente e passa a arquivar com `status = 'cancelado'`. Isso preserva histórico daqui para frente. Itens apagados antes desta mudança não podem ser reconstruídos.
+## 🔥 Sequências
 
-## ⚡ Captura rápida
+`🎯 Metas → 🔥 Sequências` mostra streak atual, recorde, total e últimos 7 dias para inglês, programação, água, alimentação e musculação. Usa `goal_progress`, `routine_logs` e, no Butler pessoal, treinos realmente concluídos.
 
-Tarefa/compromisso: título → Hoje/Outro dia/Sem data → horário → salvar. Datas/horas passadas são rejeitadas. Item faltando aceita vários itens e quantidade opcional via `item | quantidade`.
+## 💰 Finanças simples
 
-## 📥 Importação da grade
+Arquivos: `finance_store.py` e `finance_handlers.py`.
 
-Aceita PDF com texto pesquisável e `.txt`, sem OCR. Códigos SIGAA são traduzidos em blocos de horas completas; correções manuais têm prioridade.
+Escopo propositalmente pequeno:
 
-## 🕴️ Personality + Behavior Engine
+- entrada/saída;
+- categorias;
+- relatório mensal;
+- comparação simples com mês anterior;
+- limites predefinidos e alertas de excesso.
+
+Não adicionar ainda cartões, parcelas, contas bancárias, investimentos ou orçamento complexo. O Butler deixa claro que relatório só é confiável conforme o usuário registra movimentos.
+
+## 🗣️ Integração natural por texto — concluída v1
 
 Arquivos principais:
 
-- `src/personality.py`;
-- `src/behavior_engine.py`;
-- `src/behavior_handlers.py`;
-- `src/context_engine.py`;
-- `src/scheduler.py`.
+- `src/natural_language.py`: interpretação determinística de intenção/data/hora;
+- `src/natural_handlers.py`: executa ações usando os stores existentes;
+- `src/natural_store.py`: eventos comportamentais auxiliares.
 
-Sarcasmo contextual nasce de dados reais: adiamentos, atraso, streaks, faltas e evolução de carga. Emojis aparecem com moderação. Day-off e contextos sensíveis desligam cobrança/sarcasmo.
+### Princípios
 
-## 🔥 Sequências simples de metas
+1. ação direta quando intenção/alvo são claros;
+2. confirmação curta quando existem vários candidatos;
+3. nunca inventar presença, compromisso, tarefa, gasto ou treino;
+4. datas/horas passadas continuam bloqueadas;
+5. linguagem natural não substitui os stores: apenas traduz fala para as mesmas regras de negócio;
+6. sem dependência de LLM/API externa nessa etapa, importante para simplicidade do deploy.
 
-Novo arquivo: `src/streak_engine.py`.
+### Frases cobertas
 
-Dentro de `🎯 Metas` existe `🔥 Sequências`.
+Criação:
 
-O objetivo é visual e leve, no estilo Duolingo: mostrar progresso sem transformar o Butler em planilha de desempenho.
+- `Butler, amanhã tenho dentista às 15h`;
+- `sexta tenho reunião 10h`;
+- `dentista amanhã 15h`;
+- `me lembra de comprar café`;
+- `amanhã preciso entregar o relatório às 18h`.
 
-Categorias acompanhadas por padrão:
+Agenda/pendências:
 
-- 🇬🇧 Inglês;
-- 💻 Programação;
-- 💧 Água;
-- 🥗 Alimentação;
-- 🏋️ Musculação.
+- `o que tenho amanhã?`;
+- `o que tenho daqui a 3 dias?`;
+- `como está minha agenda sexta?`;
+- `quais tarefas estão atrasadas?`.
 
-Para cada categoria o Butler mostra:
+Mercado:
 
-- sequência atual;
-- melhor sequência;
-- total de dias registrados;
-- visão dos últimos 7 dias com `🟩` / `⬜`;
-- comentário curto conforme a constância.
+- `falta sal, açúcar e café`;
+- `bota café na lista de mercado`;
+- `o que falta em casa?`;
+- `comprei o café` (marca comprado, com confirmação se ambíguo).
 
-Os streaks usam registros reais já existentes:
+Tarefas:
 
-- `goal_progress` para metas;
-- `routine_logs` para rotinas;
-- no Butler pessoal, musculação usa dias realmente concluídos do Protocol Mass, evitando registrar o treino duas vezes.
+- `já fiz o relatório` / `terminei X` — busca tarefa pendente por similaridade e confirma quando necessário.
 
-Se o usuário não registrar nada no dia, não conta. O cálculo considera hoje ou ontem como ponto de continuidade para não zerar artificialmente a sequência logo pela manhã antes de o dia acontecer.
+Academia:
 
-## ☀️ Resumo automático da manhã
+- `hoje não vou treinar porque estou cansado`;
+- `não vai dar pra treinar hoje`.
 
-`src/summary_engine.py` gera resumo matinal por `chat_id`, padrão `07:30` (`BUTLER_MORNING_SUMMARY_TIME`).
+No Butler pessoal registra falta somente se `Começar os trabalhos` já ativou o protocolo.
 
-Inclui:
+Atraso:
 
-- aulas do dia com horário e local;
-- tarefas e compromissos;
-- treino na academia somente quando aplicável;
-- itens faltando;
-- resumo do dia anterior quando houver registros relevantes;
-- tarefas que ficaram pendentes de ontem.
+- `vou me atrasar para o dentista`;
+- `estou atrasado para a reunião`.
 
-Não há mais fechamento automático noturno, porque o dia pode continuar até tarde. O balanço do dia anterior é carregado para a manhã seguinte.
+O Butler encontra o compromisso, não altera o horário e registra `late_notice`. Reincidência muda o sarcasmo. Se houver mais de um compromisso plausível, pergunta qual.
 
-## 📊 Fechamento semanal
+Finanças:
 
-Continua automático no domingo às `20:00` por padrão:
+- `gastei 35 com lanche`;
+- `paguei 20 de uber`;
+- `recebi 540 de bolsa`;
+- `quanto gastei esse mês?` / `quanto sobrou?`.
 
-- `BUTLER_WEEKLY_SUMMARY_TIME=20:00`;
-- `BUTLER_WEEKLY_SUMMARY_WEEKDAY=6`.
+Categorias financeiras são inferidas somente para casos simples; desconhecido vira `outros`.
 
-Resume os últimos 7 dias: tarefas, compromissos, rotinas, pendências e academia quando o protocolo pessoal estiver ativo.
+### Follow-up natural
+
+Se a pessoa disser `tenho dentista amanhã` sem hora, o Butler mantém o contexto e pergunta apenas o que falta (`15h`). Esse contexto é temporário em `context.user_data`; reinício do processo não deve persistir uma conversa incompleta.
 
 ## 🏋️ Treino pessoal
 
-O Protocol Mass continua interno ao Butler pessoal, mas a linguagem para o usuário usa apenas **treino na academia**. O treino só entra em resumos depois de `🚀 Começar os trabalhos`.
+Protocol Mass permanece interno ao Butler pessoal. Linguagem externa usa “treino na academia”. Ele só aparece em resumos e aceita faltas depois de `🚀 Começar os trabalhos`.
 
-## Próxima sequência funcional
+## Sequência funcional concluída
 
 1. ✅ personalidade baseada em comportamento real;
-2. ✅ resumo diário automático matinal;
+2. ✅ resumo matinal automático;
 3. ✅ fechamento semanal;
-4. ✅ histórico diário + histórico de tarefas;
-5. ✅ metas com streak simples/visual;
-6. finanças persistentes;
-7. linguagem natural para criar/alterar ações.
+4. ✅ histórico diário/tarefas;
+5. ✅ streaks simples;
+6. ✅ finanças simples;
+7. ✅ integração natural v1.
 
-## Próximos testes
+## Próxima grande etapa
 
-1. registrar progresso em uma meta com categoria `inglês`, `programação`, `água` ou `alimentação` e abrir `🎯 Metas → 🔥 Sequências`;
-2. cumprir uma rotina dessas categorias e confirmar que o dia também conta no streak;
-3. no Butler pessoal, concluir treino e conferir musculação sem registro duplicado manual;
-4. validar sequência atual, recorde e últimos 7 dias;
-5. confirmar isolamento por `chat_id` na versão genérica;
-6. seguir para finanças persistentes.
+**Preparar produção Cloudflare.** Antes do deploy:
+
+1. revisar o que depende de polling/JobQueue e adaptar para o modelo do Cloudflare;
+2. migrar persistência SQLite para D1 sem quebrar isolamento por `chat_id`;
+3. definir webhook do Telegram;
+4. tratar scheduler/resumos/lembretes com mecanismo compatível com Cloudflare;
+5. revisar secrets/env;
+6. smoke test do fluxo pessoal e de dois `chat_id` genéricos.
+
+## Pente-fino recomendado antes da migração
+
+Testar manualmente pelo Telegram:
+
+- criação em ordem `amanhã tenho...` e `tenho... amanhã`;
+- horários `15h`, `15h30`, `15:30`;
+- data passada e horário passado;
+- compromisso sem hora + follow-up;
+- duas tarefas com nomes parecidos + `já fiz...`;
+- dois compromissos parecidos + `vou me atrasar...`;
+- mercado adicionar/listar/comprado;
+- falta de treino antes e depois de `Começar os trabalhos`;
+- gasto/entrada natural;
+- isolamento das mesmas frases em dois `chat_id`.
 
 ## Regra de continuidade
 
-Ao concluir nova etapa:
-
-1. atualizar este arquivo;
-2. atualizar README quando o fluxo público mudar significativamente;
-3. registrar decisões que afetem etapas futuras;
-4. deixar explícito o próximo passo técnico.
+Ao concluir nova etapa: atualizar este arquivo, atualizar README quando o fluxo público mudar e deixar explícito o próximo passo técnico.
