@@ -16,6 +16,7 @@ from src.behavior_handlers import register_behavior_handlers
 from src.bot_handlers import register_handlers
 from src.casual_handlers import register_casual_handlers
 from src.config import TELEGRAM_BOT_TOKEN, validate_config
+from src.history_handlers import register_history_handlers
 from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
 from src.lifestyle_handlers import register_lifestyle_handlers
@@ -51,6 +52,7 @@ def main() -> None:
     register_home_menu(application)
     register_academic_navigation(application)
     register_assistant_views(application)
+    register_history_handlers(application)
     register_behavior_handlers(application)
     register_quick_capture(application)
     register_lifestyle_handlers(application)
