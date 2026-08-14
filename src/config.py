@@ -8,6 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 BUTLER_TIMEZONE = os.getenv("BUTLER_TIMEZONE", "America/Bahia").strip()
+BUTLER_VARIANT = os.getenv("BUTLER_VARIANT", "personal").strip().lower()
 DATABASE_PATH = Path(os.getenv("DATABASE_PATH", "data/butler.db"))
 
 if not DATABASE_PATH.is_absolute():
