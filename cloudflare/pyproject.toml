@@ -2,13 +2,13 @@
 name = "butler-cloudflare-worker"
 version = "0.1.0"
 description = "Adapter do Butler Bot para Cloudflare Workers"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "pypdf>=5,<7",
-    "workers-runtime-sdk>=1.6.13",
 ]
 
 [dependency-groups]
 dev = [
-    "workers-py>=1.90.0,<2",
+    "workers-py>=1.9,<2",
+    "workers-runtime-sdk>=1.6.13",
 ]
