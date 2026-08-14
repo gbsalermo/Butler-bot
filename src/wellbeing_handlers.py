@@ -13,6 +13,7 @@ from src.assistant_state import (
     set_day_off,
 )
 from src.home_store import list_goals
+from src.streak_engine import streak_dashboard
 
 ROUTINE_NAME, ROUTINE_CATEGORY, ROUTINE_TIME, ROUTINE_DAYS, ROUTINE_REMINDER = range(300, 305)
 ROUTINE_COMPLETE = 306
@@ -31,7 +32,7 @@ ROUTINE_KEYBOARD = ReplyKeyboardMarkup(
 )
 GOAL_KEYBOARD = ReplyKeyboardMarkup(
     [["➕ Nova meta", "📋 Ver metas"], ["📈 Registrar progresso", "📊 Progresso das metas"],
-     ["⬅️ Voltar ao cotidiano"]], resize_keyboard=True
+     ["🔥 Sequências"], ["⬅️ Voltar ao cotidiano"]], resize_keyboard=True
 )
 
 WAKE_PHRASES = {
@@ -88,6 +89,10 @@ async def goals_plus(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         parse_mode="Markdown", reply_markup=GOAL_KEYBOARD,
     )
     raise ApplicationHandlerStop
+
+
+async def streaks_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(streak_dashboard(), parse_mode="Markdown", reply_markup=GOAL_KEYBOARD)
 
 
 async def routines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -244,6 +249,7 @@ def register_wellbeing_handlers(application) -> None:
     application.add_handler(MessageHandler(filters.Regex(r"^🧘 Rotinas$"), routines_menu), group=-4)
     application.add_handler(MessageHandler(filters.Regex(r"^📋 Ver rotinas$"), routines_list), group=-4)
     application.add_handler(MessageHandler(filters.Regex(r"^📊 Progresso das metas$"), goals_progress_view), group=-4)
+    application.add_handler(MessageHandler(filters.Regex(r"^🔥 Sequências$"), streaks_view), group=-4)
 
     routine_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(r"^➕ Nova rotina$"), routine_add_start)],
