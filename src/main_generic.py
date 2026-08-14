@@ -17,6 +17,7 @@ from src.history_handlers import register_history_handlers
 from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
 from src.lifestyle_handlers import register_lifestyle_handlers
+from src.natural_handlers import register_natural_handlers
 from src.onboarding import register_onboarding
 from src.personality_navigation import register_personality_navigation
 from src.quick_access import register_quick_access
@@ -31,6 +32,6 @@ def main():
     validate_config(); apply_layout_overrides()
     logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
     application=ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    register_user_scope(application); register_onboarding(application); register_schedule_import(application); register_wellbeing_handlers(application); register_quick_access(application); register_personality_navigation(application); register_finance_handlers(application); register_home_menu(application); register_academic_navigation(application); register_assistant_views(application); register_history_handlers(application); register_behavior_handlers(application); register_quick_capture(application); register_lifestyle_handlers(application); register_home_handlers(application); register_handlers(application); register_casual_handlers(application); register_scheduler(application)
+    register_user_scope(application); register_onboarding(application); register_schedule_import(application); register_wellbeing_handlers(application); register_quick_access(application); register_personality_navigation(application); register_finance_handlers(application); register_home_menu(application); register_academic_navigation(application); register_assistant_views(application); register_history_handlers(application); register_behavior_handlers(application); register_quick_capture(application); register_lifestyle_handlers(application); register_home_handlers(application); register_handlers(application); register_natural_handlers(application); register_casual_handlers(application); register_scheduler(application)
     print("Butler genérico iniciado em polling, com isolamento por chat_id."); application.run_polling(drop_pending_updates=True)
 if __name__ == "__main__": main()
