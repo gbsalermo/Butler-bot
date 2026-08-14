@@ -1,12 +1,11 @@
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 
-from src.config import DATABASE_PATH
+from src.user_scope import resolve_database_path
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(Path(DATABASE_PATH))
+    conn = sqlite3.connect(resolve_database_path())
     conn.row_factory = sqlite3.Row
     return conn
 
