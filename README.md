@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/butler-avatar.jpg" alt="Butler - mascote" width="420">
+  <img src="assets/butler.png" alt="Butler - mascote" width="420">
 </p>
 
 # Butler Bot
