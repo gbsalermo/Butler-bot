@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/butler-avatar.jpg" alt="Butler - mascote" width="420">
+</p>
+
 # Butler Bot
 
 Assistente pessoal via Telegram para organização acadêmica, tarefas, compromissos, pendências, casa, metas, musculação, autocuidado e finanças pessoais.
@@ -142,6 +146,8 @@ O módulo financeiro continua preparado para uma próxima frente. A direção in
 
 ```text
 Butler-bot/
+├── assets/
+│   └── butler-avatar.jpg
 ├── CONTINUIDADE.md
 ├── README.md
 ├── requirements.txt
