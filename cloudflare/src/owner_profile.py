@@ -24,7 +24,7 @@ DEFAULT_FINANCE_LIMITS = {
 
 
 def is_owner(chat_id: int) -> bool:
-    return OWNER_CHAT_ID > 0 and int(chat_id) == int(OWNER_CHAT_ID)
+    return OWNER_CHAT_ID is not None and int(chat_id) == int(OWNER_CHAT_ID)
 
 
 def preferred_name_for(chat_id: int, telegram_first_name: str | None = None) -> str:
