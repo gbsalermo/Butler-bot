@@ -2,6 +2,7 @@ import logging
 
 from telegram.ext import ApplicationBuilder
 
+from src.academic_navigation import register_academic_navigation
 from src.assistant_state import init_assistant_state
 from src.assistant_views import register_assistant_views
 from src.bot_handlers import register_handlers
@@ -33,6 +34,7 @@ def main() -> None:
 
     register_wellbeing_handlers(application)
     register_home_menu(application)
+    register_academic_navigation(application)
     register_assistant_views(application)
     register_lifestyle_handlers(application)
     register_home_handlers(application)
