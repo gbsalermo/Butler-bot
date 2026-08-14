@@ -1,24 +1,44 @@
-# Continuidade do desenvolvimento
+# Continuidade do desenvolvimento — Butler
 
-## Estado atual
+## 1. Estado do projeto antes da migração
 
-- Desenvolvimento concentrado na `main`.
-- Stack local: Python, `python-telegram-bot[job-queue]`, SQLite, `python-dotenv` e `pypdf`.
-- Execução atual via polling; próxima grande etapa = preparação/migração para Cloudflare + D1.
-- Bot pessoal: `Butler` / `@ButlerSal_BOT`.
-- Existe também `src.main_generic`, multiusuário e isolado por `chat_id`.
+O Butler encerrou a principal fase funcional do **rolling local**. O próximo trabalho grande não deve ser adicionar novos módulos, e sim transportar o comportamento atual para produção no Cloudflare sem regressões.
 
-## Filosofia
+Estado técnico atual:
 
-O Butler deve parecer um assistente presente, provocativo e útil, não um conjunto de formulários. O menu continua disponível, mas texto natural deve ser o caminho mais confortável para ações comuns. Toda personalidade contextual deve nascer de fatos reais registrados; quando houver ambiguidade, confirmar em vez de inventar.
+- desenvolvimento concentrado na `main`;
+- Python;
+- `python-telegram-bot[job-queue]`;
+- `python-dotenv`;
+- SQLite;
+- `pypdf` para PDFs textuais;
+- execução local por polling;
+- scheduler local via JobQueue;
+- Butler pessoal: `Butler` / `@ButlerSal_BOT`;
+- versão genérica em `src.main_generic`;
+- linguagem natural determinística, sem LLM/API externa;
+- próximo marco: **Cloudflare + webhook + D1/persistência compatível + scheduler compatível**.
 
-## 👥 Multiusuário por chat_id
+## 2. Filosofia consolidada
 
-A versão genérica usa um único bot e isola dados por `chat_id`. No rolling local cada chat usa `data/butler_generic_users/<chat_id>.db`; `user_scope.py` seleciona o banco antes de mensagens e callbacks. Na Cloudflare, preservar essa regra e migrar persistência para D1/armazenamento persistente apropriado.
+O Butler é um assistente pessoal, não apenas um CRUD no Telegram.
 
-A inicialização por chat agora inclui matérias, tarefas, cotidiano, finanças e eventos de linguagem natural.
+Princípios que devem ser preservados em qualquer refatoração/migração:
 
-## ⚡ Menu principal
+1. ações frequentes devem exigir poucos passos;
+2. botões continuam disponíveis, mas texto natural deve ser confortável;
+3. personalidade é provocativa, sarcástica e favorável ao usuário, sem humilhação;
+4. sarcasmo contextual deve nascer de fatos registrados, nunca de invenção;
+5. quando uma intenção natural for ambígua, confirmar antes de alterar dados;
+6. não inventar presença em aula, tarefa concluída, treino, gasto ou compromisso;
+7. não prometer lembrete sem informação suficiente para executá-lo;
+8. evitar complexidade que não entregue benefício cotidiano real;
+9. manter módulos simples quando um controle sofisticado criaria mais atrito do que utilidade;
+10. Day-off reduz/silencia cobranças e deve ser respeitado pelos agendamentos.
+
+## 3. Menu principal atual
+
+Ordem consolidada:
 
 - `🌙 Day-off`
 - `➕ Adicionar`
@@ -28,159 +48,571 @@ A inicialização por chat agora inclui matérias, tarefas, cotidiano, finanças
 - `🏠 Cotidiano`
 - `🏋️ Musculação`
 
-Pendência não é tipo: tarefa vencida e não concluída vira pendência automaticamente.
+### Atalhos
 
-## 🗓️ Agenda e histórico
+`➕ Adicionar`:
 
-`🗓️ Hoje` oferece amanhã, outra data, próximos 7 dias e histórico. `src/history_handlers.py` permite histórico diário e histórico de tarefas, separando pendentes, concluídas e canceladas. Remover tarefa/compromisso arquiva como `cancelado` em vez de apagar.
+- nova tarefa;
+- novo compromisso.
 
-## 📥 Grade
+`🛒 Item faltando`:
 
-Aceita PDF com texto pesquisável e `.txt`, sem OCR/Tesseract. Códigos SIGAA são traduzidos em blocos completos (`M23=08–10`, `M45=10–12`, `T23=14–16`, `T2345=14–18`). Correções manuais têm prioridade.
+- adicionar item;
+- listar itens faltando.
 
-## 🕴️ Personalidade + comportamento
+Tarefas/compromissos também ficam em Cotidiano.
 
-- `personality.py` + `behavior_engine.py` usam adiamentos, atrasos, streaks, faltas e evolução de carga.
-- sarcasmo é provocativo sem humilhar;
-- emojis aparecem com moderação;
-- Day-off/contextos sensíveis desligam cobrança.
+**Pendência não é um tipo cadastrável.** É uma tarefa vencida e ainda não concluída.
 
-`natural_events` registra eventos úteis para personalidade. Ex.: avisos de atraso. A primeira ocorrência não é tratada como padrão; reincidências permitem provocações baseadas no histórico real.
+## 4. Tarefas e compromissos
 
-## ☀️ Resumo matinal + semanal
+Fluxos foram encurtados para uso rápido.
 
-Resumo matinal padrão 07:30 (`BUTLER_MORNING_SUMMARY_TIME`): aulas com horário/local, tarefas, compromissos, academia quando aplicável, mercado e pendências do dia anterior. Não há fechamento automático noturno. Fechamento semanal permanece domingo 20:00 por padrão.
+Tarefa/compromisso por botão:
 
-## 🔥 Sequências
+1. título;
+2. Hoje / Outro dia / Sem data;
+3. horário quando aplicável;
+4. salvar.
 
-`🎯 Metas → 🔥 Sequências` mostra streak atual, recorde, total e últimos 7 dias para inglês, programação, água, alimentação e musculação. Usa `goal_progress`, `routine_logs` e, no Butler pessoal, treinos realmente concluídos.
+Não perguntar observação/antecedência em sequência para o fluxo simples.
 
-## 💰 Finanças simples
+Regras:
 
-Arquivos: `finance_store.py` e `finance_handlers.py`.
+- bloquear data passada;
+- bloquear horário passado quando a data é hoje;
+- tarefas podem ser concluídas;
+- lembretes podem ser adiados;
+- `postpone_count` registra quantos adiamentos ocorreram;
+- remoção agora arquiva como `cancelado`, preservando histórico;
+- tarefa vencida + não concluída = pendência.
 
-Escopo propositalmente pequeno:
+Personalidade usa adiamentos e atraso real. Exemplo aprovado para conclusão atrasada:
 
-- entrada/saída;
-- categorias;
-- relatório mensal;
+> 😏 Feito. Demorou mais do que deveria, mas chegamos lá. Não vou estragar o momento.
+
+## 5. Agenda
+
+`🗓️ Hoje` reúne:
+
+- aulas;
+- horário/local;
+- tarefas;
+- compromissos;
+- pendências vencidas;
+- treino quando aplicável;
+- quantidade de itens faltando.
+
+Navegação disponível:
+
+- amanhã;
+- outra data (`DD/MM` ou `DD/MM/AAAA`);
+- próximos 7 dias;
+- histórico.
+
+A agenda futura reutiliza as mesmas fontes de dados do resumo automático.
+
+## 6. Histórico
+
+### Histórico diário
+
+Consulta uma data e reconstrói o que está registrado naquele dia:
+
+- aulas previstas;
+- tarefas/compromissos e status;
+- rotinas registradas;
+- academia quando houver registro.
+
+Não afirmar que o usuário compareceu a uma aula apenas porque ela estava na grade; usar “aula prevista”.
+
+### Histórico de tarefas
+
+Separar:
+
+- pendentes;
+- concluídas;
+- canceladas.
+
+Itens apagados antes da mudança para arquivamento não podem ser reconstruídos.
+
+## 7. Acadêmico
+
+Funcionalidades:
+
+- listar matérias;
+- adicionar;
+- remover;
+- trancar;
+- editar;
+- horário/local persistentes;
+- lembretes de aula;
+- importação de grade.
+
+### Importação
+
+Aceitar:
+
+- PDF com texto pesquisável;
+- `.txt`.
+
+Não usar OCR/Tesseract. Motivo: simplicidade e compatibilidade de hospedagem. Se o usuário só possuir imagem/PDF escaneado, orientar conversão externa para PDF textual ou `.txt`, ou cadastro manual.
+
+### SIGAA
+
+Conversão usa horas completas:
+
+- `M23 = 08:00–10:00`;
+- `M45 = 10:00–12:00`;
+- `T23 = 14:00–16:00`;
+- `T2345 = 14:00–18:00`;
+- `N12 = 18:00–20:00`.
+
+Correção manual tem prioridade.
+
+No Butler pessoal, Laboratório de Sistemas Digitais I permanece manualmente em **segunda 14:00–16:00**, mesmo que o código importado sugira bloco maior.
+
+## 8. Grade pessoal atual
+
+- Álgebra Linear I — terça/quinta 10:00–12:00 — PAV III, Sala 10;
+- Física II — segunda/quarta 10:00–12:00 — PAV III, Sala 07;
+- Laboratório de Sistemas Digitais I — segunda 14:00–16:00 — PAV Eng., Sala D6;
+- Princípios de Eletrônica Analógica — terça/quinta 08:00–10:00 — PAV I, Sala 104;
+- Sistemas Digitais I — segunda 08:00–10:00 — PAV I, Sala 11;
+- Sistemas Digitais I — quarta 08:00–10:00 — PAV I, Sala 114.
+
+## 9. Casa / lista de mercado
+
+A lista é persistente e representa coisas faltando em casa, não uma lista temporária criada para cada compra.
+
+Cadastro rápido aceita:
+
+- `sal`;
+- `sal, açúcar, café`;
+- `falta sal, açúcar, café`;
+- `café | 2 pacotes`.
+
+Quantidade é opcional.
+
+Texto natural deve diferenciar compras domésticas de tarefas:
+
+- `preciso comprar café` → item faltando;
+- `preciso comprar arroz e feijão` → itens faltando;
+- `preciso comprar um adaptador para o trabalho` → tarefa;
+- `me lembra de comprar café amanhã às 18h` → tarefa/lembrete temporal.
+
+`comprei o café` marca o item como comprado; confirmar se houver ambiguidade.
+
+## 10. Day-off
+
+Day-off representa folga/indisponibilidade e deve silenciar cobranças e agendamentos compatíveis.
+
+Reativação por chamada ao Butler, mantendo sensação conversacional.
+
+Na versão genérica, Day-off é isolado por `chat_id`.
+
+## 11. Musculação — Butler pessoal
+
+O protocolo interno possui 12 semanas.
+
+Funcionalidades implementadas:
+
+- `🚀 Começar os trabalhos` inicia oficialmente o protocolo;
+- treino do dia/semana;
+- exercícios;
+- substitutos;
+- série por série;
+- carga;
+- repetições;
+- histórico/evolução de carga;
+- falta com motivo;
+- progresso semanal;
+- reinício temporário para testes.
+
+Decisão de UX: mensagens comuns não chamam isso de “Protocol Mass”; usar **treino na academia**.
+
+Regra crítica: antes de `Começar os trabalhos`, treino não aparece nos resumos e uma frase de falta não deve criar falta no protocolo.
+
+Versão genérica não recebe esse protocolo; musculação começa vazia e usa cadastro próprio.
+
+## 12. Personalidade baseada em comportamento
+
+Arquivos centrais:
+
+- `personality.py`;
+- `behavior_engine.py`;
+- `natural_store.py` para eventos naturais úteis.
+
+Contextos atualmente aproveitados:
+
+- quantidade de adiamentos;
+- conclusão atrasada/no prazo;
+- streaks;
+- faltas no treino;
+- evolução de carga quando os valores são comparáveis;
+- avisos recorrentes de atraso.
+
+Emojis podem aparecer com moderação.
+
+Regra importante: primeira ocorrência não vira “você sempre faz isso”. Ex.: primeiro aviso de atraso é caso isolado; somente reincidência dá munição para provocações como “não chega a ser novidade”.
+
+## 13. Resumos automáticos
+
+### Manhã
+
+Default: **07:30**, configurável por `BUTLER_MORNING_SUMMARY_TIME`.
+
+Pode conter:
+
+- aulas do dia com horário/local;
+- tarefas;
+- compromissos;
+- treino quando aplicável;
+- mercado;
+- fechamento curto do dia anterior quando houver algo relevante;
+- tarefas que ficaram pendentes ontem.
+
+Não existe mais fechamento automático noturno. Decisão tomada porque o usuário pode treinar/encerrar responsabilidades às 22h–23h e o resumo noturno poderia ocorrer antes do fim real do dia.
+
+### Semanal
+
+Default: domingo **20:00**, configurável.
+
+Mostra de forma simples o que foi cumprido, o que ficou aberto e sinais de evolução nos registros disponíveis.
+
+## 14. Metas e streaks
+
+Escopo deliberadamente leve, estilo acompanhamento visual de sequência.
+
+Categorias-base:
+
+- Inglês;
+- Programação;
+- Água;
+- Alimentação;
+- Musculação.
+
+`🎯 Metas → 🔥 Sequências` mostra:
+
+- streak atual;
+- recorde;
+- total de dias;
+- últimos 7 dias.
+
+No Butler pessoal, musculação usa treinos concluídos reais para evitar marcação duplicada.
+
+Não aprofundar em gamificação complexa antes de necessidade real.
+
+## 15. Finanças
+
+Escopo deliberadamente simples.
+
+Implementado:
+
+- entrada;
+- saída/gasto;
+- categoria;
+- descrição opcional;
+- relatório do mês;
+- saldo baseado nos registros;
 - comparação simples com mês anterior;
-- limites predefinidos e alertas de excesso.
+- limites predefinidos para algumas categorias;
+- alertas de excesso;
+- linguagem natural para registros simples.
 
-Não adicionar ainda cartões, parcelas, contas bancárias, investimentos ou orçamento complexo. O Butler deixa claro que relatório só é confiável conforme o usuário registra movimentos.
+Categorias-base:
 
-## 🗣️ Integração natural por texto — concluída v1
+- Alimentação;
+- Transporte;
+- Lazer;
+- Compras;
+- Renda;
+- Outros.
 
-Arquivos principais:
+O Butler deve lembrar que relatório financeiro só é tão confiável quanto os registros informados, inclusive com provocações sobre o trabalho chato de registrar movimentos.
 
-- `src/natural_language.py`: interpretação determinística de intenção/data/hora;
-- `src/natural_handlers.py`: executa ações usando os stores existentes;
-- `src/natural_store.py`: eventos comportamentais auxiliares.
+Não adicionar agora:
 
-### Princípios
+- cartões;
+- parcelas;
+- investimentos;
+- múltiplas contas;
+- orçamento sofisticado.
 
-1. ação direta quando intenção/alvo são claros;
-2. confirmação curta quando existem vários candidatos;
-3. nunca inventar presença, compromisso, tarefa, gasto ou treino;
-4. datas/horas passadas continuam bloqueadas;
-5. linguagem natural não substitui os stores: apenas traduz fala para as mesmas regras de negócio;
-6. sem dependência de LLM/API externa nessa etapa, importante para simplicidade do deploy.
+## 16. Integração natural por texto — v1 concluída
 
-### Frases cobertas
+Arquivos:
 
-Criação:
+- `src/natural_language.py` — interpretação;
+- `src/natural_handlers.py` — execução;
+- `src/natural_store.py` — eventos comportamentais;
+- `scripts/nlu_smoke.py` — smoke test crítico.
+
+A camada é determinística, sem LLM externo, e chama os stores existentes.
+
+### Intenções cobertas
+
+#### Criar compromisso
 
 - `Butler, amanhã tenho dentista às 15h`;
+- `amanhã tenho dentista 15h`;
+- `tenho dentista amanhã às 15:30`;
 - `sexta tenho reunião 10h`;
-- `dentista amanhã 15h`;
-- `me lembra de comprar café`;
-- `amanhã preciso entregar o relatório às 18h`.
+- `dentista amanhã 15h`.
 
-Agenda/pendências:
+#### Criar tarefa/lembrete
 
-- `o que tenho amanhã?`;
-- `o que tenho daqui a 3 dias?`;
-- `como está minha agenda sexta?`;
-- `quais tarefas estão atrasadas?`.
+- `amanhã preciso entregar o relatório às 18h`;
+- `tenho que estudar física amanhã`;
+- `preciso comprar um adaptador`;
+- `anota uma tarefa: revisar álgebra`;
+- `me lembra de ...` pede data/hora quando ausentes.
 
-Mercado:
+#### Mercado
 
+- `preciso comprar café`;
+- `preciso comprar arroz e feijão`;
 - `falta sal, açúcar e café`;
 - `bota café na lista de mercado`;
 - `o que falta em casa?`;
-- `comprei o café` (marca comprado, com confirmação se ambíguo).
+- `comprei o café`.
 
-Tarefas:
+#### Agenda
 
-- `já fiz o relatório` / `terminei X` — busca tarefa pendente por similaridade e confirma quando necessário.
+- `o que tenho amanhã?`;
+- `o que tenho daqui a 3 dias?`;
+- `o que tenho sexta?`;
+- `como está minha agenda sexta?`;
+- `o que tenho na próxima semana?`.
 
-Academia:
+#### Pendências
+
+- `quais tarefas estão atrasadas?`;
+- `o que ficou pendente?`;
+- `o que está atrasado?`.
+
+#### Concluir tarefa
+
+- `já fiz o relatório`;
+- `terminei o trabalho`;
+- `concluí revisar física`.
+
+Busca entre tarefas pendentes e confirma quando houver mais de um alvo plausível.
+
+#### Falta de treino
 
 - `hoje não vou treinar porque estou cansado`;
+- `não consigo treinar hoje`;
 - `não vai dar pra treinar hoje`.
 
-No Butler pessoal registra falta somente se `Começar os trabalhos` já ativou o protocolo.
-
-Atraso:
+#### Atraso
 
 - `vou me atrasar para o dentista`;
-- `estou atrasado para a reunião`.
+- `vou chegar atrasado na reunião`;
+- `estou atrasado para a entrevista`.
 
-O Butler encontra o compromisso, não altera o horário e registra `late_notice`. Reincidência muda o sarcasmo. Se houver mais de um compromisso plausível, pergunta qual.
+Não altera horário. Registra `late_notice` para contexto futuro.
 
-Finanças:
+#### Finanças
 
 - `gastei 35 com lanche`;
 - `paguei 20 de uber`;
+- `gastei 80 no mercado`;
 - `recebi 540 de bolsa`;
-- `quanto gastei esse mês?` / `quanto sobrou?`.
+- `entrou 200 de trabalho`;
+- `quanto gastei esse mês?`;
+- `quanto sobrou?`.
 
-Categorias financeiras são inferidas somente para casos simples; desconhecido vira `outros`.
+### Datas/horas reconhecidas
 
-### Follow-up natural
+- hoje;
+- amanhã;
+- depois de amanhã;
+- dias da semana;
+- próxima sexta etc.;
+- `DD/MM`;
+- `DD/MM/AAAA`;
+- daqui a N dias;
+- `15h`;
+- `15h30`;
+- `15:30`;
+- às 15h;
+- por volta das 15h.
 
-Se a pessoa disser `tenho dentista amanhã` sem hora, o Butler mantém o contexto e pergunta apenas o que falta (`15h`). Esse contexto é temporário em `context.user_data`; reinício do processo não deve persistir uma conversa incompleta.
+### Follow-up temporário
 
-## 🏋️ Treino pessoal
+Se faltar uma informação como horário, `context.user_data` mantém temporariamente o contexto para a próxima mensagem. Reiniciar o processo pode descartar uma conversa incompleta; isso é aceitável nesta versão.
 
-Protocol Mass permanece interno ao Butler pessoal. Linguagem externa usa “treino na academia”. Ele só aparece em resumos e aceita faltas depois de `🚀 Começar os trabalhos`.
+## 17. Multiusuário por chat_id
 
-## Sequência funcional concluída
+Existem dois modos de execução.
 
-1. ✅ personalidade baseada em comportamento real;
-2. ✅ resumo matinal automático;
-3. ✅ fechamento semanal;
-4. ✅ histórico diário/tarefas;
-5. ✅ streaks simples;
-6. ✅ finanças simples;
-7. ✅ integração natural v1.
+### Pessoal
 
-## Próxima grande etapa
+`python -m src.main`
 
-**Preparar produção Cloudflare.** Antes do deploy:
+Usa `data/butler.db` e mantém os dados pessoais/grade/protocolo.
 
-1. revisar o que depende de polling/JobQueue e adaptar para o modelo do Cloudflare;
-2. migrar persistência SQLite para D1 sem quebrar isolamento por `chat_id`;
-3. definir webhook do Telegram;
-4. tratar scheduler/resumos/lembretes com mecanismo compatível com Cloudflare;
-5. revisar secrets/env;
-6. smoke test do fluxo pessoal e de dois `chat_id` genéricos.
+### Genérico
 
-## Pente-fino recomendado antes da migração
+`python -m src.main_generic`
 
-Testar manualmente pelo Telegram:
+Regras:
 
-- criação em ordem `amanhã tenho...` e `tenho... amanhã`;
+- nasce sem grade pessoal;
+- nasce sem protocolo pessoal;
+- `/start` pergunta como o usuário quer ser chamado;
+- cada chat é identificado pelo Telegram `chat_id`;
+- `telegram_user_id` também é preservado quando aplicável;
+- cada chat possui armazenamento isolado no rolling local;
+- callbacks também precisam selecionar o escopo correto;
+- scheduler percorre chats individualmente.
+
+Rolling local atual:
+
+- registro central em `data/butler_generic_registry.db`;
+- bancos em `data/butler_generic_users/<chat_id>.db`.
+
+Essa estratégia foi escolhida por simplicidade e pelo volume esperado ser muito pequeno (poucos usuários). **Não transportar os arquivos SQLite literalmente para Cloudflare.** Preservar a regra de identidade/isolamento e trocar a implementação de persistência.
+
+## 18. Arquitetura funcional relevante
+
+Principais responsabilidades:
+
+- `database.py`: usuários/grade;
+- `daily_store.py`: tarefas e compromissos;
+- `home_store.py`: mercado, metas, rotinas, musculação genérica;
+- `protocol_mass_store.py`: treino pessoal;
+- `finance_store.py`: finanças;
+- `assistant_state.py`: estado/Day-off;
+- `scheduler.py`: agendamentos locais;
+- `summary_engine.py`: resumos;
+- `behavior_engine.py`: comportamento contextual;
+- `personality.py`: personalidade;
+- `natural_language.py`: NLU determinística;
+- `natural_handlers.py`: ações por linguagem natural;
+- `natural_store.py`: eventos naturais;
+- `user_scope.py`: escopo multiusuário local.
+
+Evitar duplicar regra entre botão e texto natural.
+
+## 19. Smoke test da NLU
+
+Rodar antes da migração:
+
+```bash
+python scripts/nlu_smoke.py
+```
+
+Esperado:
+
+```text
+NLU smoke OK
+```
+
+O teste inclui casos críticos de:
+
+- compromisso;
+- tarefa;
+- agenda relativa;
+- mercado;
+- distinção `preciso comprar café` x compra não doméstica;
+- falta de treino;
+- atraso;
+- finanças;
+- data/horário passado.
+
+## 20. Pente-fino obrigatório antes/depois da migração
+
+Teste manual recomendado no Telegram:
+
+- `/start` e nome preferido;
+- menu principal completo;
+- Day-off e reativação;
+- criação por botão;
+- criação natural em ordem `amanhã tenho...` e `tenho... amanhã`;
 - horários `15h`, `15h30`, `15:30`;
-- data passada e horário passado;
+- data passada/horário passado;
 - compromisso sem hora + follow-up;
-- duas tarefas com nomes parecidos + `já fiz...`;
-- dois compromissos parecidos + `vou me atrasar...`;
-- mercado adicionar/listar/comprado;
-- falta de treino antes e depois de `Começar os trabalhos`;
-- gasto/entrada natural;
-- isolamento das mesmas frases em dois `chat_id`.
+- agenda hoje/amanhã/outra data/7 dias;
+- histórico diário;
+- histórico de tarefas;
+- duas tarefas semelhantes + `já fiz...`;
+- dois compromissos semelhantes + `vou me atrasar...`;
+- mercado por botão e texto;
+- `preciso comprar café` → mercado;
+- `preciso comprar adaptador para o trabalho` → tarefa;
+- importar grade por `.txt`/PDF textual e revisar prévia;
+- tradução SIGAA;
+- treino antes/depois de `Começar os trabalhos`;
+- falta de treino com motivo;
+- série/carga/substituto;
+- streaks;
+- entrada/saída financeira;
+- relatório financeiro;
+- resumo matinal;
+- fechamento semanal;
+- dois chats distintos no modo genérico sem vazamento de dados.
 
-## Regra de continuidade
+## 21. Próxima grande etapa — Cloudflare
 
-Ao concluir nova etapa: atualizar este arquivo, atualizar README quando o fluxo público mudar e deixar explícito o próximo passo técnico.
+A migração deve priorizar **paridade funcional**, não novas features.
+
+### Objetivos
+
+1. revisar dependências incompatíveis com ambiente Cloudflare;
+2. substituir polling por webhook do Telegram;
+3. migrar SQLite para Cloudflare D1 ou persistência compatível;
+4. preservar isolamento por `chat_id`;
+5. adaptar scheduler/JobQueue para mecanismo Cloudflare;
+6. preservar lembretes de tarefas/compromissos/aulas;
+7. preservar resumo matinal e fechamento semanal;
+8. configurar secrets sem expor token;
+9. validar timezone corretamente;
+10. executar smoke tests pessoais e multiusuário;
+11. somente depois considerar produção estável.
+
+### Regra de migração
+
+Não redesenhar funcionalidades durante a migração salvo quando a plataforma exigir. Se uma abstração for necessária, criar adaptadores para persistência/agendamento mantendo as regras de domínio atuais.
+
+### Pontos de atenção
+
+- SQLite local não é persistência de produção no Worker;
+- JobQueue/polling não devem ser assumidos como disponíveis;
+- webhook precisa validar e processar updates do Telegram corretamente;
+- scheduler deve conseguir enviar mensagens proativamente por `chat_id`;
+- timezone dos resumos/lembretes deve permanecer coerente;
+- PDFs textuais/importação precisam ser reavaliados conforme limites do runtime;
+- manter versão pessoal e genérica sem duplicar projeto;
+- dados pessoais existentes precisam de estratégia explícita de migração se forem levados ao D1.
+
+## 22. Decisões que NÃO devem ser revertidas sem motivo
+
+- Pendência é estado derivado, não categoria manual.
+- Mercado persistente é memória do que falta em casa.
+- Quantidade de item de mercado é opcional.
+- Sem OCR/Tesseract.
+- SIGAA usa blocos de horas completas.
+- Laboratório pessoal permanece 14:00–16:00.
+- Sem resumo automático noturno.
+- Treino pessoal só começa após `Começar os trabalhos`.
+- Mensagens comuns dizem “treino na academia”.
+- Streaks são simples, não gamificação pesada.
+- Finanças permanecem simples nesta fase.
+- Personalidade contextual depende de comportamento real.
+- Primeiro aviso de atraso não deve ser tratado como hábito.
+- Linguagem natural confirma ambiguidade.
+- `preciso comprar café` é mercado; compra não doméstica pode ser tarefa.
+- `me lembra de...` sem data/hora deve pedir quando lembrar.
+- Multiusuário é isolado por `chat_id`.
+- Próxima etapa é infraestrutura Cloudflare, não expansão funcional.
+
+## 23. Regra de continuidade
+
+Ao concluir qualquer etapa futura:
+
+1. atualizar este arquivo com decisões e estado técnico;
+2. atualizar README quando capacidade pública/uso mudar;
+3. registrar incompatibilidades encontradas na migração;
+4. não apagar decisões históricas relevantes sem substituí-las explicitamente;
+5. deixar sempre indicado o próximo passo técnico.
