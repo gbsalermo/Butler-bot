@@ -1,5 +1,4 @@
 import re
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,52 +21,42 @@ _LOCATION_MARKERS = re.compile(r"\b(PAV(?:ILH[AÃ]O)?|BLOCO|SALA|LAB(?:ORAT[ÓO]
 def extract_text_from_file(path: str | Path) -> str:
     path = Path(path)
     suffix = path.suffix.lower()
+
     if suffix == ".pdf":
-        return _extract_pdf(path)
-    return _ocr_image(path)
+        return _extract_pdf_text(path)
+    if suffix == ".txt":
+        return _extract_txt(path)
+
+    raise ValueError("Formato não aceito. Envie um PDF com texto pesquisável ou um arquivo .txt.")
 
 
-def _extract_pdf(path: Path) -> str:
+def _extract_pdf_text(path: Path) -> str:
     try:
-        import fitz
+        from pypdf import PdfReader
     except ImportError as exc:
-        raise RuntimeError("PyMuPDF não instalado. Rode pip install -r requirements.txt.") from exc
+        raise RuntimeError("pypdf não instalado. Rode pip install -r requirements.txt.") from exc
 
-    doc = fitz.open(path)
-    text = "\n".join(page.get_text("text") for page in doc).strip()
-    if len(text) >= 40 and _CODE_RE.search(text):
-        return text
+    reader = PdfReader(str(path))
+    text = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
 
-    # PDF escaneado: renderiza páginas e usa o mesmo OCR das imagens.
-    chunks: list[str] = []
-    for index, page in enumerate(doc):
-        pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0), alpha=False)
-        with tempfile.NamedTemporaryFile(suffix=f"-{index}.png", delete=False) as tmp:
-            image_path = Path(tmp.name)
-        try:
-            pix.save(str(image_path))
-            chunks.append(_ocr_image(image_path))
-        finally:
-            image_path.unlink(missing_ok=True)
-    return "\n".join(chunks)
-
-
-def _ocr_image(path: Path) -> str:
-    try:
-        import pytesseract
-        from PIL import Image, ImageEnhance, ImageOps
-    except ImportError as exc:
-        raise RuntimeError("OCR não instalado. Rode pip install -r requirements.txt.") from exc
-
-    try:
-        image = Image.open(path).convert("L")
-        image = ImageOps.autocontrast(image)
-        image = ImageEnhance.Contrast(image).enhance(1.4)
-        return pytesseract.image_to_string(image, lang="por+eng", config="--psm 6")
-    except pytesseract.TesseractNotFoundError as exc:
+    if len(text) < 20:
         raise RuntimeError(
-            "O Tesseract OCR não foi encontrado no computador. Instale o Tesseract para importar imagens/PDFs escaneados."
-        ) from exc
+            "Este PDF não possui texto pesquisável suficiente. Se ele veio de uma imagem ou scan, converta antes para PDF com texto."
+        )
+
+    return text
+
+
+def _extract_txt(path: Path) -> str:
+    raw = path.read_bytes()
+    for encoding in ("utf-8", "utf-8-sig", "latin-1"):
+        try:
+            text = raw.decode(encoding).strip()
+            if text:
+                return text
+        except UnicodeDecodeError:
+            continue
+    raise RuntimeError("Não consegui ler o arquivo de texto.")
 
 
 def parse_schedule_text(text: str) -> list[ImportedSubject]:
@@ -83,13 +72,12 @@ def parse_schedule_text(text: str) -> list[ImportedSubject]:
         prefix = line[: match.start()].strip(" -|:")
         subject, location = _subject_location(prefix)
 
-        # OCR frequentemente joga nome/local para a linha imediatamente anterior.
         if not subject and i > 0:
-            previous = lines[i - 1]
-            subject, location = _subject_location(f"{previous} {prefix}".strip())
+            subject, location = _subject_location(f"{lines[i - 1]} {prefix}".strip())
         elif subject and not location and i > 0 and len(subject.split()) <= 2:
-            p_subject, p_location = _subject_location(f"{lines[i - 1]} {prefix}".strip())
-            subject, location = p_subject or subject, p_location or location
+            previous_subject, previous_location = _subject_location(f"{lines[i - 1]} {prefix}".strip())
+            subject = previous_subject or subject
+            location = previous_location or location
 
         if not subject:
             continue
@@ -100,27 +88,42 @@ def parse_schedule_text(text: str) -> list[ImportedSubject]:
             continue
 
         location = _clean_location(location)
-        sessions = [(day, parsed.start_time, parsed.end_time, _location_for_day(location, day)) for day in parsed.weekdays]
-        found.append(ImportedSubject(name=_title_subject(subject), code=code, location=location, sessions=sessions))
+        sessions = [
+            (day, parsed.start_time, parsed.end_time, _location_for_day(location, day))
+            for day in parsed.weekdays
+        ]
+        found.append(
+            ImportedSubject(
+                name=_title_subject(subject),
+                code=code,
+                location=location,
+                sessions=sessions,
+            )
+        )
 
     return _merge_duplicates(found)
 
 
 def _clean_line(value: str) -> str:
-    value = value.replace("|", " ")
-    return " ".join(value.split())
+    return " ".join(value.replace("|", " ").split())
 
 
 def _subject_location(prefix: str) -> tuple[str, str]:
-    prefix = re.sub(r"^(COMPONENTE CURRICULAR|LOCAL|HOR[ÁA]RIO|CHAT)\s*", "", prefix, flags=re.I).strip()
+    prefix = re.sub(
+        r"^(COMPONENTE CURRICULAR|LOCAL|HOR[ÁA]RIO|CHAT)\s*",
+        "",
+        prefix,
+        flags=re.I,
+    ).strip()
+
     marker = _LOCATION_MARKERS.search(prefix)
     if marker:
-        subject = prefix[: marker.start()].strip(" -,:;")
-        location = prefix[marker.start():].strip()
-        return subject, location
+        return (
+            prefix[: marker.start()].strip(" -,:;"),
+            prefix[marker.start():].strip(),
+        )
 
-    # Em texto extraído de tabela, colunas podem vir separadas por vários espaços.
-    pieces = [p.strip() for p in re.split(r"\s{2,}", prefix) if p.strip()]
+    pieces = [piece.strip() for piece in re.split(r"\s{2,}", prefix) if piece.strip()]
     if len(pieces) >= 2:
         return pieces[0], " ".join(pieces[1:])
     return prefix.strip(), ""
@@ -128,25 +131,36 @@ def _subject_location(prefix: str) -> tuple[str, str]:
 
 def _clean_location(location: str) -> str:
     location = re.sub(r"\s+", " ", location).strip(" -,:;")
-    # Mantém anotações SEG/QUA quando descrevem salas diferentes; remove apenas finais simples.
     simple_days = re.compile(rf"\s+(?:{_DAY_WORDS})(?:\s+E\s+{_DAY_WORDS})+$", re.I)
     return simple_days.sub("", location).strip()
 
 
 def _location_for_day(location: str, weekday: str) -> str:
-    # Caso comum do SIGAA: "PAV I, SALA 11 SEG E SALA 114 QUA".
     short = {
-        "segunda-feira": "SEG", "terça-feira": "TER", "quarta-feira": "QUA",
-        "quinta-feira": "QUI", "sexta-feira": "SEX", "sábado": "SAB",
+        "segunda-feira": "SEG",
+        "terça-feira": "TER",
+        "quarta-feira": "QUA",
+        "quinta-feira": "QUI",
+        "sexta-feira": "SEX",
+        "sábado": "SAB",
     }.get(weekday)
     if not short or not location:
         return location
 
-    base_match = re.match(r"^(.*?)(SALA\s+[^,;]+?\s+(?:SEG|TER|QUA|QUI|SEX|SAB)\b.*)$", location, re.I)
+    base_match = re.match(
+        r"^(.*?)(SALA\s+[^,;]+?\s+(?:SEG|TER|QUA|QUI|SEX|SAB)\b.*)$",
+        location,
+        re.I,
+    )
     if not base_match:
         return location
+
     base, tail = base_match.groups()
-    for room, day in re.findall(r"SALA\s+([^,;]+?)\s+(SEG|TER|QUA|QUI|SEX|SAB)\b", tail, re.I):
+    for room, day in re.findall(
+        r"SALA\s+([^,;]+?)\s+(SEG|TER|QUA|QUI|SEX|SAB)\b",
+        tail,
+        re.I,
+    ):
         if day.upper() == short:
             return f"{base.strip(' ,;-')} Sala {room.strip()}".strip()
     return location
@@ -154,7 +168,6 @@ def _location_for_day(location: str, weekday: str) -> str:
 
 def _title_subject(value: str) -> str:
     value = re.sub(r"\s+", " ", value).strip(" -,:;")
-    # Se OCR já veio todo em maiúsculo, Title preserva números/romanos razoavelmente bem.
     if value.isupper():
         small = {"de", "da", "do", "das", "dos", "e", "para"}
         words = []
