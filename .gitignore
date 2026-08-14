@@ -1,4 +1,5 @@
 .env
+.env.generic
 .venv/
 venv/
 __pycache__/
