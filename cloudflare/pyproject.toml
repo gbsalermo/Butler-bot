@@ -3,6 +3,9 @@ name = "butler-cloudflare-worker"
 version = "0.1.0"
 description = "Adapter do Butler Bot para Cloudflare Workers"
 requires-python = ">=3.11"
+dependencies = [
+    "pypdf>=5,<7",
+]
 
 [dependency-groups]
 dev = [
