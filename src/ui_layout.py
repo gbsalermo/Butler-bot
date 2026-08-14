@@ -16,7 +16,15 @@ COTIDIANO_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["🛒 O que está faltando?", "➕ Item faltando"],
         ["🎯 Metas", "🧘 Rotinas"],
-        ["💰 Finanças"],
+        ["💰 Finanças", "👤 Como me chamar"],
+        ["🏠 Menu principal"],
+    ],
+    resize_keyboard=True,
+)
+
+ACADEMIC_IMPORT_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["📥 Importar grade por PDF/imagem"],
         ["🏠 Menu principal"],
     ],
     resize_keyboard=True,
@@ -34,11 +42,7 @@ FINANCE_KEYBOARD = ReplyKeyboardMarkup(
 
 
 def apply_layout_overrides() -> None:
-    """Mantém um único desenho de menus mesmo em módulos antigos.
-
-    Alguns handlers ainda possuem constantes locais de teclado. Em vez de duplicar
-    a alteração em todos eles, substituímos essas referências na inicialização.
-    """
+    """Mantém um único desenho de menus mesmo em módulos antigos."""
     import src.home_handlers as home_handlers
     import src.home_menu as home_menu
     import src.lifestyle_handlers as lifestyle_handlers
