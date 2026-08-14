@@ -3,130 +3,166 @@
 ## Estado atual
 
 - Desenvolvimento concentrado na `main`.
-- Stack: Python, `python-telegram-bot[job-queue]`, SQLite e `python-dotenv`.
+- Stack: Python, `python-telegram-bot[job-queue]`, SQLite, `python-dotenv` e `pypdf`.
 - Execução local via polling.
-- Nome do bot pessoal: `Butler`.
-- Username pessoal atual: `@ButlerSal_BOT`.
-- Prioridade continua sendo funcionalidade antes de suíte de testes.
+- Bot pessoal: `Butler` / `@ButlerSal_BOT`.
+- Prioridade continua sendo funcionalidade e experiência de uso antes de suíte de testes.
 
-## Filosofia do produto
+## Filosofia
 
-O Butler deve parecer um assistente presente, não um formulário. Deve reduzir carga mental, lembrar antes que o usuário precise conferir, guardar pequenas informações persistentes, conversar de forma natural e respeitar períodos de descanso sem cobrança.
+O Butler deve parecer um assistente presente, não um conjunto de formulários. A tela inicial deve priorizar ações rápidas e recorrentes; módulos menos urgentes ficam em `🏠 Cotidiano`.
+
+## ⚡ Menu principal orientado a ação
+
+`src/ui_layout.py` centraliza os teclados.
+
+Menu principal atual:
+
+- `🌙 Day-off`
+- `➕ Adicionar`
+- `🗓️ Hoje`
+- `🛒 Item faltando`
+- `🏋️ Musculação`
+- `📚 Matérias`
+- `🏠 Cotidiano`
+
+`➕ Adicionar` abre somente:
+
+- `✅ Nova tarefa`
+- `📅 Novo compromisso`
+
+Tarefas e compromissos deixaram o menu principal e passaram para Cotidiano.
+
+### Cotidiano
+
+- `✅ Tarefas`
+- `📅 Compromissos`
+- `🛒 O que está faltando?`
+- `➕ Item faltando`
+- `🎯 Metas`
+- `🧘 Rotinas`
+- `💰 Finanças`
+- `👤 Como me chamar`
+- retorno ao menu principal
+
+Novo arquivo: `src/quick_access.py`.
+
+## 📌 Pendência não é mais um tipo
+
+Decisão estrutural: `pendencia` deixou de ser uma categoria que o usuário cria.
+
+Agora:
+
+- tarefa = algo que precisa ser feito;
+- compromisso = evento/agendamento;
+- pendência = tarefa com data vencida e ainda não concluída.
+
+`init_daily_store()` migra registros antigos com `kind = 'pendencia'` para `kind = 'tarefa'`.
+
+Botões antigos de Pendências, caso ainda apareçam num teclado antigo do Telegram, apenas explicam a nova regra e direcionam para `➕ Adicionar` / `🗓️ Hoje`.
+
+## 🗓️ Hoje
+
+`src/assistant_views.py` reúne:
+
+- aulas do dia;
+- tarefas do dia;
+- compromissos do dia;
+- bloco `📌 Pendências — tarefas vencidas`;
+- musculação manual do dia quando cadastrada;
+- quantidade de itens faltando em casa.
+
+Pendências são calculadas automaticamente a partir de tarefas vencidas.
 
 ## ⚡ Captura rápida
 
-Criado `src/quick_capture.py` para reduzir atrito em ações simples e recorrentes.
+`src/quick_capture.py` reduz passos em ações simples.
 
-### Tarefas, compromissos e pendências
+### Tarefa/compromisso
 
-Fluxo novo de criação:
+Fluxo:
 
-1. clicar em adicionar;
-2. informar somente o título;
-3. escolher `Hoje`, `Outro dia` ou `Sem data`;
-4. se houver data, informar o horário;
-5. salvar imediatamente.
+1. título;
+2. `Hoje`, `Outro dia` ou `Sem data`;
+3. horário quando houver data;
+4. salva.
 
-Não perguntar por padrão observação nem antecedência. O lembrete padrão dos itens criados pelo fluxo rápido é `0` minutos, ou seja, na hora marcada.
+Não pergunta observação nem antecedência por padrão. Lembrete do fluxo rápido = na hora marcada (`0` minutos).
 
 Validações:
 
-- não aceitar data anterior ao dia atual;
-- para hoje, não aceitar horário anterior ou igual ao momento atual;
-- para data futura, aceitar qualquer horário válido;
-- timezone usado: `BUTLER_TIMEZONE`.
+- não aceitar data passada;
+- se for hoje, não aceitar horário passado ou igual ao momento atual;
+- timezone: `BUTLER_TIMEZONE`.
 
-Os fluxos antigos de listar, concluir, editar e remover permanecem disponíveis.
+Depois de salvar, volta para o menu principal.
 
-### Lista do que falta em casa
-
-`➕ Item faltando` agora deve ser instantâneo.
+### Item faltando
 
 Aceita:
 
-- `sal` → salva um item;
-- `sal, açúcar, café` → salva três itens;
-- `falta sal, açúcar, café` → remove o prefixo e salva três itens;
-- `café | 2 pacotes` → quantidade opcional no mesmo envio.
+- `sal`;
+- `sal, açúcar, café`;
+- `falta sal, açúcar, café`;
+- `café | 2 pacotes` para quantidade opcional.
 
-Não perguntar quantidade nem observação em mensagens separadas.
-
-O módulo é registrado antes dos handlers antigos no mesmo group, assumindo apenas os fluxos rápidos e preservando as demais operações existentes.
+Depois de salvar, volta para o menu principal.
 
 ## 🧩 Dois modos de execução
-
-Existe um único código-base com dois entrypoints.
 
 ### Butler pessoal
 
 `python -m src.main`
 
 - banco `data/butler.db`;
-- mantém a grade pessoal;
-- mantém a correção manual de Laboratório de Sistemas Digitais I em segunda 14:00–16:00;
-- mantém Protocol Mass de 12 semanas e histórico de treino.
+- grade pessoal;
+- correção manual do Laboratório de Sistemas Digitais I em segunda 14:00–16:00;
+- Protocol Mass de 12 semanas e histórico de treino.
 
 ### Butler genérico
 
 `python -m src.main_generic`
 
-- usa `.env.generic`;
-- token Telegram próprio;
-- banco separado `data/butler_generic.db` por padrão;
-- não chama `seed_default_schedule()`;
-- não inicializa/expõe Protocol Mass;
-- não contém grade ou treino pessoal;
-- `/start` registra `chat_id` e pergunta como a pessoa quer ser chamada;
+- `.env.generic`;
+- token próprio;
+- banco `data/butler_generic.db`;
+- sem grade pessoal;
+- sem Protocol Mass;
+- pergunta no `/start` como a pessoa quer ser chamada;
 - musculação começa vazia.
 
-## 👤 Nome preferido / onboarding
+## 👤 Nome preferido
 
 `src/onboarding.py` controla `/start`.
 
-A tabela `users` possui `preferred_name`.
+- registra `chat_id`;
+- pergunta `preferred_name` quando necessário;
+- pode ser alterado em `🏠 Cotidiano → 👤 Como me chamar`;
+- respostas casuais e lembretes usam o nome preferido quando possível.
 
-Fluxo:
+## 📥 Importação da grade
 
-1. registra/atualiza `chat_id`, Telegram user id, nome e username;
-2. se não existir `preferred_name`, pergunta como a pessoa quer ser chamada;
-3. salva o nome/apelido;
-4. abre o menu principal;
-5. pode ser alterado em `🏠 Cotidiano → 👤 Como me chamar`.
-
-Respostas casuais e lembretes proativos usam o nome preferido quando possível.
-
-## 📥 Importação de grade — decisão simplificada
-
-Arquivos:
-
-- `src/schedule_importer.py`;
-- `src/schedule_import_handlers.py`.
-
-Opção atual:
+Opção:
 
 `📚 Matérias → 📥 Importar grade por PDF/texto`
 
-### Formatos aceitos
+Aceitos:
 
-- PDF com texto pesquisável/selecionável;
-- arquivo `.txt`.
+- PDF com texto pesquisável;
+- `.txt`.
 
-### Formatos não aceitos
+Não aceitos:
 
-- imagem/foto;
-- JPG/PNG/WebP;
-- screenshot;
-- PDF escaneado que contenha apenas imagem.
+- imagem/foto/screenshot;
+- PDF escaneado sem camada de texto.
 
-O Butler não executa OCR. Se a pessoa só tiver uma imagem, deve ser orientada a usar qualquer IA/ferramenta para converter para PDF com texto pesquisável ou cadastrar manualmente.
+Sem OCR/Tesseract. Se a pessoa só tiver imagem, o Butler orienta converter em IA/ferramenta para PDF com texto pesquisável ou cadastrar manualmente.
 
-PDF textual é extraído com `pypdf`.
+O parser procura códigos SIGAA (`35M45`, `24M23`, `3T23` etc.) e sempre mostra prévia antes de persistir.
 
-O parser procura códigos SIGAA como `35M45`, `24M23`, `3T23`, usa `src/sigaa_schedule.py` e apresenta prévia obrigatória antes de persistir.
+## ⏰ Horários SIGAA
 
-## ⏰ Normalização dos horários SIGAA
-
-O Butler usa horas completas como representação oficial:
+Representação oficial por horas completas:
 
 - `M23` → `08:00–10:00`;
 - `M45` → `10:00–12:00`;
@@ -134,9 +170,9 @@ O Butler usa horas completas como representação oficial:
 - `T2345` → `14:00–18:00`;
 - `N12` → `18:00–20:00`.
 
-O horário manual continua tendo prioridade quando o usuário corrige uma informação, como no Laboratório de Sistemas Digitais I.
+Correções manuais do usuário têm prioridade.
 
-## 🕴️ Personality Engine v1
+## 🕴️ Personality Engine
 
 Arquivos principais:
 
@@ -146,113 +182,36 @@ Arquivos principais:
 - `src/personality_navigation.py`;
 - `src/scheduler.py`.
 
-Personalidade: competente, informal, levemente cansado/cínico e útil. Pode provocar a situação/comportamento, nunca humilhar o usuário. Day-off e situações sensíveis permanecem sem sarcasmo.
+Personalidade: competente, informal, levemente cansada/cínica e útil. Pode provocar a situação, nunca humilhar o usuário. Day-off e situações sensíveis ficam sem sarcasmo.
 
-## 🧭 Organização dos menus
+## 🏋️ Protocol Mass — somente Butler pessoal
 
-`src/ui_layout.py` centraliza os teclados.
-
-### Menu principal
-
-- `🌙 Day-off`
-- `🏋️ Musculação`
-- `📚 Matérias`
-- `✅ Tarefas`
-- `📅 Compromissos`
-- `📌 Pendências`
-- `🗓️ Hoje`
-- `🏠 Cotidiano`
-
-### Cotidiano
-
-- lista do que está faltando;
-- metas;
-- rotinas/autocuidado;
-- finanças;
-- `👤 Como me chamar`;
-- retorno ao menu principal.
-
-### Acadêmico
-
-- `📚 Minhas matérias`;
-- `⚙️ Gerenciar matérias`;
-- `📥 Importar grade por PDF/texto`;
-- retorno ao menu principal.
-
-## Funcionalidades consolidadas
-
-### 🌙 Day-off
-
-- estado persistente;
-- silencia scheduler;
-- permanece após reinício;
-- retorno por `Butler, preciso de você!` e variações.
-
-### 📚 Acadêmico
-
-- grade persistente;
-- tradução SIGAA em horas completas;
-- adicionar/remover/trancar/editar matérias;
-- importação de PDF textual/`.txt` com confirmação;
-- matérias trancadas não geram lembretes.
-
-### ✅ Tarefas, 📅 compromissos e 📌 pendências
-
-- criação rápida;
-- listar/concluir/editar/remover;
-- data e horário opcionais;
-- lembretes proativos;
-- concluir ou adiar no próprio aviso;
-- cancelamento visível durante fluxos.
-
-### 🏠 Cotidiano
-
-- lista persistente do que falta em casa com captura rápida;
-- metas gerais e progresso;
-- rotinas/autocuidado;
-- finanças ainda como módulo futuro;
-- visão `🗓️ Hoje`.
-
-## 🏋️ Musculação — Protocol Mass (somente Butler pessoal)
-
-- 12 semanas carregadas;
-- `🚀 Começar os trabalhos` inicia o protocolo inteiro apenas uma vez;
+- 12 semanas;
+- início único por `🚀 Começar os trabalhos`;
 - treino do dia;
 - falta com motivo;
 - substitutos oficiais;
 - registro série por série;
-- carga e repetições por série;
-- histórico de carga;
+- carga/repetições;
+- histórico;
 - progresso semanal;
-- `🔄 Reiniciar os trabalhos` temporário para testes.
+- reinício temporário para testes.
 
-A versão genérica não registra Protocol Mass e começa com musculação manual vazia.
+## Próximos testes
 
-## Scheduler
-
-Trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. Lembretes passam pelo Personality Engine e usam `preferred_name` quando cadastrado.
-
-## Finanças
-
-Continua planejado, ainda sem persistência real.
-
-## Próximos passos sugeridos
-
-1. validar captura rápida de tarefa para hoje em poucos minutos;
-2. validar rejeição de data/horário passado;
-3. validar captura múltipla de itens de mercado;
-4. validar importação de grade e versão genérica;
-5. retomar resumo diário + personalidade contextual baseada em comportamento;
-6. streaks de metas/rotinas;
-7. finanças persistentes;
-8. integração com ônibus;
-9. consolidar testes e hospedagem posteriormente.
+1. `/menu` e conferir o novo painel de acesso rápido;
+2. `➕ Adicionar → Nova tarefa` para alguns minutos à frente;
+3. tentar horário passado e confirmar bloqueio;
+4. `🛒 Item faltando` com um e vários itens;
+5. deixar uma tarefa vencer e confirmar que aparece como `📌 Pendência` em `🗓️ Hoje`;
+6. validar versão genérica e importação da grade;
+7. depois retomar resumo diário + personalidade comportamental.
 
 ## Regra de continuidade
 
 Ao concluir nova etapa:
 
-1. atualizar este arquivo com o estado real;
-2. atualizar README quando funcionalidades ou execução mudarem;
+1. atualizar este arquivo;
+2. atualizar README quando o fluxo público mudar significativamente;
 3. registrar decisões que afetem etapas futuras;
 4. deixar explícito o próximo passo técnico.
