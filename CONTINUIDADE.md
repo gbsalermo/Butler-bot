@@ -5,68 +5,148 @@
 - Desenvolvimento concentrado na `main`.
 - Stack: Python, `python-telegram-bot[job-queue]`, SQLite e `python-dotenv`.
 - Execução local via polling.
-- Nome do bot: `Butler`.
-- Username atual: `@ButlerSal_BOT`.
+- Nome do bot pessoal: `Butler`.
+- Username pessoal atual: `@ButlerSal_BOT`.
 - Prioridade continua sendo funcionalidade antes de suíte de testes.
 
 ## Filosofia do produto
 
 O Butler deve parecer um assistente presente, não um formulário. Deve reduzir carga mental, lembrar antes que o usuário precise conferir, guardar pequenas informações persistentes, conversar de forma natural e respeitar períodos de descanso sem cobrança.
 
-## 🕴️ Personality Engine v1
+## 🧩 Dois modos de execução
 
-Implementado como camada separada da regra de negócio.
+A partir desta etapa existe **um único código-base com dois entrypoints**. Não criar fork separado enquanto não houver necessidade real.
+
+### Butler pessoal
+
+Entry point:
+
+`python -m src.main`
+
+Características:
+
+- usa o banco pessoal padrão `data/butler.db`;
+- mantém a grade acadêmica já cadastrada;
+- mantém a correção manual de Laboratório de Sistemas Digitais I (segunda 14:00–16:00);
+- mantém o Protocol Mass de 12 semanas e histórico de treino;
+- continua sendo a versão principal de desenvolvimento.
+
+### Butler genérico
+
+Entry point:
+
+`python -m src.main_generic`
+
+Configuração:
+
+- `.env.generic`, criado a partir de `.env.generic.example`;
+- token Telegram próprio;
+- banco separado `data/butler_generic.db` por padrão.
+
+Regras:
+
+- não chama `seed_default_schedule()`;
+- não inicializa/expõe Protocol Mass;
+- não contém grade ou treino pessoal;
+- `/start` registra o `chat_id` da pessoa;
+- pergunta como ela quer ser chamada;
+- musculação começa vazia e usa o cadastro manual disponível no código-base;
+- tarefas, compromissos, pendências, Day-off, metas, rotinas, lista de mercado, personalidade e scheduler continuam disponíveis.
+
+A separação por banco/token impede que os dados pessoais do Butler principal sejam enviados para a outra instância.
+
+## 👤 Nome preferido / onboarding
+
+Novo arquivo: `src/onboarding.py`.
+
+A tabela `users` ganhou `preferred_name` por migração compatível com bancos existentes.
+
+Fluxo:
+
+1. `/start` registra/atualiza `chat_id`, Telegram user id, nome e username;
+2. se não existir `preferred_name`, pergunta como a pessoa quer ser chamada;
+3. salva o nome/apelido;
+4. abre o menu principal;
+5. o valor pode ser alterado depois em `🏠 Cotidiano → 👤 Como me chamar`.
+
+O `/start` antigo foi removido de `home_menu.py`; onboarding agora é o único dono desse comando.
+
+Respostas casuais e lembretes proativos já substituem `chefe` pelo nome preferido quando possível.
+
+## 📥 Importação de grade por PDF/imagem
+
+Novos arquivos:
+
+- `src/schedule_importer.py` — extração e interpretação;
+- `src/schedule_import_handlers.py` — fluxo Telegram com prévia/confirmação.
+
+A opção aparece em:
+
+`📚 Matérias → 📥 Importar grade por PDF/imagem`
+
+Formatos:
+
+- PDF com texto: PyMuPDF;
+- PDF escaneado: renderização + OCR;
+- JPG/PNG/WebP/foto: OCR via `pytesseract` + Pillow.
+
+Dependências adicionadas ao `requirements.txt`:
+
+- `PyMuPDF`;
+- `Pillow`;
+- `pytesseract`.
+
+Observação operacional: `pytesseract` exige que o executável **Tesseract OCR** esteja instalado no sistema para imagens/PDFs escaneados.
+
+### Lógica da importação
+
+O parser procura códigos SIGAA como:
+
+- `35M45`;
+- `24M23`;
+- `3T23`.
+
+Usa `src/sigaa_schedule.py` para transformar os códigos em dias e horários.
+
+A importação tenta identificar:
+
+- nome da matéria;
+- local/sala;
+- código SIGAA;
+- sessões resultantes.
+
+Antes de gravar, o Butler mostra uma **prévia obrigatória**. Somente `✅ Importar grade` persiste os dados.
+
+Se a matéria já existir, `upsert_subject_schedule()` substitui os horários daquela matéria e a reativa. Não cria duplicata.
+
+A confirmação é importante porque OCR e o próprio SIGAA podem estar errados. Não remover essa etapa. O caso do laboratório pessoal demonstra por que um horário manual pode ser mais correto que o código exibido.
+
+## 🕴️ Personality Engine v1
 
 Arquivos:
 
-- `src/personality.py` — tons, famílias de respostas e traços recorrentes;
-- `src/context_engine.py` — contexto factual do cotidiano;
-- `src/casual_handlers.py` — pequenas conversas naturais;
-- `src/personality_navigation.py` — personalidade perceptível nas telas mais usadas;
-- `src/scheduler.py` — lembretes proativos usam a personalidade.
+- `src/personality.py`;
+- `src/context_engine.py`;
+- `src/casual_handlers.py`;
+- `src/personality_navigation.py`;
+- `src/scheduler.py`.
 
-### Personalidade desejada
+Personalidade: competente, informal, levemente cansado/cínico e útil. Pode provocar a situação/comportamento, nunca humilhar o usuário.
 
-Butler é competente, informal, levemente cansado e cínico, mas genuinamente útil. Chama o usuário de `chefe` e pode provocar sem transformar toda mensagem em piada.
+Tons:
 
-Tons disponíveis:
+- `NEUTRO`;
+- `LEVE`;
+- `SARCASTICO`;
+- `CUIDADOSO`.
 
-- `NEUTRO` — direto;
-- `LEVE` — informal;
-- `SARCASTICO` — provocação curta;
-- `CUIDADOSO` — sem sarcasmo.
+Day-off e situações sensíveis permanecem sem sarcasmo.
 
-O sarcasmo não deve ser constante. Day-off e situações sensíveis permanecem sem provocação.
-
-### Visibilidade da personalidade
-
-A primeira implementação ficou concentrada demais em lembretes. Isso foi corrigido.
-
-Agora a personalidade também aparece em:
-
-- `/start` e retorno ao menu principal;
-- entrada em `📚 Matérias`;
-- entrada em `✅ Tarefas`, `📅 Compromissos` e `📌 Pendências`;
-- entrada em `🏠 Cotidiano`;
-- área `💰 Finanças` enquanto ainda é placeholder;
-- cumprimentos e agradecimentos;
-- lembretes proativos.
-
-As telas de tarefas/compromissos/pendências usam a quantidade real de itens pendentes para escolher comentários. Não inventar contexto.
-
-### Contexto real
-
-`context_engine.py` observa dados reais como quantidade total de pendências, itens previstos para hoje e itens atrasados. Isso é o início da memória comportamental.
-
-### Traços recorrentes
-
-Butler possui pequenas características que podem reaparecer ocasionalmente. A primeira é uma antipatia gratuita por terça-feira:
-
-`Terça-feira. Você sabe o que penso sobre isso.`
+A personalidade aparece em menus frequentes, cumprimentos, agradecimentos e lembretes. O contexto atual já observa pendências/atrasos e há um traço recorrente de antipatia por terça-feira.
 
 ## 🧭 Organização dos menus
 
-Criado `src/ui_layout.py` para centralizar o desenho dos teclados e evitar versões divergentes em handlers antigos.
+`src/ui_layout.py` centraliza os teclados.
 
 ### Menu principal
 
@@ -79,18 +159,21 @@ Criado `src/ui_layout.py` para centralizar o desenho dos teclados e evitar vers�
 - `🗓️ Hoje`
 - `🏠 Cotidiano`
 
-Musculação foi promovida para o menu principal.
-
 ### Cotidiano
 
-- `🛒 O que está faltando?`
-- `➕ Item faltando`
-- `🎯 Metas`
-- `🧘 Rotinas`
-- `💰 Finanças`
-- retorno ao menu principal
+- lista do que está faltando;
+- metas;
+- rotinas/autocuidado;
+- finanças;
+- `👤 Como me chamar`;
+- retorno ao menu principal.
 
-Finanças saiu do menu principal e passou para Cotidiano.
+### Acadêmico
+
+- `📚 Minhas matérias`;
+- `⚙️ Gerenciar matérias`;
+- `📥 Importar grade por PDF/imagem`;
+- retorno ao menu principal.
 
 ## Funcionalidades consolidadas
 
@@ -103,11 +186,11 @@ Finanças saiu do menu principal e passou para Cotidiano.
 
 ### 📚 Acadêmico
 
-- grade inicial persistida;
+- grade persistente;
 - tradução de códigos SIGAA;
 - adicionar/remover/trancar/editar matérias;
-- matérias trancadas não geram lembretes;
-- navegação possui retorno para o menu acadêmico/principal.
+- importação por PDF/imagem com confirmação;
+- matérias trancadas não geram lembretes.
 
 ### ✅ Tarefas, 📅 compromissos e 📌 pendências
 
@@ -115,84 +198,34 @@ Finanças saiu do menu principal e passou para Cotidiano.
 - data, horário, detalhes e antecedência configuráveis;
 - lembretes proativos;
 - concluir ou adiar no próprio aviso;
-- botão `❌ Cancelar ação` durante fluxos de cadastro/edição.
+- cancelamento visível durante fluxos.
 
 ### 🏠 Cotidiano
 
-- lista persistente do que está faltando em casa;
+- lista persistente do que falta em casa;
 - metas gerais e progresso;
 - rotinas/autocuidado;
-- finanças como módulo futuro;
-- visão `🗓️ Hoje` agregando agenda e rotina.
+- finanças ainda como módulo futuro;
+- visão `🗓️ Hoje`.
 
-## 🏋️ Musculação — Protocol Mass
+## 🏋️ Musculação — Protocol Mass (somente Butler pessoal)
 
-Implementado a partir das 12 planilhas semanais fornecidas e da tabela oficial de exercícios substitutos.
+- 12 semanas carregadas;
+- `🚀 Começar os trabalhos` inicia o protocolo inteiro apenas uma vez;
+- treino do dia;
+- falta com motivo (`😕 Não consegui treinar hoje`);
+- substitutos oficiais;
+- registro série por série;
+- carga e repetições por série;
+- histórico de carga;
+- progresso semanal;
+- `🔄 Reiniciar os trabalhos` ainda temporário para testes.
 
-Arquivos principais:
-
-- `src/protocol_mass_data.py` — dados das 12 semanas + substituições;
-- `src/protocol_mass_store.py` — estado, sessões, exercícios e séries em SQLite;
-- `src/protocol_mass_handlers.py` — fluxo geral do Telegram;
-- `src/protocol_mass_series.py` — acompanhamento série por série e histórico;
-- `src/protocol_mass_navigation.py` — entrada pelo botão de musculação;
-- `src/protocol_mass_ui.py` — menus diferentes antes/durante o protocolo;
-- `src/main.py` — inicialização e registro do módulo.
-
-### Semântica de início
-
-`🚀 Começar os trabalhos` significa iniciar o protocolo inteiro de 12 semanas e deve aparecer somente antes do início.
-
-Durante o protocolo ativo, o menu diário não oferece um novo início. O botão `🔄 Reiniciar os trabalhos` continua apenas como ferramenta temporária de teste e zera completamente o protocolo.
-
-### Menu durante o protocolo
-
-- `📅 Treino de hoje`
-- `🏋️ Registrar séries`
-- `🔁 Substituir exercício`
-- `✅ Finalizar treino`
-- `😕 Não consegui treinar hoje`
-- `📈 Progresso Protocol Mass`
-- `📊 Histórico de carga`
-- `🔄 Reiniciar os trabalhos` — temporário para teste
-- retorno ao cotidiano
-
-### Regras do acompanhamento
-
-- protocolo possui 12 semanas;
-- cada semana possui treinos de segunda a sábado;
-- domingo não entra na contagem;
-- semana só avança após 6/6 treinos concluídos;
-- reiniciar o processo do bot não perde o progresso;
-- Semana 12 concluída encerra o protocolo.
-
-### Registro série por série
-
-Tabela: `protocol_mass_set_logs`.
-
-Cada série guarda separadamente semana, dia, exercício original, exercício efetivamente realizado quando houve substituição, número da série, carga e repetições.
-
-Para prescrições simples o Butler deduz o número de séries. Para prescrições especiais/complexas ele mostra a prescrição original e pergunta quantas séries serão registradas, evitando interpretar técnica avançada de forma errada.
-
-### Histórico de carga
-
-`📊 Histórico de carga` lista exercícios que já possuem séries registradas e mostra a evolução por semana/dia. A comparação atual é factual/visual. Percentual de evolução e volume ficam para depois da normalização das cargas.
-
-### Exercício substituído
-
-`🔁 Substituir exercício` usa somente os substitutos da tabela fornecida e preserva o movimento realmente executado nos registros de séries.
-
-### Não consegui treinar hoje
-
-`😕 Não consegui treinar hoje` registra falta com motivo opcional. O dia não conta como treino concluído e aparece como `➖` no progresso.
-
-### Fluxo de teste
-
-`🧪 Exemplo de treino` existe antes do início e não altera o progresso real. `🔄 Reiniciar os trabalhos` é temporário e apaga também séries/cargas/repetições.
+A versão genérica não registra os módulos Protocol Mass e começa com musculação manual vazia.
 
 ## Scheduler
 
-Atualmente trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. Os lembretes passam pelo Personality Engine. O Protocol Mass ainda não envia lembrete automático porque não foi definido horário fixo para musculação.
+Trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. Lembretes passam pelo Personality Engine e já usam `preferred_name` quando cadastrado.
 
 ## Finanças
 
@@ -200,16 +233,15 @@ Continua planejado, ainda sem persistência real. Direção: entradas/saídas, c
 
 ## Próximos passos sugeridos
 
-1. validar manualmente a personalidade nas telas e nos lembretes;
-2. expandir contexto comportamental com adiamentos, streaks e progresso real;
-3. permitir corrigir/apagar uma série registrada por engano;
-4. normalizar cargas e calcular evolução/volume quando seguro;
-5. remover o botão temporário `🔄 Reiniciar os trabalhos` quando o módulo estiver estável;
-6. rotinas/metas: progresso por período real e streak;
-7. resumo diário e semanal automático;
-8. finanças persistentes;
-9. integração com ônibus;
-10. depois consolidar testes e preparar hospedagem 24/7.
+1. validar importação de grade com screenshot/PDF real no Telegram;
+2. validar o onboarding/nome preferido nas duas versões;
+3. validar que `main_generic` nasce realmente sem grade e sem Protocol Mass;
+4. depois retomar resumo diário + personalidade contextual baseada em comportamento;
+5. streaks de metas/rotinas;
+6. permitir corrigir/apagar série de treino registrada por engano;
+7. finanças persistentes;
+8. integração com ônibus;
+9. consolidar testes e hospedagem 24/7 posteriormente.
 
 ## Regra de continuidade
 
