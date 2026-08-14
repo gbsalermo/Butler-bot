@@ -6,7 +6,7 @@
 
 Assistente pessoal via Telegram para organização acadêmica, tarefas, compromissos, casa, metas, musculação, autocuidado e finanças pessoais.
 
-O projeto roda inicialmente via **polling**, usa **SQLite** e possui duas formas de execução no mesmo código-base.
+O projeto roda inicialmente via **polling**, usa **SQLite** no rolling local e possui duas formas de execução no mesmo código-base.
 
 ## Versões
 
@@ -23,33 +23,59 @@ Mantém os dados pessoais já existentes no projeto:
 - Protocol Mass de 12 semanas;
 - histórico do usuário no banco `data/butler.db`.
 
-### Butler genérico
+### Butler genérico / multiusuário
 
 ```bash
 python -m src.main_generic
 ```
 
-A versão genérica nasce limpa:
+A versão genérica nasce limpa e é personalizada por `chat_id`:
 
 - não carrega a grade pessoal;
 - não carrega o Protocol Mass;
-- usa banco separado (`data/butler_generic.db` por padrão);
-- registra o `chat_id` no `/start`;
-- pergunta como a pessoa quer ser chamada;
+- registra automaticamente cada chat que interage com o bot;
+- cada `chat_id` possui dados isolados no rolling local;
+- `/start` pergunta como a pessoa quer ser chamada;
 - musculação começa sem rotina cadastrada;
 - pode importar a própria grade por PDF textual ou `.txt`.
 
+No rolling local, o isolamento usa um pequeno registro central e um SQLite por chat em `data/butler_generic_users/`. Isso é propositalmente simples para o volume esperado de poucos usuários.
+
+### Regra de isolamento
+
+O `chat_id` define o contexto do Butler. Antes de qualquer mensagem ou callback, `src/user_scope.py` seleciona o armazenamento correspondente ao chat atual.
+
+Isso isola por usuário/chat:
+
+- matérias e horários;
+- tarefas e compromissos;
+- itens faltando em casa;
+- metas e progresso;
+- rotinas e logs;
+- musculação manual da versão genérica;
+- Day-off;
+- nome preferido;
+- lembretes do scheduler.
+
+O scheduler percorre os chats registrados individualmente e envia cada lembrete somente ao chat dono daquele armazenamento.
+
+> O Protocol Mass permanece exclusivo do Butler pessoal nesta etapa.
+
+### Hospedagem Cloudflare
+
+A separação por `chat_id` é uma regra de domínio e deve ser preservada na hospedagem. O SQLite por arquivo é apenas a implementação do rolling local. Na etapa de Cloudflare, a persistência será adaptada para D1/armazenamento persistente da plataforma sem alterar a lógica de identidade do Butler.
+
 ## Menu principal — acesso rápido
 
-O menu inicial foi reorganizado para priorizar ações de poucos segundos:
+O menu inicial prioriza ações de poucos segundos:
 
 - 🌙 Day-off
 - ➕ Adicionar
 - 🗓️ Hoje
 - 🛒 Item faltando
-- 🏋️ Musculação
 - 📚 Matérias
 - 🏠 Cotidiano
+- 🏋️ Musculação
 
 `➕ Adicionar` deixa escolher entre **Nova tarefa** e **Novo compromisso**.
 
@@ -158,7 +184,7 @@ Na versão genérica, musculação começa vazia e usa o cadastro manual.
 
 ### 🌙 Day-off
 
-Silencia cobranças e lembretes até o usuário chamar o Butler novamente.
+Silencia cobranças e lembretes até o usuário chamar o Butler novamente. Na versão genérica, o Day-off é isolado por `chat_id` e não afeta outros usuários.
 
 ### 🕴️ Personality Engine
 
