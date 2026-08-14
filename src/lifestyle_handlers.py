@@ -15,6 +15,12 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
      ["🏠 Cotidiano", "🗓️ Hoje"], ["💰 Finanças"]], resize_keyboard=True
 )
 
+LABELS = {
+    "tarefa": ("✅", "Tarefa", "Tarefas", "Nova tarefa", "Concluir tarefa", "Editar tarefa", "Remover tarefa"),
+    "compromisso": ("📅", "Compromisso", "Compromissos", "Novo compromisso", "Concluir compromisso", "Editar compromisso", "Remover compromisso"),
+    "pendencia": ("📌", "Pendência", "Pendências", "Nova pendência", "Resolver pendência", "Editar pendência", "Remover pendência"),
+}
+
 
 def _kind_from_text(text: str) -> str | None:
     t = text.lower()
@@ -23,21 +29,13 @@ def _kind_from_text(text: str) -> str | None:
     if "pendência" in t or "pendencia" in t: return "pendencia"
     return None
 
-LABELS = {
-    "tarefa": ("✅", "Tarefa", "Tarefas"),
-    "compromisso": ("📅", "Compromisso", "Compromissos"),
-    "pendencia": ("📌", "Pendência", "Pendências"),
-}
-
 
 def _menu(kind: str) -> ReplyKeyboardMarkup:
-    singular = LABELS[kind][1].lower()
-    plural = LABELS[kind][2].lower()
-    complete = "☑️ Resolver pendência" if kind == "pendencia" else f"☑️ Concluir {singular}"
+    _, _, plural, add_label, complete_label, edit_label, remove_label = LABELS[kind]
     return ReplyKeyboardMarkup(
-        [[f"➕ Novo {singular}", f"📋 Ver {plural}"],
-         [complete, f"✏️ Editar {singular}"],
-         [f"🗑️ Remover {singular}", "🏠 Menu principal"]], resize_keyboard=True
+        [[f"➕ {add_label}", f"📋 Ver {plural.lower()}"],
+         [f"☑️ {complete_label}", f"✏️ {edit_label}"],
+         [f"🗑️ {remove_label}", "🏠 Menu principal"]], resize_keyboard=True
     )
 
 
@@ -60,7 +58,7 @@ def _parse_time(value: str):
 async def open_kind_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     kind = _kind_from_text(update.message.text or "")
     if not kind: return
-    icon, _, plural = LABELS[kind]
+    icon, _, plural, *_ = LABELS[kind]
     await update.message.reply_text(f"{icon} *{plural}*\n\nO que você quer fazer?", parse_mode="Markdown", reply_markup=_menu(kind))
 
 
@@ -247,12 +245,12 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 def register_lifestyle_handlers(application) -> None:
     add_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r"^➕ Novo (tarefa|compromisso|pendência)$"), add_start)],
+        entry_points=[MessageHandler(filters.Regex(r"^➕ (Nova tarefa|Novo compromisso|Nova pendência)$"), add_start)],
         states={ITEM_TITLE:[MessageHandler(filters.TEXT & ~filters.COMMAND, add_title)], ITEM_DATE:[MessageHandler(filters.TEXT & ~filters.COMMAND, add_date)], ITEM_TIME:[MessageHandler(filters.TEXT & ~filters.COMMAND, add_time)], ITEM_REMINDER:[MessageHandler(filters.TEXT & ~filters.COMMAND, add_reminder)], ITEM_DETAILS:[MessageHandler(filters.TEXT & ~filters.COMMAND, add_details)]},
         fallbacks=[CommandHandler("cancelar", cancel)])
     complete_conv = ConversationHandler(entry_points=[MessageHandler(filters.Regex(r"^☑️ (Concluir tarefa|Concluir compromisso|Resolver pendência)$"), complete_start)], states={COMPLETE_ID:[MessageHandler(filters.TEXT & ~filters.COMMAND, complete_id)]}, fallbacks=[CommandHandler("cancelar", cancel)])
-    edit_conv = ConversationHandler(entry_points=[MessageHandler(filters.Regex(r"^✏️ Editar (tarefa|compromisso|pendência)$"), edit_start)], states={EDIT_ID:[MessageHandler(filters.TEXT & ~filters.COMMAND, edit_id)], EDIT_FIELD:[MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field)], EDIT_VALUE:[MessageHandler(filters.TEXT & ~filters.COMMAND, edit_value)]}, fallbacks=[CommandHandler("cancelar", cancel)])
-    delete_conv = ConversationHandler(entry_points=[MessageHandler(filters.Regex(r"^🗑️ Remover (tarefa|compromisso|pendência)$"), delete_start)], states={DELETE_ID:[MessageHandler(filters.TEXT & ~filters.COMMAND, delete_id)], DELETE_CONFIRM:[MessageHandler(filters.TEXT & ~filters.COMMAND, delete_confirm)]}, fallbacks=[CommandHandler("cancelar", cancel)])
+    edit_conv = ConversationHandler(entry_points=[MessageHandler(filters.Regex(r"^✏️ (Editar tarefa|Editar compromisso|Editar pendência)$"), edit_start)], states={EDIT_ID:[MessageHandler(filters.TEXT & ~filters.COMMAND, edit_id)], EDIT_FIELD:[MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field)], EDIT_VALUE:[MessageHandler(filters.TEXT & ~filters.COMMAND, edit_value)]}, fallbacks=[CommandHandler("cancelar", cancel)])
+    delete_conv = ConversationHandler(entry_points=[MessageHandler(filters.Regex(r"^🗑️ (Remover tarefa|Remover compromisso|Remover pendência)$"), delete_start)], states={DELETE_ID:[MessageHandler(filters.TEXT & ~filters.COMMAND, delete_id)], DELETE_CONFIRM:[MessageHandler(filters.TEXT & ~filters.COMMAND, delete_confirm)]}, fallbacks=[CommandHandler("cancelar", cancel)])
     application.add_handler(add_conv, group=-1); application.add_handler(complete_conv, group=-1); application.add_handler(edit_conv, group=-1); application.add_handler(delete_conv, group=-1)
     application.add_handler(MessageHandler(filters.Regex(r"^(✅ Tarefas|📅 Compromissos|📌 Pendências)$"), open_kind_menu), group=-1)
     application.add_handler(MessageHandler(filters.Regex(r"^📋 Ver (tarefas|compromissos|pendências)$"), list_kind), group=-1)
