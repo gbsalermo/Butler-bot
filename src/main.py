@@ -11,6 +11,8 @@ from src.casual_handlers import register_casual_handlers
 from src.config import TELEGRAM_BOT_TOKEN, validate_config
 from src.daily_store import init_daily_store
 from src.database import init_database, seed_default_schedule
+from src.finance_handlers import register_finance_handlers
+from src.finance_store import init_finance_tables
 from src.history_handlers import register_history_handlers
 from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
@@ -37,15 +39,12 @@ def main() -> None:
     init_daily_store()
     init_home_tables()
     init_assistant_state()
+    init_finance_tables()
     init_protocol_mass_tables()
     seed_default_schedule()
     apply_layout_overrides()
 
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
-    )
-
+    logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
     register_onboarding(application)
@@ -53,6 +52,7 @@ def main() -> None:
     register_wellbeing_handlers(application)
     register_quick_access(application)
     register_personality_navigation(application)
+    register_finance_handlers(application)
     register_home_menu(application)
     register_protocol_mass_series(application)
     register_protocol_mass_ui(application)
@@ -73,5 +73,4 @@ def main() -> None:
     application.run_polling(drop_pending_updates=True)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
