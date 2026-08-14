@@ -4,16 +4,16 @@ from telegram import ReplyKeyboardMarkup
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["🌙 Day-off"],
-        ["🏋️ Musculação", "📚 Matérias"],
-        ["✅ Tarefas", "📅 Compromissos"],
-        ["📌 Pendências", "🗓️ Hoje"],
-        ["🏠 Cotidiano"],
+        ["➕ Adicionar", "🗓️ Hoje"],
+        ["🛒 Item faltando", "🏋️ Musculação"],
+        ["📚 Matérias", "🏠 Cotidiano"],
     ],
     resize_keyboard=True,
 )
 
 COTIDIANO_KEYBOARD = ReplyKeyboardMarkup(
     [
+        ["✅ Tarefas", "📅 Compromissos"],
         ["🛒 O que está faltando?", "➕ Item faltando"],
         ["🎯 Metas", "🧘 Rotinas"],
         ["💰 Finanças", "👤 Como me chamar"],
