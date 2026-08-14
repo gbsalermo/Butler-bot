@@ -25,6 +25,7 @@ from src.home_store import init_home_tables
 from src.lifestyle_handlers import register_lifestyle_handlers
 from src.onboarding import register_onboarding
 from src.personality_navigation import register_personality_navigation
+from src.quick_capture import register_quick_capture
 from src.schedule_import_handlers import register_schedule_import
 from src.scheduler import register_scheduler
 from src.ui_layout import apply_layout_overrides
@@ -54,6 +55,7 @@ def main() -> None:
     register_home_menu(application)
     register_academic_navigation(application)
     register_assistant_views(application)
+    register_quick_capture(application)
     register_lifestyle_handlers(application)
     register_home_handlers(application)
     register_handlers(application)
