@@ -22,8 +22,9 @@ COTIDIANO_KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
-ACADEMIC_IMPORT_KEYBOARD = ReplyKeyboardMarkup(
+ACADEMIC_KEYBOARD = ReplyKeyboardMarkup(
     [
+        ["📚 Minhas matérias", "⚙️ Gerenciar matérias"],
         ["📥 Importar grade por PDF/imagem"],
         ["🏠 Menu principal"],
     ],
@@ -43,6 +44,7 @@ FINANCE_KEYBOARD = ReplyKeyboardMarkup(
 
 def apply_layout_overrides() -> None:
     """Mantém um único desenho de menus mesmo em módulos antigos."""
+    import src.academic_navigation as academic_navigation
     import src.home_handlers as home_handlers
     import src.home_menu as home_menu
     import src.lifestyle_handlers as lifestyle_handlers
@@ -50,6 +52,8 @@ def apply_layout_overrides() -> None:
 
     home_menu.MAIN_KEYBOARD = MAIN_KEYBOARD
     home_menu.FINANCE_KEYBOARD = FINANCE_KEYBOARD
+    home_menu.ACADEMIC_KEYBOARD = ACADEMIC_KEYBOARD
+    academic_navigation.ACADEMIC_KEYBOARD = ACADEMIC_KEYBOARD
 
     lifestyle_handlers.MAIN_KEYBOARD = MAIN_KEYBOARD
 
