@@ -16,7 +16,7 @@ class ImportedSubject:
 _CODE_RE = re.compile(r"(?<![A-Z0-9])([2-7]{1,6})\s*([MTN])\s*([1-6]{1,6})(?![A-Z0-9])", re.I)
 _DAY_WORDS = r"(?:SEG|TER|QUA|QUI|SEX|SAB|SÁB)"
 _DAY_ONLY_RE = re.compile(rf"^(?:{_DAY_WORDS})(?:\s+E\s+(?:{_DAY_WORDS}))*$", re.I)
-_LOCATION_MARKERS = re.compile(r"\b(PAV(?:ILH[AÃ]O)?|BLOCO|SALA|LAB(?:ORAT[ÓO]RIO)?|AUDIT[ÓO]RIO|PR[ÉE]DIO|CAMPUS)\b", re.I)
+_LOCATION_MARKERS = re.compile(r"\b(PAV(?:ILH[AÃ]O)?|BLOCO|SALA|AUDIT[ÓO]RIO|PR[ÉE]DIO|CAMPUS)\b", re.I)
 _HEADERS = {
     "componente curricular",
     "local",
