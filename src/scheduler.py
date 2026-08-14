@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -10,6 +11,7 @@ from src.config import BUTLER_TIMEZONE
 from src.daily_store import clear_snooze, list_items
 from src.database import preferred_name
 from src.personality import choose, everyday_tone
+from src.summary_engine import morning_summary, nightly_summary, weekly_summary
 from src.user_scope import (
     initialize_current_user_storage,
     multiuser_enabled,
@@ -20,6 +22,11 @@ from src.user_scope import (
 
 WEEKDAY_NAMES = {0:"segunda-feira",1:"terça-feira",2:"quarta-feira",3:"quinta-feira",4:"sexta-feira",5:"sábado",6:"domingo"}
 WEEKDAY_SHORT = {0:"seg",1:"ter",2:"qua",3:"qui",4:"sex",5:"sab",6:"dom"}
+
+MORNING_SUMMARY_TIME = os.getenv("BUTLER_MORNING_SUMMARY_TIME", "07:30")
+NIGHT_SUMMARY_TIME = os.getenv("BUTLER_NIGHT_SUMMARY_TIME", "21:30")
+WEEKLY_SUMMARY_TIME = os.getenv("BUTLER_WEEKLY_SUMMARY_TIME", "20:00")
+WEEKLY_SUMMARY_WEEKDAY = int(os.getenv("BUTLER_WEEKLY_SUMMARY_WEEKDAY", "6"))  # 0=seg ... 6=dom
 
 
 def _connect() -> sqlite3.Connection:
@@ -57,6 +64,41 @@ def _address(text: str, chat_id: int) -> str:
     return text.replace("chefe", preferred_name(chat_id))
 
 
+async def _automatic_summaries(context: ContextTypes.DEFAULT_TYPE, chat_id: int, now: datetime, sent: set[str]) -> None:
+    current = now.strftime("%H:%M")
+    name = preferred_name(chat_id)
+
+    if current == MORNING_SUMMARY_TIME:
+        key = f"{chat_id}:summary:morning:{now.date()}"
+        if key not in sent:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=morning_summary(name, now.date()),
+                parse_mode="Markdown",
+            )
+            sent.add(key)
+
+    if current == NIGHT_SUMMARY_TIME:
+        key = f"{chat_id}:summary:night:{now.date()}"
+        if key not in sent:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=nightly_summary(name, now.date()),
+                parse_mode="Markdown",
+            )
+            sent.add(key)
+
+    if now.weekday() == WEEKLY_SUMMARY_WEEKDAY and current == WEEKLY_SUMMARY_TIME:
+        key = f"{chat_id}:summary:weekly:{now.date()}"
+        if key not in sent:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=weekly_summary(name, now.date()),
+                parse_mode="Markdown",
+            )
+            sent.add(key)
+
+
 async def _tick_for_chat(context: ContextTypes.DEFAULT_TYPE, chat_id: int, now: datetime, sent: set[str]) -> None:
     set_current_chat_id(chat_id)
     if multiuser_enabled():
@@ -64,6 +106,8 @@ async def _tick_for_chat(context: ContextTypes.DEFAULT_TYPE, chat_id: int, now: 
 
     if is_day_off():
         return
+
+    await _automatic_summaries(context, chat_id, now, sent)
 
     tz = ZoneInfo(BUTLER_TIMEZONE)
     target = now + timedelta(minutes=10)
@@ -154,8 +198,8 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
         await _tick_for_chat(context, chat_id, now, sent)
 
     set_current_chat_id(None)
-    if len(sent) > 2000:
-        context.application.bot_data["sent_reminders"] = set(list(sent)[-500:])
+    if len(sent) > 3000:
+        context.application.bot_data["sent_reminders"] = set(list(sent)[-800:])
 
 
 def register_scheduler(application: Application) -> None:
