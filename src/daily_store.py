@@ -1,15 +1,14 @@
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 
-from src.config import DATABASE_PATH
+from src.user_scope import resolve_database_path
 
 VALID_KINDS = {"tarefa", "compromisso"}
 _UNSET = object()
 
 
 def _connect() -> sqlite3.Connection:
-    db_path = Path(DATABASE_PATH)
+    db_path = resolve_database_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -47,8 +46,6 @@ def init_daily_store() -> None:
             """
         )
         _ensure_column(conn, "daily_items", "snoozed_until", "TEXT")
-        # Modelo antigo tinha "pendencia" como terceiro tipo. A partir de agora,
-        # pendência significa uma tarefa vencida e ainda não concluída.
         conn.execute("UPDATE daily_items SET kind = 'tarefa' WHERE kind = 'pendencia'")
 
 
