@@ -17,7 +17,6 @@ from src.ui_layout import MAIN_KEYBOARD
 
 def _fmt_money(v: float) -> str:
     return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
 def _fmt_date(value: date | None) -> str: return value.strftime("%d/%m/%Y") if value else "sem data"
 def _flow_active(context):
     keys={"new_daily_item","quick_capture","quick_item","grocery","goal","workout","routine","goal_progress","finance","schedule_import","protocol_log_exercises","protocol_sub_exercises","series_exercises","history_names","preferred_name_pending","academic_edit"}
@@ -82,7 +81,7 @@ async def _ask_missing(update,context,intent):
     context.user_data["natural_pending"]={"name":intent.name,**intent.data}
     missing=[]
     if not intent.data.get("date"):missing.append("dia")
-    if intent.name=="appointment_create" and not intent.data.get("time"):missing.append("horário")
+    if (intent.name=="appointment_create" or intent.data.get("reminder_request")) and not intent.data.get("time"):missing.append("horário")
     await update.message.reply_text(f"Entendi *{intent.data.get('title') or 'isso'}*. Só falta {' e '.join(missing) or 'um detalhe'}. Pode mandar `amanhã às 15h`, `sexta 10h` etc.",parse_mode="Markdown")
 
 async def natural_followup(update:Update,context:ContextTypes.DEFAULT_TYPE):
@@ -96,7 +95,7 @@ async def natural_followup(update:Update,context:ContextTypes.DEFAULT_TYPE):
     if t:pending["time"]=t
     if not pending.get("date"):
         await update.message.reply_text("Ainda não peguei o dia. Ex.: `amanhã`, `sexta` ou `20/08`.",parse_mode="Markdown"); raise ApplicationHandlerStop
-    if pending["name"]=="appointment_create" and not pending.get("time"):
+    if (pending["name"]=="appointment_create" or pending.get("reminder_request")) and not pending.get("time"):
         await update.message.reply_text("Peguei o dia. Falta só a hora, tipo `15h` ou `15:30`.",parse_mode="Markdown"); raise ApplicationHandlerStop
     valid,error=validate_future(pending.get("date"),pending.get("time"))
     if not valid:await update.message.reply_text(error); raise ApplicationHandlerStop
@@ -107,18 +106,20 @@ async def natural_followup(update:Update,context:ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Fechado. *{pending['title']}* — {when}. Eu lembro; você aparece. Esse era o acordo implícito.",parse_mode="Markdown",reply_markup=MAIN_KEYBOARD); raise ApplicationHandlerStop
 
 async def _handle_create(update,context,intent):
-    title=(intent.data.get("title") or "").strip(); d=intent.data.get("date"); t=intent.data.get("time")
+    title=(intent.data.get("title") or "").strip(); d=intent.data.get("date"); t=intent.data.get("time"); reminder_request=bool(intent.data.get("reminder_request"))
     if not title:await update.message.reply_text("Entendi que você quer registrar algo, mas perdi justamente o que era. Reformula para mim."); return
     if t and not d:
         valid,_=validate_future(date.today(),t)
         if valid:d=date.today()
-    if intent.name=="appointment_create" and (not d or not t):
+    if (intent.name=="appointment_create" and (not d or not t)) or (reminder_request and (not d or not t)):
         intent.data["date"],intent.data["time"]=d,t; await _ask_missing(update,context,intent); return
     valid,error=validate_future(d,t)
     if not valid:await update.message.reply_text(error); return
     kind="compromisso" if intent.name=="appointment_create" else "tarefa"; add_item(kind,title,d.isoformat() if d else None,t,reminder_minutes=0)
     when=(_fmt_date(d)+(f" às {t}" if t else "")) if d else "sem data por enquanto"
-    extra="Eu cuido do lembrete; você cuida da parte inconveniente de realmente fazer." if kind=="tarefa" else "Eu aviso. Comparecer continua sendo uma responsabilidade surpreendentemente sua."
+    if kind=="compromisso": extra="Eu aviso. Comparecer continua sendo uma responsabilidade surpreendentemente sua."
+    elif d and t: extra="Eu cuido do lembrete; você cuida da parte inconveniente de realmente fazer."
+    else: extra="Salvei na lista. Sem data e hora eu não vou fingir que existe lembrete automático."
     await update.message.reply_text(f"✅ *{'Compromisso' if kind=='compromisso' else 'Tarefa'} salvo:* {title} — {when}. {extra}",parse_mode="Markdown",reply_markup=MAIN_KEYBOARD)
 
 async def _handle_completion(update,intent):
