@@ -5,6 +5,7 @@ from pathlib import Path
 from src.config import DATABASE_PATH
 
 VALID_KINDS = {"tarefa", "compromisso", "pendencia"}
+_UNSET = object()
 
 
 def _connect() -> sqlite3.Connection:
@@ -109,9 +110,8 @@ def delete_item(item_id: int) -> bool:
         return cur.rowcount > 0
 
 
-def update_item(item_id: int, *, title: str | None = None, due_date: str | None = None,
-                due_time: str | None = None, details: str | None = None,
-                reminder_minutes: int | None = None) -> bool:
+def update_item(item_id: int, *, title=_UNSET, due_date=_UNSET, due_time=_UNSET,
+                details=_UNSET, reminder_minutes=_UNSET) -> bool:
     current = get_item(item_id)
     if current is None:
         return False
@@ -123,11 +123,11 @@ def update_item(item_id: int, *, title: str | None = None, due_date: str | None 
             WHERE id = ?
             """,
             (
-                title if title is not None else current["title"],
-                due_date if due_date is not None else current["due_date"],
-                due_time if due_time is not None else current["due_time"],
-                details if details is not None else current["details"],
-                reminder_minutes if reminder_minutes is not None else current["reminder_minutes"],
+                current["title"] if title is _UNSET else title,
+                current["due_date"] if due_date is _UNSET else due_date,
+                current["due_time"] if due_time is _UNSET else due_time,
+                current["details"] if details is _UNSET else details,
+                current["reminder_minutes"] if reminder_minutes is _UNSET else reminder_minutes,
                 item_id,
             ),
         )
