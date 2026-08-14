@@ -15,16 +15,16 @@ O Butler deve parecer um assistente presente, não um formulário. Deve reduzir 
 
 ## 🧩 Dois modos de execução
 
-Existe **um único código-base com dois entrypoints**.
+Existe um único código-base com dois entrypoints.
 
 ### Butler pessoal
 
 `python -m src.main`
 
 - banco `data/butler.db`;
-- mantém a grade pessoal já cadastrada;
-- mantém a correção manual de Laboratório de Sistemas Digitais I (segunda 14:00–16:00);
-- mantém o Protocol Mass de 12 semanas e histórico de treino.
+- mantém a grade pessoal;
+- mantém a correção manual de Laboratório de Sistemas Digitais I em segunda 14:00–16:00;
+- mantém Protocol Mass de 12 semanas e histórico de treino.
 
 ### Butler genérico
 
@@ -36,7 +36,7 @@ Existe **um único código-base com dois entrypoints**.
 - não chama `seed_default_schedule()`;
 - não inicializa/expõe Protocol Mass;
 - não contém grade ou treino pessoal;
-- `/start` registra o `chat_id` e pergunta como a pessoa quer ser chamada;
+- `/start` registra `chat_id` e pergunta como a pessoa quer ser chamada;
 - musculação começa vazia.
 
 ## 👤 Nome preferido / onboarding
@@ -55,38 +55,54 @@ Fluxo:
 
 Respostas casuais e lembretes proativos usam o nome preferido quando possível.
 
-## 📥 Importação de grade por PDF/imagem
+## 📥 Importação de grade — decisão simplificada
 
 Arquivos:
 
 - `src/schedule_importer.py`;
 - `src/schedule_import_handlers.py`.
 
-Opção:
+Opção atual:
 
-`📚 Matérias → 📥 Importar grade por PDF/imagem`
+`📚 Matérias → 📥 Importar grade por PDF/texto`
 
-Formatos:
+### Formatos aceitos
 
-- PDF com texto: PyMuPDF;
-- PDF escaneado: renderização + OCR;
-- JPG/PNG/WebP/foto: OCR via `pytesseract` + Pillow.
+- PDF com texto pesquisável/selecionável;
+- arquivo `.txt`.
 
-`pytesseract` exige o executável Tesseract OCR instalado no sistema para imagens/PDFs escaneados.
+### Formatos não aceitos
+
+- imagem/foto;
+- JPG/PNG/WebP;
+- screenshot;
+- PDF escaneado que contenha apenas imagem.
+
+O Butler **não executa OCR**. Tesseract, Pillow e `pytesseract` foram removidos das dependências.
+
+Motivo: manter o projeto simples, portátil e mais adequado à futura hospedagem.
+
+Se a pessoa só tiver uma imagem da grade, o Butler deve orientá-la a:
+
+1. usar qualquer IA/ferramenta para converter a imagem em **PDF com texto pesquisável**;
+2. enviar esse PDF ao Butler;
+3. ou cadastrar as matérias uma por uma em `⚙️ Gerenciar matérias`.
+
+PDF textual é extraído com `pypdf`.
 
 ### Lógica da importação
 
 O parser procura códigos SIGAA como `35M45`, `24M23`, `3T23`, usa `src/sigaa_schedule.py` e tenta identificar matéria, local/sala, código e sessões resultantes.
 
-Antes de gravar, o Butler mostra uma **prévia obrigatória**. Somente `✅ Importar grade` persiste os dados.
+Antes de gravar, o Butler mostra uma prévia obrigatória. Somente `✅ Importar grade` persiste os dados.
 
-Se a matéria já existir, `upsert_subject_schedule()` substitui os horários daquela matéria e a reativa.
+Se a matéria já existir, `upsert_subject_schedule()` substitui os horários e reativa a matéria.
 
-A confirmação é obrigatória porque OCR e o próprio SIGAA podem conter informação errada.
+A confirmação continua obrigatória porque o próprio documento/SIGAA pode conter informação incorreta.
 
 ## ⏰ Normalização dos horários SIGAA
 
-Decisão atual: o Butler usa **horas completas** como representação oficial dos blocos acadêmicos, em vez dos minutos quebrados exibidos pelo SIGAA.
+O Butler usa **horas completas** como representação oficial dos blocos acadêmicos.
 
 Exemplos:
 
@@ -96,13 +112,15 @@ Exemplos:
 - `T2345` → `14:00–18:00`;
 - `N12` → `18:00–20:00`.
 
-Essa normalização acontece diretamente em `src/sigaa_schedule.py`, portanto vale tanto para cadastro por código quanto para importação por PDF/imagem.
+`src/sigaa_schedule.py` é a fonte da conversão para cadastro por código e importação.
 
-O horário manual continua tendo prioridade quando o usuário corrige uma informação do SIGAA, como no caso do Laboratório de Sistemas Digitais I.
+`init_database()` também normaliza registros antigos que ainda usam minutos quebrados do SIGAA, como `08:01–09:40` e `10:00–11:40`.
+
+O horário manual continua tendo prioridade quando o usuário corrige uma informação, como no Laboratório de Sistemas Digitais I.
 
 ## 🕴️ Personality Engine v1
 
-Arquivos:
+Arquivos principais:
 
 - `src/personality.py`;
 - `src/context_engine.py`;
@@ -144,7 +162,7 @@ Day-off e situações sensíveis permanecem sem sarcasmo.
 
 - `📚 Minhas matérias`;
 - `⚙️ Gerenciar matérias`;
-- `📥 Importar grade por PDF/imagem`;
+- `📥 Importar grade por PDF/texto`;
 - retorno ao menu principal.
 
 ## Funcionalidades consolidadas
@@ -152,16 +170,16 @@ Day-off e situações sensíveis permanecem sem sarcasmo.
 ### 🌙 Day-off
 
 - estado persistente;
-- silencia o scheduler;
+- silencia scheduler;
 - permanece após reinício;
-- retorno por frases como `Butler, preciso de você!` e `Chamar, Butler!`.
+- retorno por `Butler, preciso de você!` e variações.
 
 ### 📚 Acadêmico
 
 - grade persistente;
-- tradução de códigos SIGAA em horas completas;
+- tradução SIGAA em horas completas;
 - adicionar/remover/trancar/editar matérias;
-- importação por PDF/imagem com confirmação;
+- importação de PDF textual/`.txt` com confirmação;
 - matérias trancadas não geram lembretes.
 
 ### ✅ Tarefas, 📅 compromissos e 📌 pendências
@@ -185,15 +203,15 @@ Day-off e situações sensíveis permanecem sem sarcasmo.
 - 12 semanas carregadas;
 - `🚀 Começar os trabalhos` inicia o protocolo inteiro apenas uma vez;
 - treino do dia;
-- falta com motivo (`😕 Não consegui treinar hoje`);
+- falta com motivo;
 - substitutos oficiais;
 - registro série por série;
 - carga e repetições por série;
 - histórico de carga;
 - progresso semanal;
-- `🔄 Reiniciar os trabalhos` ainda temporário para testes.
+- `🔄 Reiniciar os trabalhos` temporário para testes.
 
-A versão genérica não registra os módulos Protocol Mass e começa com musculação manual vazia.
+A versão genérica não registra Protocol Mass e começa com musculação manual vazia.
 
 ## Scheduler
 
@@ -205,9 +223,9 @@ Continua planejado, ainda sem persistência real.
 
 ## Próximos passos sugeridos
 
-1. validar importação de grade com screenshot/PDF real no Telegram;
+1. validar importação usando um PDF textual real do tipo `grade_curricular.pdf`;
 2. validar onboarding/nome preferido nas duas versões;
-3. validar que `main_generic` nasce realmente sem grade e sem Protocol Mass;
+3. validar que `main_generic` nasce sem grade e sem Protocol Mass;
 4. retomar resumo diário + personalidade contextual baseada em comportamento;
 5. streaks de metas/rotinas;
 6. permitir corrigir/apagar série de treino registrada por engano;
@@ -220,6 +238,6 @@ Continua planejado, ainda sem persistência real.
 Ao concluir nova etapa:
 
 1. atualizar este arquivo com o estado real;
-2. atualizar o README quando funcionalidades ou execução mudarem;
+2. atualizar README quando funcionalidades ou execução mudarem;
 3. registrar decisões que afetem etapas futuras;
 4. deixar explícito o próximo passo técnico.
