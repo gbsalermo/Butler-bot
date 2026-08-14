@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes, MessageHandler, filters
 
 from src.assistant_state import is_day_off
 from src.context_engine import context_comment, daily_context
+from src.database import preferred_name
 from src.personality import choose, day_flavor, everyday_tone
 
 
@@ -10,8 +11,12 @@ def _normalized(text: str) -> str:
     return " ".join((text or "").strip().lower().split())
 
 
+def _address(text: str, chat_id: int) -> str:
+    return text.replace("chefe", preferred_name(chat_id))
+
+
 async def casual_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message:
+    if not update.message or not update.effective_chat:
         return
     text = _normalized(update.message.text or "")
     if not text or is_day_off():
@@ -28,11 +33,11 @@ async def casual_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             msg += f"\n\n{flavor}"
         if comment:
             msg += f"\n\n{comment}"
-        await update.message.reply_text(msg)
+        await update.message.reply_text(_address(msg, update.effective_chat.id))
         return
 
     if text in thanks:
-        await update.message.reply_text(choose("thanks", everyday_tone()))
+        await update.message.reply_text(_address(choose("thanks", everyday_tone()), update.effective_chat.id))
         return
 
 
