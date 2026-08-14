@@ -2,7 +2,8 @@ from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
 from src.assistant_state import is_day_off
-from src.personality import Tone, choose, day_flavor, everyday_tone
+from src.context_engine import context_comment, daily_context
+from src.personality import choose, day_flavor, everyday_tone
 
 
 def _normalized(text: str) -> str:
@@ -13,21 +14,20 @@ async def casual_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not update.message:
         return
     text = _normalized(update.message.text or "")
-    if not text:
-        return
-
-    if is_day_off():
+    if not text or is_day_off():
         return
 
     greetings = {"oi", "ola", "olá", "bom dia", "boa tarde", "boa noite", "e ai", "e aí", "fala butler", "butler"}
     thanks = {"obrigado", "valeu", "vlw", "brigado", "obg", "obrigado butler", "valeu butler"}
 
     if text in greetings:
-        tone = everyday_tone()
-        msg = choose("greeting", tone)
+        msg = choose("greeting", everyday_tone())
         flavor = day_flavor()
+        comment = context_comment(daily_context())
         if flavor:
             msg += f"\n\n{flavor}"
+        if comment:
+            msg += f"\n\n{comment}"
         await update.message.reply_text(msg)
         return
 
