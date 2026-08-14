@@ -13,9 +13,30 @@ A versão inicial já possui:
 - grade do semestre carregada automaticamente no primeiro uso;
 - `/materias` para consultar a grade;
 - botão **📚 Minhas matérias**;
-- botão **➕ Adicionar matéria**;
+- botão **⚙️ Gerenciar matérias**;
+- submenu com **📚 Ver matérias**, **➕ Adicionar matéria** e **⬅️ Voltar**;
 - cadastro guiado de novas matérias pelo Telegram;
+- tradução automática de códigos de horário do SIGAA, como `3T23`, `35M45` e `24M23`;
+- modo manual para horários fora do padrão do SIGAA;
 - prevenção de duplicidade pelo nome da matéria.
+
+## Tradução dos horários do SIGAA
+
+O Butler entende códigos no padrão usado pelo SIGAA:
+
+- números antes da letra: dias da semana (`2` segunda, `3` terça, ..., `7` sábado);
+- `M`: manhã;
+- `T`: tarde;
+- `N`: noite;
+- números depois da letra: blocos de aula daquele turno.
+
+Exemplos:
+
+- `3T23` → terça-feira à tarde, aproximadamente das 14h às 16h; horário exato: `14:01–15:40`;
+- `35M45` → terça e quinta pela manhã, aproximadamente das 10h às 12h; horário exato: `10:00–11:40`;
+- `24M23` → segunda e quarta pela manhã, aproximadamente das 8h às 10h; horário exato: `08:01–09:40`.
+
+O Butler usa os horários exatos internamente para permitir lembretes precisos, mas apresenta uma tradução mais natural durante o cadastro.
 
 ## Grade inicial cadastrada
 
@@ -44,7 +65,8 @@ Butler-bot/
     ├── bot_handlers.py
     ├── config.py
     ├── database.py
-    └── main.py
+    ├── main.py
+    └── sigaa_schedule.py
 ```
 
 ## Como executar localmente
