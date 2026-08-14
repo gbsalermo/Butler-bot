@@ -34,17 +34,7 @@ Ao ativar **🌙 Day-off**:
 - o Butler evita cobranças e responde de forma mínima;
 - o modo continua ativo mesmo se o processo do bot for reiniciado.
 
-Para trazê-lo de volta, basta dizer:
-
-```text
-Butler, preciso de você!
-```
-
-ou
-
-```text
-Chamar, Butler!
-```
+Para trazê-lo de volta, basta dizer `Butler, preciso de você!` ou `Chamar, Butler!`.
 
 ## Funcionalidades atuais
 
@@ -60,70 +50,39 @@ Chamar, Butler!
 
 ### Tarefas, compromissos e pendências
 
-Cada tipo permite:
-
-- adicionar;
-- listar;
-- concluir/resolver;
-- editar;
-- remover;
-- informar data, horário e observação;
-- configurar quantos minutos antes o Butler deve avisar.
-
-Lembretes possuem ações rápidas:
-
-- **✅ Concluir**;
-- **⏰ +10 min**;
-- **⏰ +30 min**.
-
-O adiamento fica persistido até o novo horário do aviso.
+Cada tipo permite adicionar, listar, concluir/resolver, editar, remover e configurar data, horário, observações e antecedência do lembrete. Os fluxos possuem cancelamento visível e os lembretes permitem concluir ou adiar rapidamente.
 
 ### 🗓️ Hoje
 
-A visão diária reúne:
-
-- aulas do dia;
-- tarefas;
-- compromissos;
-- pendências;
-- musculação programada para aquele dia;
-- quantidade de itens marcados como faltando em casa.
+A visão diária reúne aulas, tarefas, compromissos, pendências, musculação do dia e quantidade de itens faltando em casa.
 
 ### 🏠 Cotidiano
 
 #### Lista persistente de itens faltando
 
-A lista não é descartável por ida ao mercado. Itens ficam salvos até serem marcados como comprados.
-
-Você pode perguntar naturalmente:
-
-```text
-O que está faltando?
-```
+A lista não é descartável por ida ao mercado. Itens ficam salvos até serem marcados como comprados. Também é possível perguntar naturalmente `O que está faltando?`.
 
 #### Metas gerais
 
-Metas podem ser de água, alimentação, inglês, programação, musculação, estudos, financeiro ou outras categorias.
-
-Além do cadastro da meta, agora é possível **registrar progresso** e consultar um resumo acumulado.
+Metas podem ser de água, alimentação, inglês, programação, musculação, estudos, financeiro ou outras categorias. Já é possível registrar progresso e consultar o acumulado.
 
 #### 🧘 Rotinas e autocuidado
 
-Rotinas recorrentes podem representar:
+Rotinas recorrentes podem representar água, remédio, alimentação, sono, inglês, programação e autocuidado em geral, com horário, recorrência e registro de cumprimento.
 
-- água;
-- remédio;
-- alimentação;
-- sono;
-- inglês;
-- programação;
-- autocuidado em geral.
+#### 🏋️ Musculação — Protocol Mass
 
-Cada rotina pode ter horário, dias de recorrência e antecedência do lembrete. Também é possível registrar que uma rotina foi cumprida no dia.
+O Butler possui as **12 semanas do Protocol Mass** cadastradas com os treinos de segunda a sábado.
 
-#### 🏋️ Musculação
+Fluxo principal:
 
-O Butler armazena uma rotina semanal por dia e foco muscular. Dentro de cada dia podem ser cadastrados exercícios com nome, carga, séries e repetições.
+- `🚀 Começar os trabalhos` — inicia ou retoma o protocolo e marca o treino do dia como iniciado;
+- `📅 Treino de hoje` — mostra os exercícios da semana/dia atual com séries/repetições, descanso, velocidade e técnica disponíveis na planilha;
+- `✅ Finalizar treino` — registra o dia como cumprido;
+- `📈 Progresso Protocol Mass` — mostra o cumprimento dos seis dias da semana;
+- `🔁 Substitutos` — permite escolher um exercício do treino atual e consultar somente as alternativas presentes na tabela de substituições do protocolo.
+
+Uma semana só avança depois de **6/6 treinos concluídos**. Ao concluir a Semana 12, o programa é marcado como finalizado. O antigo cadastro manual de exercícios permanece no banco para evoluções futuras.
 
 ### Finanças
 
@@ -147,11 +106,11 @@ O módulo financeiro continua preparado para uma próxima frente. A direção in
 ```text
 Butler-bot/
 ├── assets/
-│   └── butler-avatar.jpg
 ├── CONTINUIDADE.md
 ├── README.md
 ├── requirements.txt
 └── src/
+    ├── academic_navigation.py
     ├── assistant_state.py
     ├── assistant_views.py
     ├── bot_handlers.py
@@ -163,6 +122,10 @@ Butler-bot/
     ├── home_store.py
     ├── lifestyle_handlers.py
     ├── main.py
+    ├── protocol_mass_data.py
+    ├── protocol_mass_handlers.py
+    ├── protocol_mass_navigation.py
+    ├── protocol_mass_store.py
     ├── scheduler.py
     ├── sigaa_schedule.py
     └── wellbeing_handlers.py
