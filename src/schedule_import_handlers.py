@@ -15,7 +15,10 @@ CONFIRM_KEYBOARD = ReplyKeyboardMarkup([["✅ Importar grade", "❌ Cancelar aç
 
 async def import_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "Manda o PDF ou uma imagem da sua grade do SIGAA.\n\nEu vou tentar identificar matéria, local e código de horário e *vou te mostrar uma prévia antes de salvar*. Nada de confiar cegamente em OCR — já temos problemas suficientes.",
+        "📥 Envie sua grade em *PDF com texto pesquisável* ou em arquivo `.txt`.\n\n"
+        "Não aceito imagem, foto ou PDF escaneado nesta versão. Se você só tiver uma imagem, peça a qualquer IA/ferramenta para converter a grade em *PDF com texto pesquisável* e envie o resultado aqui.\n\n"
+        "Se preferir, também dá para cadastrar as matérias uma por uma em *⚙️ Gerenciar matérias*.\n\n"
+        "Quando eu ler o arquivo, mostro uma prévia antes de salvar.",
         parse_mode="Markdown",
         reply_markup=WAIT_KEYBOARD,
     )
@@ -31,35 +34,61 @@ async def receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await message.reply_text("Importação cancelada. Nenhuma matéria foi alterada.", reply_markup=MAIN_KEYBOARD)
         return ConversationHandler.END
 
-    file_obj = None
-    suffix = ".jpg"
     if message.photo:
-        file_obj = await message.photo[-1].get_file()
-        suffix = ".jpg"
-    elif message.document:
-        name = (message.document.file_name or "grade").lower()
-        mime = message.document.mime_type or ""
-        if mime == "application/pdf" or name.endswith(".pdf"):
-            suffix = ".pdf"
-        elif mime.startswith("image/") or name.endswith((".png", ".jpg", ".jpeg", ".webp")):
-            suffix = Path(name).suffix or ".jpg"
-        else:
-            await message.reply_text("Use um PDF ou imagem (JPG/PNG/WebP).", reply_markup=WAIT_KEYBOARD)
-            return WAIT_FILE
-        file_obj = await message.document.get_file()
-    else:
-        await message.reply_text("Estou esperando um PDF ou uma imagem da grade.", reply_markup=WAIT_KEYBOARD)
+        await message.reply_text(
+            "Essa grade veio como imagem. Para manter o Butler simples e compatível com a hospedagem, eu não faço OCR aqui.\n\n"
+            "Peça a uma IA/ferramenta para converter a imagem em *PDF com texto pesquisável* e me envie esse PDF, ou cadastre as matérias manualmente.",
+            parse_mode="Markdown",
+            reply_markup=WAIT_KEYBOARD,
+        )
         return WAIT_FILE
 
+    if not message.document:
+        await message.reply_text(
+            "Estou esperando um *PDF com texto pesquisável* ou um arquivo `.txt`.",
+            parse_mode="Markdown",
+            reply_markup=WAIT_KEYBOARD,
+        )
+        return WAIT_FILE
+
+    name = (message.document.file_name or "grade").lower()
+    mime = (message.document.mime_type or "").lower()
+
+    if mime.startswith("image/") or name.endswith((".png", ".jpg", ".jpeg", ".webp")):
+        await message.reply_text(
+            "Imagem não entra direto, chefe. Converta primeiro para *PDF com texto pesquisável* usando uma IA/ferramenta e me mande o PDF.\n\n"
+            "Ou, se quiser sofrer do jeito tradicional, cadastre matéria por matéria em *⚙️ Gerenciar matérias*.",
+            parse_mode="Markdown",
+            reply_markup=WAIT_KEYBOARD,
+        )
+        return WAIT_FILE
+
+    if mime == "application/pdf" or name.endswith(".pdf"):
+        suffix = ".pdf"
+    elif mime.startswith("text/") or name.endswith(".txt"):
+        suffix = ".txt"
+    else:
+        await message.reply_text(
+            "Formato não aceito. Use *PDF com texto pesquisável* ou `.txt`.\n\n"
+            "Se sua grade estiver numa imagem, converta antes para PDF com texto.",
+            parse_mode="Markdown",
+            reply_markup=WAIT_KEYBOARD,
+        )
+        return WAIT_FILE
+
+    file_obj = await message.document.get_file()
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         path = Path(tmp.name)
+
     try:
         await file_obj.download_to_drive(custom_path=str(path))
         text = extract_text_from_file(path)
         subjects = parse_schedule_text(text)
     except Exception as exc:
         await message.reply_text(
-            f"Não consegui ler essa grade.\n\n`{type(exc).__name__}: {exc}`\n\nSe for imagem/PDF escaneado, confira se o Tesseract OCR está instalado.",
+            "Não consegui ler essa grade como texto.\n\n"
+            f"`{type(exc).__name__}: {exc}`\n\n"
+            "Se esse PDF veio de uma imagem/scan, converta-o para *PDF com texto pesquisável* e tente novamente.",
             parse_mode="Markdown",
             reply_markup=WAIT_KEYBOARD,
         )
@@ -69,7 +98,8 @@ async def receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     if not subjects:
         await message.reply_text(
-            "Eu li o arquivo, mas não encontrei linhas com códigos SIGAA do tipo `35M45` ou `3T23`. Tente uma imagem mais nítida ou um PDF original.",
+            "Eu consegui extrair texto do arquivo, mas não encontrei códigos SIGAA como `35M45`, `24M23` ou `3T23`.\n\n"
+            "Confira se a conversão preservou nome da matéria, local e código de horário. Se não, você ainda pode cadastrar manualmente.",
             parse_mode="Markdown",
             reply_markup=WAIT_KEYBOARD,
         )
@@ -81,9 +111,10 @@ async def receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         lines.append(f"• *{subject.name}* — `{subject.code}`")
         for day, start, end, location in subject.sessions:
             lines.append(f"   {day.capitalize()} • {start}–{end} • {location or 'local não identificado'}")
+
     lines.extend([
         "",
-        "Confere antes de importar. Se o SIGAA estiver errado ou o OCR tiver viajado, cancele e ajuste manualmente depois.",
+        "Confere antes de importar. PDF com texto é mais confiável que OCR, mas ainda não vou sair alterando sua vida acadêmica sem autorização.",
     ])
     await message.reply_text("\n".join(lines), parse_mode="Markdown", reply_markup=CONFIRM_KEYBOARD)
     return CONFIRM
@@ -101,7 +132,7 @@ async def confirm_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         upsert_subject_schedule(subject.name, subject.sessions)
 
     await update.message.reply_text(
-        f"✅ Grade importada: {len(subjects)} matéria(s).\n\nAgora sim. Digitar matéria por matéria em 2026 seria uma derrota administrativa.",
+        f"✅ Grade importada: {len(subjects)} matéria(s).\n\nDigitar tudo uma por uma continua disponível, mas felizmente não foi necessário.",
         reply_markup=MAIN_KEYBOARD,
     )
     return ConversationHandler.END
@@ -109,11 +140,9 @@ async def confirm_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 def register_schedule_import(application) -> None:
     conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r"^📥 Importar grade por PDF/imagem$"), import_start)],
+        entry_points=[MessageHandler(filters.Regex(r"^📥 Importar grade por PDF/texto$"), import_start)],
         states={
-            WAIT_FILE: [
-                MessageHandler(filters.PHOTO | filters.Document.ALL | filters.TEXT, receive_file),
-            ],
+            WAIT_FILE: [MessageHandler(filters.PHOTO | filters.Document.ALL | filters.TEXT, receive_file)],
             CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_import)],
         },
         fallbacks=[CommandHandler("cancelar", confirm_import)],
