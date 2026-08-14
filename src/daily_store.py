@@ -47,6 +47,7 @@ def init_daily_store() -> None:
         )
         _ensure_column(conn, "daily_items", "snoozed_until", "TEXT")
         _ensure_column(conn, "daily_items", "postpone_count", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "daily_items", "cancelled_at", "TEXT")
         conn.execute("UPDATE daily_items SET kind = 'tarefa' WHERE kind = 'pendencia'")
 
 
@@ -80,8 +81,8 @@ def list_items(kind: str | None = None, only_pending: bool = True) -> list[sqlit
         return conn.execute(
             f"""
             SELECT id, kind, title, details, due_date, due_time,
-                   reminder_minutes, status, created_at, completed_at, snoozed_until,
-                   COALESCE(postpone_count, 0) AS postpone_count
+                   reminder_minutes, status, created_at, completed_at, cancelled_at,
+                   snoozed_until, COALESCE(postpone_count, 0) AS postpone_count
             FROM daily_items
             {where}
             ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date,
@@ -89,6 +90,10 @@ def list_items(kind: str | None = None, only_pending: bool = True) -> list[sqlit
             """,
             params,
         ).fetchall()
+
+
+def list_item_history(kind: str | None = None) -> list[sqlite3.Row]:
+    return list_items(kind=kind, only_pending=False)
 
 
 def get_item(item_id: int) -> sqlite3.Row | None:
@@ -100,29 +105,42 @@ def complete_item(item_id: int) -> bool:
     now = datetime.now().isoformat(timespec="seconds")
     with _connect() as conn:
         cur = conn.execute(
-            "UPDATE daily_items SET status = 'concluido', completed_at = ?, snoozed_until = NULL WHERE id = ? AND status = 'pendente'",
+            """
+            UPDATE daily_items
+            SET status = 'concluido', completed_at = ?, cancelled_at = NULL, snoozed_until = NULL
+            WHERE id = ? AND status = 'pendente'
+            """,
             (now, item_id),
         )
         return cur.rowcount > 0
 
 
 def delete_item(item_id: int) -> bool:
+    """Arquiva como cancelado em vez de apagar para preservar histórico."""
+    now = datetime.now().isoformat(timespec="seconds")
     with _connect() as conn:
-        cur = conn.execute("DELETE FROM daily_items WHERE id = ?", (item_id,))
+        cur = conn.execute(
+            """
+            UPDATE daily_items
+            SET status = 'cancelado', cancelled_at = ?, snoozed_until = NULL
+            WHERE id = ? AND status = 'pendente'
+            """,
+            (now, item_id),
+        )
         return cur.rowcount > 0
 
 
 def update_item(item_id: int, *, title=_UNSET, due_date=_UNSET, due_time=_UNSET,
                 details=_UNSET, reminder_minutes=_UNSET) -> bool:
     current = get_item(item_id)
-    if current is None:
+    if current is None or current["status"] != "pendente":
         return False
     with _connect() as conn:
         cur = conn.execute(
             """
             UPDATE daily_items
             SET title = ?, due_date = ?, due_time = ?, details = ?, reminder_minutes = ?, snoozed_until = NULL
-            WHERE id = ?
+            WHERE id = ? AND status = 'pendente'
             """,
             (
                 current["title"] if title is _UNSET else title,
