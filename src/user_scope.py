@@ -4,7 +4,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from telegram import Update
-from telegram.ext import ContextTypes, MessageHandler, filters
+from telegram.ext import ContextTypes, TypeHandler
 
 from src.config import DATABASE_PATH
 
@@ -61,10 +61,7 @@ def _register_chat(chat_id: int) -> None:
             )
             """
         )
-        conn.execute(
-            "INSERT OR IGNORE INTO registered_chats (chat_id) VALUES (?)",
-            (chat_id,),
-        )
+        conn.execute("INSERT OR IGNORE INTO registered_chats (chat_id) VALUES (?)", (chat_id,))
 
 
 def registered_chat_ids() -> list[int]:
@@ -87,7 +84,6 @@ def initialize_current_user_storage() -> None:
     if not multiuser_enabled() or chat_id is None or chat_id in _INITIALIZED:
         return
 
-    # Imports locais evitam ciclos durante o carregamento dos módulos.
     from src.assistant_state import init_assistant_state
     from src.daily_store import init_daily_store
     from src.database import init_database
@@ -111,5 +107,6 @@ async def establish_user_scope(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 def register_user_scope(application) -> None:
-    # Executa antes de qualquer regra de negócio e não interrompe o processamento.
-    application.add_handler(MessageHandler(filters.ALL, establish_user_scope), group=-100)
+    # TypeHandler cobre mensagens e callbacks. O group muito baixo garante que o
+    # banco do chat esteja selecionado antes de qualquer regra de negócio.
+    application.add_handler(TypeHandler(Update, establish_user_scope), group=-100)
