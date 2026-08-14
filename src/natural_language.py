@@ -73,8 +73,8 @@ def interpret(text:str,today:date|None=None)->Intent|None:
     raw=_strip_butler(text or ""); n=normalize(raw)
     if not n:return None
 
-    if any(x in n for x in ("o que falta em casa","o que ta faltando em casa","lista de mercado","lista da feira","lista de compras")) and any(x in n for x in ("o que","mostra","lista","quais")):
-        return Intent("grocery_query",.98)
+    grocery_question = any(x in n for x in ("o que falta em casa","o que ta faltando em casa","o que esta faltando em casa","quais itens faltam")) or bool(re.match(r"^(?:mostra|mostrar|lista|listar)\s+(?:a\s+)?(?:lista\s+)?(?:de mercado|da feira|de compras)",n))
+    if grocery_question:return Intent("grocery_query",.98)
     if re.search(r"\b(o que|que que|como esta|minha agenda|tenho algo|tenho o que)\b",n) and any(x in n for x in ("hoje","amanha","depois de amanha","daqui a","segunda","terca","quarta","quinta","sexta","sabado","domingo","agenda")):
         target=parse_date(raw,today)
         if "proximos 7" in n or "proxima semana" in n:return Intent("agenda_range",.95,{"days":7})
