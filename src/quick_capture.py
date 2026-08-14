@@ -7,8 +7,7 @@ from telegram.ext import CommandHandler, ContextTypes, ConversationHandler, Mess
 from src.config import BUTLER_TIMEZONE
 from src.daily_store import add_item
 from src.home_store import add_grocery_item
-import src.lifestyle_handlers as lifestyle
-from src.ui_layout import COTIDIANO_KEYBOARD
+from src.ui_layout import COTIDIANO_KEYBOARD, MAIN_KEYBOARD
 
 Q_TITLE, Q_WHEN, Q_DATE, Q_TIME = range(810, 814)
 GROCERY_QUICK = 820
@@ -26,12 +25,7 @@ def _now() -> datetime:
 
 
 def _kind(text: str) -> str:
-    lowered = text.lower()
-    if "compromisso" in lowered:
-        return "compromisso"
-    if "pendência" in lowered or "pendencia" in lowered:
-        return "pendencia"
-    return "tarefa"
+    return "compromisso" if "compromisso" in text.lower() else "tarefa"
 
 
 def _parse_date(value: str):
@@ -64,9 +58,9 @@ def _future_datetime(due_date: str, due_time: str) -> bool:
 async def quick_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     kind = _kind(update.message.text or "")
     context.user_data["quick_item"] = {"kind": kind}
-    labels = {"tarefa": "tarefa", "compromisso": "compromisso", "pendencia": "pendência"}
+    label = "compromisso" if kind == "compromisso" else "tarefa"
     await update.message.reply_text(
-        f"Qual é a {labels[kind]}? Manda só o essencial.",
+        f"Qual é o {label}? Manda só o essencial.",
         reply_markup=CANCEL_KEYBOARD,
     )
     return Q_TITLE
@@ -93,7 +87,7 @@ async def quick_when(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if text == "📍 Hoje":
         context.user_data["quick_item"]["due_date"] = _now().date().isoformat()
         await update.message.reply_text(
-            "Qual horário? Use `HH:MM`. Não vale viajar no tempo, então horário passado eu recuso.",
+            "Qual horário? Use `HH:MM`. Horário que já passou eu recuso — nem eu faço milagre temporal.",
             parse_mode="Markdown",
             reply_markup=CANCEL_KEYBOARD,
         )
@@ -118,7 +112,7 @@ async def quick_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("Data inválida. Use `DD/MM/AAAA` ou `amanhã`.", parse_mode="Markdown")
         return Q_DATE
     if parsed == "past":
-        await update.message.reply_text("Essa data já passou, chefe. Escolha hoje ou uma data futura.")
+        await update.message.reply_text("Essa data já passou. Escolha hoje ou uma data futura.")
         return Q_DATE
     context.user_data["quick_item"]["due_date"] = parsed
     await update.message.reply_text("Qual horário? Use `HH:MM`.", parse_mode="Markdown", reply_markup=CANCEL_KEYBOARD)
@@ -161,25 +155,21 @@ async def _save_quick(update: Update, context: ContextTypes.DEFAULT_TYPE, due_da
         when += f" às {due_time}"
     await update.message.reply_text(
         f"✅ Salvo: {data['title']}{when}." if when else f"✅ Salvo: {data['title']}.",
-        reply_markup=lifestyle._menu(data["kind"]),
+        reply_markup=MAIN_KEYBOARD,
     )
     return ConversationHandler.END
 
 
 async def quick_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    data = context.user_data.pop("quick_item", None)
-    kind = (data or {}).get("kind")
-    await update.message.reply_text(
-        "Cancelei. Menos burocracia, pelo menos.",
-        reply_markup=lifestyle._menu(kind) if kind else COTIDIANO_KEYBOARD,
-    )
+    context.user_data.pop("quick_item", None)
+    await update.message.reply_text("Cancelei. Menos burocracia, pelo menos.", reply_markup=MAIN_KEYBOARD)
     return ConversationHandler.END
 
 
 async def grocery_quick_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         "O que está faltando?\n\n"
-        "Pode mandar `sal`, `sal, açúcar, café` ou até `falta sal, açúcar, café`. "
+        "Pode mandar `sal`, `sal, açúcar, café` ou `falta sal, açúcar, café`. "
         "Se quiser quantidade de um item, use `café | 2 pacotes`.",
         parse_mode="Markdown",
         reply_markup=CANCEL_KEYBOARD,
@@ -190,7 +180,9 @@ async def grocery_quick_start(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def grocery_quick_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = (update.message.text or "").strip()
     if text == CANCEL:
-        return await quick_cancel(update, context)
+        context.user_data.pop("quick_item", None)
+        await update.message.reply_text("Cancelei.", reply_markup=MAIN_KEYBOARD)
+        return ConversationHandler.END
     if len(text) < 2:
         await update.message.reply_text("Me diga o que está faltando.", reply_markup=CANCEL_KEYBOARD)
         return GROCERY_QUICK
@@ -202,8 +194,6 @@ async def grocery_quick_save(update: Update, context: ContextTypes.DEFAULT_TYPE)
         text = text[7:].strip()
 
     saved: list[str] = []
-
-    # Quantidade opcional para um único item: "café | 2 pacotes".
     if "|" in text:
         parts = [part.strip() for part in text.split("|", 1)]
         name = parts[0]
@@ -214,7 +204,6 @@ async def grocery_quick_save(update: Update, context: ContextTypes.DEFAULT_TYPE)
         add_grocery_item(name, quantity, None)
         saved.append(f"{name} ({quantity})" if quantity else name)
     else:
-        # Sem quantidade, vírgula ou ponto e vírgula vira lista rápida de itens.
         names = [part.strip() for part in text.replace(";", ",").split(",") if part.strip()]
         if not names:
             await update.message.reply_text("Me diga pelo menos um item.", reply_markup=CANCEL_KEYBOARD)
@@ -224,19 +213,22 @@ async def grocery_quick_save(update: Update, context: ContextTypes.DEFAULT_TYPE)
             saved.append(name)
 
     if len(saved) == 1:
-        response = f"🛒 Anotado: {saved[0]}. Quando estiver no mercado, eu lembro."
+        response = f"🛒 Anotado: {saved[0]}."
     else:
-        response = "🛒 Anotado: " + ", ".join(saved) + ". Pronto, antes que a memória resolva sabotar a feira de novo."
+        response = "🛒 Anotado: " + ", ".join(saved) + ". Pronto, antes que a memória sabote a feira de novo."
 
-    await update.message.reply_text(response, reply_markup=COTIDIANO_KEYBOARD)
+    await update.message.reply_text(response, reply_markup=MAIN_KEYBOARD)
     return ConversationHandler.END
 
 
 def register_quick_capture(application) -> None:
-    # Mesmo group dos handlers antigos, mas registrado antes deles. Assim os fluxos
-    # rápidos assumem as entradas e o restante (listar/editar/remover) continua intacto.
     daily_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r"^➕ (Nova tarefa|Novo compromisso|Nova pendência)$"), quick_add_start)],
+        entry_points=[
+            MessageHandler(
+                filters.Regex(r"^(?:➕ |✅ |📅 )?(?:Nova tarefa|Novo compromisso)$"),
+                quick_add_start,
+            )
+        ],
         states={
             Q_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, quick_title)],
             Q_WHEN: [MessageHandler(filters.TEXT & ~filters.COMMAND, quick_when)],
@@ -246,7 +238,9 @@ def register_quick_capture(application) -> None:
         fallbacks=[CommandHandler("cancelar", quick_cancel)],
     )
     grocery_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r"^➕ Item faltando$"), grocery_quick_start)],
+        entry_points=[
+            MessageHandler(filters.Regex(r"^(?:➕ |🛒 )?Item faltando$"), grocery_quick_start)
+        ],
         states={GROCERY_QUICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, grocery_quick_save)]},
         fallbacks=[CommandHandler("cancelar", quick_cancel)],
     )
