@@ -9,6 +9,7 @@ from telegram.ext import Application, ContextTypes
 from src.assistant_state import is_day_off, list_routines
 from src.config import BUTLER_TIMEZONE, DATABASE_PATH
 from src.daily_store import clear_snooze, list_items
+from src.database import preferred_name
 from src.personality import choose, everyday_tone
 
 WEEKDAY_NAMES = {0:"segunda-feira",1:"terça-feira",2:"quarta-feira",3:"quinta-feira",4:"sexta-feira",5:"sábado",6:"domingo"}
@@ -39,6 +40,10 @@ def _routine_matches(days: str | None, weekday_short: str, weekday_full: str) ->
     return weekday_short in values or weekday_full in values
 
 
+def _address(text: str, chat_id: int) -> str:
+    return text.replace("chefe", preferred_name(chat_id))
+
+
 async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
     if is_day_off():
         return
@@ -55,7 +60,8 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
         opener = choose("class_reminder", everyday_tone())
         text = (f"🎓 *Aula em 10 minutos*\n\n{opener}\n\n*{row['name']}*\n🕐 {row['start_time']}–{row['end_time']}\n"
                 f"📍 {row['location'] or 'local não informado'}")
-        for chat in chats: await context.bot.send_message(chat_id=chat, text=text, parse_mode="Markdown")
+        for chat in chats:
+            await context.bot.send_message(chat_id=chat, text=_address(text, chat), parse_mode="Markdown")
         sent.add(key)
 
     for item in list_items(only_pending=True):
@@ -84,7 +90,8 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
             [InlineKeyboardButton("✅ Concluir", callback_data=f"daily_done:{item['id']}")],
             [InlineKeyboardButton("⏰ +10 min", callback_data=f"daily_snooze:{item['id']}:10"), InlineKeyboardButton("⏰ +30 min", callback_data=f"daily_snooze:{item['id']}:30")]
         ])
-        for chat in chats: await context.bot.send_message(chat_id=chat, text=text, parse_mode="Markdown", reply_markup=keyboard)
+        for chat in chats:
+            await context.bot.send_message(chat_id=chat, text=_address(text, chat), parse_mode="Markdown", reply_markup=keyboard)
         sent.add(key)
 
     for routine in list_routines():
@@ -99,7 +106,8 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
         if key in sent: continue
         opener = choose("routine_reminder", everyday_tone())
         text = f"🧘 *Um cuidado rápido*\n\n{opener}\n\n*{routine['name']}*\nCategoria: {routine['category']}"
-        for chat in chats: await context.bot.send_message(chat_id=chat, text=text, parse_mode="Markdown")
+        for chat in chats:
+            await context.bot.send_message(chat_id=chat, text=_address(text, chat), parse_mode="Markdown")
         sent.add(key)
 
     if len(sent) > 2000:
