@@ -16,6 +16,7 @@ from src.lifestyle_handlers import register_lifestyle_handlers
 from src.protocol_mass_handlers import register_protocol_mass_handlers
 from src.protocol_mass_navigation import register_protocol_mass_navigation
 from src.protocol_mass_store import init_protocol_mass_tables
+from src.protocol_mass_ui import register_protocol_mass_ui
 from src.scheduler import register_scheduler
 from src.wellbeing_handlers import register_wellbeing_handlers
 
@@ -38,6 +39,7 @@ def main() -> None:
 
     register_wellbeing_handlers(application)
     register_home_menu(application)
+    register_protocol_mass_ui(application)
     register_protocol_mass_navigation(application)
     register_protocol_mass_handlers(application)
     register_academic_navigation(application)
