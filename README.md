@@ -14,11 +14,22 @@ A versão inicial já possui:
 - `/materias` para consultar a grade;
 - botão **📚 Minhas matérias**;
 - botão **⚙️ Gerenciar matérias**;
-- submenu com **📚 Ver matérias**, **➕ Adicionar matéria** e **⬅️ Voltar**;
-- cadastro guiado de novas matérias pelo Telegram;
+- gerenciamento com quatro ações principais: **➕ Adicionar**, **🗑️ Remover**, **⏸️ Trancar** e **✏️ Editar**;
+- cadastro guiado de matérias pelo Telegram;
 - tradução automática de códigos de horário do SIGAA, como `3T23`, `35M45` e `24M23`;
 - modo manual para horários fora do padrão do SIGAA;
 - prevenção de duplicidade pelo nome da matéria.
+
+## Gerenciar matérias
+
+O submenu **⚙️ Gerenciar matérias** possui quatro operações principais:
+
+- **➕ Adicionar**: cadastra uma nova disciplina usando código SIGAA ou horário manual;
+- **🗑️ Remover**: exclui definitivamente a matéria e seus horários após confirmação;
+- **⏸️ Trancar**: mantém a matéria registrada no histórico, mas a retira da grade ativa e dos futuros lembretes;
+- **✏️ Editar**: permite corrigir nome, horário ou sala/local da disciplina.
+
+`⬅️ Voltar` retorna ao menu principal.
 
 ## Tradução dos horários do SIGAA
 
@@ -120,11 +131,7 @@ Na raiz do projeto:
 python -m src.main
 ```
 
-Depois, abra o bot no Telegram e envie:
-
-```text
-/start
-```
+Depois, abra o bot no Telegram e envie `/start`.
 
 O Butler criará o banco local e cadastrará automaticamente a grade inicial na primeira execução.
 
