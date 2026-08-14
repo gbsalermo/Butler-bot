@@ -2,6 +2,7 @@ import logging
 
 from telegram.ext import ApplicationBuilder
 
+from src.assistant_views import register_assistant_views
 from src.bot_handlers import register_handlers
 from src.config import TELEGRAM_BOT_TOKEN, validate_config
 from src.daily_store import init_daily_store
@@ -27,7 +28,8 @@ def main() -> None:
 
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # O menu principal completo entra antes dos módulos específicos.
+    # Visões e menu principal entram antes dos módulos específicos.
+    register_assistant_views(application)
     register_home_menu(application)
     register_lifestyle_handlers(application)
     register_home_handlers(application)
