@@ -6,6 +6,8 @@ from src.bot_handlers import register_handlers
 from src.config import TELEGRAM_BOT_TOKEN, validate_config
 from src.daily_store import init_daily_store
 from src.database import init_database, seed_default_schedule
+from src.home_handlers import register_home_handlers
+from src.home_store import init_home_tables
 from src.lifestyle_handlers import register_lifestyle_handlers
 from src.scheduler import register_scheduler
 
@@ -14,6 +16,7 @@ def main() -> None:
     validate_config()
     init_database()
     init_daily_store()
+    init_home_tables()
     seed_default_schedule()
 
     logging.basicConfig(
@@ -25,6 +28,7 @@ def main() -> None:
 
     # O menu geral entra antes do módulo acadêmico para assumir o /start.
     register_lifestyle_handlers(application)
+    register_home_handlers(application)
     register_handlers(application)
     register_scheduler(application)
 
