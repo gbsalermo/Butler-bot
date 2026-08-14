@@ -72,6 +72,38 @@ Arquivos principais:
 
 Sarcasmo contextual nasce de dados reais: adiamentos, atraso, streaks, faltas e evolução de carga. Emojis aparecem com moderação. Day-off e contextos sensíveis desligam cobrança/sarcasmo.
 
+## 🔥 Sequências simples de metas
+
+Novo arquivo: `src/streak_engine.py`.
+
+Dentro de `🎯 Metas` existe `🔥 Sequências`.
+
+O objetivo é visual e leve, no estilo Duolingo: mostrar progresso sem transformar o Butler em planilha de desempenho.
+
+Categorias acompanhadas por padrão:
+
+- 🇬🇧 Inglês;
+- 💻 Programação;
+- 💧 Água;
+- 🥗 Alimentação;
+- 🏋️ Musculação.
+
+Para cada categoria o Butler mostra:
+
+- sequência atual;
+- melhor sequência;
+- total de dias registrados;
+- visão dos últimos 7 dias com `🟩` / `⬜`;
+- comentário curto conforme a constância.
+
+Os streaks usam registros reais já existentes:
+
+- `goal_progress` para metas;
+- `routine_logs` para rotinas;
+- no Butler pessoal, musculação usa dias realmente concluídos do Protocol Mass, evitando registrar o treino duas vezes.
+
+Se o usuário não registrar nada no dia, não conta. O cálculo considera hoje ou ontem como ponto de continuidade para não zerar artificialmente a sequência logo pela manhã antes de o dia acontecer.
+
 ## ☀️ Resumo automático da manhã
 
 `src/summary_engine.py` gera resumo matinal por `chat_id`, padrão `07:30` (`BUTLER_MORNING_SUMMARY_TIME`).
@@ -106,18 +138,18 @@ O Protocol Mass continua interno ao Butler pessoal, mas a linguagem para o usuá
 2. ✅ resumo diário automático matinal;
 3. ✅ fechamento semanal;
 4. ✅ histórico diário + histórico de tarefas;
-5. aprofundar metas com streak/histórico;
+5. ✅ metas com streak simples/visual;
 6. finanças persistentes;
 7. linguagem natural para criar/alterar ações.
 
 ## Próximos testes
 
-1. cancelar uma tarefa e confirmar que aparece em `🗂️ Histórico de tarefas → Canceladas`;
-2. concluir uma tarefa e conferir a separação entre concluídas/pendentes/canceladas;
-3. abrir `🗓️ Hoje → 📚 Histórico → 📖 Histórico diário` e consultar ontem;
-4. conferir aula com horário/local e rotinas registradas no histórico diário;
-5. validar isolamento do histórico entre dois `chat_id` na versão genérica;
-6. validar resumo matinal com pendência do dia anterior.
+1. registrar progresso em uma meta com categoria `inglês`, `programação`, `água` ou `alimentação` e abrir `🎯 Metas → 🔥 Sequências`;
+2. cumprir uma rotina dessas categorias e confirmar que o dia também conta no streak;
+3. no Butler pessoal, concluir treino e conferir musculação sem registro duplicado manual;
+4. validar sequência atual, recorde e últimos 7 dias;
+5. confirmar isolamento por `chat_id` na versão genérica;
+6. seguir para finanças persistentes.
 
 ## Regra de continuidade
 
