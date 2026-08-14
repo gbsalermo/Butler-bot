@@ -53,7 +53,6 @@ def init_protocol_mass_tables() -> None:
         )
         conn.execute("INSERT OR IGNORE INTO protocol_mass_state (id, current_week, active) VALUES (1, 1, 0)")
 
-        # Migração leve para bancos criados antes dos campos de falta.
         columns = {row[1] for row in conn.execute("PRAGMA table_info(protocol_mass_sessions)").fetchall()}
         if "skipped_at" not in columns:
             conn.execute("ALTER TABLE protocol_mass_sessions ADD COLUMN skipped_at TEXT")
@@ -181,9 +180,13 @@ def log_exercise(
                 (week, weekday, exercise_name, result, status, substituted_by, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(week, weekday, exercise_name) DO UPDATE SET
-                result = excluded.result,
-                status = excluded.status,
-                substituted_by = excluded.substituted_by,
+                result = COALESCE(excluded.result, protocol_mass_exercise_logs.result),
+                status = CASE
+                    WHEN protocol_mass_exercise_logs.status = 'substituido' AND excluded.status = 'feito'
+                    THEN protocol_mass_exercise_logs.status
+                    ELSE excluded.status
+                END,
+                substituted_by = COALESCE(excluded.substituted_by, protocol_mass_exercise_logs.substituted_by),
                 updated_at = excluded.updated_at
             """,
             (week, weekday, exercise_name, result, status, substituted_by, now, now),
