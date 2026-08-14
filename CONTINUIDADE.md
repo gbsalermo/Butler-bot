@@ -7,10 +7,11 @@
 - Execução local via polling.
 - `/start` registra e atualiza o `chat_id` do usuário no SQLite.
 - A grade acadêmica do semestre é carregada automaticamente no primeiro uso.
-- `/materias` e o botão `📚 Minhas matérias` listam as disciplinas cadastradas.
+- `/materias` e o botão `📚 Minhas matérias` listam as disciplinas cadastradas, incluindo indicação visual de matérias trancadas.
 - O menu principal possui `⚙️ Gerenciar matérias`.
-- O submenu de gerenciamento possui `📚 Ver matérias`, `➕ Adicionar matéria` e `⬅️ Voltar`.
-- O cadastro de matéria entende códigos de horário do SIGAA e também oferece modo manual.
+- O submenu de gerenciamento possui quatro ações principais: `➕ Adicionar`, `🗑️ Remover`, `⏸️ Trancar` e `✏️ Editar`.
+- `⬅️ Voltar` retorna ao menu principal.
+- O cadastro e a edição de horário entendem códigos do SIGAA e também oferecem modo manual.
 
 ## Grade base do semestre
 
@@ -45,7 +46,7 @@ O banco recebe os horários exatos do SIGAA. A tradução amigável é usada par
 Tabelas:
 
 - `users`: armazena `telegram_chat_id`, dados básicos do usuário e datas de atualização.
-- `subjects`: cadastro das disciplinas.
+- `subjects`: cadastro das disciplinas; `active = 1` indica matéria ativa e `active = 0` indica matéria trancada/desistida.
 - `class_sessions`: dias, horários e locais associados a cada disciplina.
 
 O banco local é criado em `data/butler.db` por padrão e não é versionado.
@@ -63,35 +64,46 @@ O banco local é criado em `data/butler.db` por padrão e não é versionado.
 ### Gerenciar matérias
 
 1. Pressionar `⚙️ Gerenciar matérias`.
-2. Escolher entre visualizar as matérias ou adicionar uma nova.
+2. Escolher uma das quatro ações principais.
 3. `⬅️ Voltar` retorna ao menu principal.
 
-### Adicionar matéria por código SIGAA
+### Adicionar
 
-1. Pressionar `➕ Adicionar matéria` ou usar `/adicionar_materia`.
-2. Informar o nome da disciplina.
-3. Informar um código como `3T23`, `35M45` ou `24M23`.
-4. O Butler traduz o código, informa a descrição amigável e guarda o horário exato.
-5. Informar sala/local.
-6. A matéria e suas aulas são persistidas no SQLite.
+1. Informar o nome da disciplina.
+2. Informar código SIGAA ou `manual`.
+3. Se SIGAA, o Butler traduz dias e horário automaticamente.
+4. Informar sala/local.
+5. Persistir a matéria e suas aulas no SQLite.
 
-### Adicionar matéria manualmente
+### Remover
 
-Após informar o nome, digitar `manual` no campo de horário. Em seguida:
+1. Selecionar uma matéria cadastrada.
+2. O Butler exige confirmação explícita.
+3. Confirmando, a matéria e todas as suas sessões são apagadas definitivamente.
 
-1. informar dias separados por vírgula;
-2. informar horário inicial em `HH:MM`;
-3. informar horário final em `HH:MM`;
-4. informar sala/local.
+### Trancar
 
-Use `/cancelar` durante o cadastro para interromper o fluxo.
+1. Selecionar uma matéria ativa.
+2. Confirmar a operação.
+3. A matéria recebe `active = 0`.
+4. Ela permanece no histórico, mas deve ser ignorada pela grade ativa e pelos futuros lembretes.
+
+### Editar
+
+1. Selecionar uma matéria ativa.
+2. Escolher entre `Nome`, `Horário` ou `Local`.
+3. Nome: substitui o nome atual preservando a matéria.
+4. Horário: aceita novo código SIGAA ou modo `manual`; as sessões antigas são substituídas pelas novas.
+5. Local: atualiza a sala/local das sessões existentes.
+
+Use `/cancelar` durante os fluxos para interromper a operação.
 
 ## Próxima etapa prioritária
 
 Implementar o núcleo proativo do Butler:
 
 1. Scheduler executando junto ao bot.
-2. Consulta das próximas aulas do dia.
+2. Consulta das próximas aulas do dia, considerando apenas matérias ativas.
 3. Aviso automático aproximadamente 10 minutos antes da aula.
 4. Estrutura reutilizável para compromissos, tarefas e rotinas.
 5. Botões de confirmação/adiamento para lembretes.
@@ -105,6 +117,8 @@ Depois disso, adicionar tarefas, compromissos, ônibus e autocuidado.
 - Aula é tratada separadamente de tarefa e compromisso, pois possui disciplina, recorrência semanal, horário e sala.
 - O horário de Laboratório de Sistemas Digitais I não segue o código exibido pelo SIGAA; usar 14:00–16:00 na segunda-feira até nova atualização.
 - Para códigos SIGAA, armazenar horários exatos e exibir uma descrição amigável arredondada quando isso facilitar a leitura.
+- `Remover` significa exclusão definitiva.
+- `Trancar` significa manter histórico, mas retirar a matéria do funcionamento ativo do Butler.
 
 ## Regra de continuidade
 
