@@ -46,6 +46,7 @@ def init_daily_store() -> None:
             """
         )
         _ensure_column(conn, "daily_items", "snoozed_until", "TEXT")
+        _ensure_column(conn, "daily_items", "postpone_count", "INTEGER NOT NULL DEFAULT 0")
         conn.execute("UPDATE daily_items SET kind = 'tarefa' WHERE kind = 'pendencia'")
 
 
@@ -58,8 +59,8 @@ def add_item(kind: str, title: str, due_date: str | None = None, due_time: str |
         cur = conn.execute(
             """
             INSERT INTO daily_items
-                (kind, title, details, due_date, due_time, reminder_minutes, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'pendente', ?)
+                (kind, title, details, due_date, due_time, reminder_minutes, status, created_at, postpone_count)
+            VALUES (?, ?, ?, ?, ?, ?, 'pendente', ?, 0)
             """,
             (kind, title.strip(), details, due_date, due_time, reminder_minutes, now),
         )
@@ -79,7 +80,8 @@ def list_items(kind: str | None = None, only_pending: bool = True) -> list[sqlit
         return conn.execute(
             f"""
             SELECT id, kind, title, details, due_date, due_time,
-                   reminder_minutes, status, created_at, completed_at, snoozed_until
+                   reminder_minutes, status, created_at, completed_at, snoozed_until,
+                   COALESCE(postpone_count, 0) AS postpone_count
             FROM daily_items
             {where}
             ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date,
@@ -137,7 +139,11 @@ def update_item(item_id: int, *, title=_UNSET, due_date=_UNSET, due_time=_UNSET,
 def snooze_item(item_id: int, until_iso: str) -> bool:
     with _connect() as conn:
         cur = conn.execute(
-            "UPDATE daily_items SET snoozed_until = ? WHERE id = ? AND status = 'pendente'",
+            """
+            UPDATE daily_items
+            SET snoozed_until = ?, postpone_count = COALESCE(postpone_count, 0) + 1
+            WHERE id = ? AND status = 'pendente'
+            """,
             (until_iso, item_id),
         )
         return cur.rowcount > 0
