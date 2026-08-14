@@ -1,9 +1,8 @@
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 from typing import Iterable
 
-from src.config import DATABASE_PATH
+from src.user_scope import resolve_database_path
 
 
 DEFAULT_SUBJECTS = [
@@ -15,40 +14,19 @@ DEFAULT_SUBJECTS = [
 ]
 
 LEGACY_TIME_NORMALIZATION = {
-    "07:10": "07:00",
-    "08:01": "08:00",
-    "08:50": "09:00",
-    "08:51": "09:00",
-    "09:40": "10:00",
-    "10:50": "11:00",
-    "10:51": "11:00",
-    "11:40": "12:00",
-    "11:41": "12:00",
-    "12:30": "13:00",
-    "13:10": "13:00",
-    "14:01": "14:00",
-    "14:50": "15:00",
-    "14:51": "15:00",
-    "15:40": "16:00",
-    "16:50": "17:00",
-    "16:51": "17:00",
-    "17:40": "18:00",
-    "17:41": "18:00",
-    "18:30": "19:00",
-    "18:05": "18:00",
-    "18:50": "19:00",
-    "18:51": "19:00",
-    "19:35": "20:00",
-    "19:36": "20:00",
-    "20:20": "21:00",
-    "20:30": "21:00",
-    "21:15": "22:00",
+    "07:10": "07:00", "08:01": "08:00", "08:50": "09:00", "08:51": "09:00",
+    "09:40": "10:00", "10:50": "11:00", "10:51": "11:00", "11:40": "12:00",
+    "11:41": "12:00", "12:30": "13:00", "13:10": "13:00", "14:01": "14:00",
+    "14:50": "15:00", "14:51": "15:00", "15:40": "16:00", "16:50": "17:00",
+    "16:51": "17:00", "17:40": "18:00", "17:41": "18:00", "18:30": "19:00",
+    "18:05": "18:00", "18:50": "19:00", "18:51": "19:00", "19:35": "20:00",
+    "19:36": "20:00", "20:20": "21:00", "20:30": "21:00", "21:15": "22:00",
     "21:16": "22:00",
 }
 
 
 def _connect() -> sqlite3.Connection:
-    db_path = Path(DATABASE_PATH)
+    db_path = resolve_database_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(db_path)
     connection.row_factory = sqlite3.Row
@@ -69,12 +47,8 @@ def _normalize_legacy_class_times(conn: sqlite3.Connection) -> None:
         original_end = row["end_time"]
         start = LEGACY_TIME_NORMALIZATION.get(original_start, original_start)
         end = LEGACY_TIME_NORMALIZATION.get(original_end, original_end)
-
-        # 22:00 pode ser um término moderno válido (N4). Só vira 23:00 quando
-        # o início denuncia que se trata do antigo bloco noturno que chegava ao N5.
         if original_end == "22:00" and original_start in {"20:30", "21:16"}:
             end = "23:00"
-
         if start != original_start or end != original_end:
             conn.execute(
                 "UPDATE class_sessions SET start_time = ?, end_time = ? WHERE id = ?",
