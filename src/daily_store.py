@@ -4,7 +4,7 @@ from pathlib import Path
 
 from src.config import DATABASE_PATH
 
-VALID_KINDS = {"tarefa", "compromisso", "pendencia"}
+VALID_KINDS = {"tarefa", "compromisso"}
 _UNSET = object()
 
 
@@ -47,6 +47,9 @@ def init_daily_store() -> None:
             """
         )
         _ensure_column(conn, "daily_items", "snoozed_until", "TEXT")
+        # Modelo antigo tinha "pendencia" como terceiro tipo. A partir de agora,
+        # pendência significa uma tarefa vencida e ainda não concluída.
+        conn.execute("UPDATE daily_items SET kind = 'tarefa' WHERE kind = 'pendencia'")
 
 
 def add_item(kind: str, title: str, due_date: str | None = None, due_time: str | None = None,
