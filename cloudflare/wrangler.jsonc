@@ -9,7 +9,7 @@
     {
       "binding": "DB",
       "database_name": "butler-db",
-      "database_id": "REPLACE_AFTER_D1_CREATE"
+      "database_id": "9dad2543-b75f-48f7-9aac-7f0248732c5d"
     }
   ],
   "triggers": {
