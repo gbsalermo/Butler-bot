@@ -101,11 +101,24 @@ def _workout_for(target: date) -> str | None:
     return str(rows[0]["focus"])
 
 
+def _protocol_table_exists() -> bool:
+    with _connect() as conn:
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='protocol_mass_state'"
+            ).fetchone()
+            return row is not None
+        except sqlite3.OperationalError:
+            return False
+
+
 def _protocol_today(target: date) -> tuple[str | None, str | None]:
     weekday = WEEKDAYS[target.weekday()]
     with _connect() as conn:
         try:
             state = conn.execute("SELECT * FROM protocol_mass_state WHERE id = 1").fetchone()
+            # O treino pessoal só existe para os resumos depois de
+            # 'Começar os trabalhos'. Antes disso, silêncio total sobre academia.
             if not state or not state["active"]:
                 return None, None
             session = conn.execute(
@@ -119,13 +132,27 @@ def _protocol_today(target: date) -> tuple[str | None, str | None]:
         except sqlite3.OperationalError:
             return None, None
 
+    label = "treino na academia"
     if session and session["completed_at"]:
-        return f"Protocol Mass — semana {int(state['current_week'])}", "concluido"
+        return label, "concluido"
     if session and session["skipped_at"]:
-        return f"Protocol Mass — semana {int(state['current_week'])}", "faltou"
+        return label, "faltou"
     if weekday != "domingo":
-        return f"Protocol Mass — semana {int(state['current_week'])}", "pendente"
+        return label, "pendente"
     return None, None
+
+
+def _summary_workout(target: date) -> str | None:
+    """Resolve o treino mostrado nos resumos.
+
+    Butler pessoal: se a tabela do protocolo existe, treino só aparece quando
+    o protocolo estiver ativo após 'Começar os trabalhos'.
+    Butler genérico: sem Protocol Mass, pode usar a rotina manual de musculação.
+    """
+    if _protocol_table_exists():
+        protocol, _ = _protocol_today(target)
+        return protocol
+    return _workout_for(target)
 
 
 def morning_summary(name: str, target: date | None = None) -> str:
@@ -136,8 +163,7 @@ def morning_summary(name: str, target: date | None = None) -> str:
     appointments = [row for row in items if row["kind"] == "compromisso" and row["status"] == "pendente"]
     overdue = _overdue_tasks(target)
     groceries = list_missing_groceries()
-    workout = _workout_for(target)
-    protocol, _ = _protocol_today(target)
+    workout = _summary_workout(target)
 
     chunks = []
     if classes:
@@ -146,8 +172,8 @@ def morning_summary(name: str, target: date | None = None) -> str:
         chunks.append(f"{len(tasks)} tarefa{'s' if len(tasks) != 1 else ''}")
     if appointments:
         chunks.append(f"{len(appointments)} compromisso{'s' if len(appointments) != 1 else ''}")
-    if protocol or workout:
-        chunks.append(f"treino de {protocol or workout}")
+    if workout:
+        chunks.append(workout)
 
     if chunks:
         opening = f"Bom dia, {name}. Hoje temos " + ", ".join(chunks[:-1]) + (f" e {chunks[-1]}" if len(chunks) > 1 else chunks[0]) + "."
@@ -167,6 +193,8 @@ def morning_summary(name: str, target: date | None = None) -> str:
             icon = "✅" if row["kind"] == "tarefa" else "📅"
             when = f"{row['due_time']} — " if row["due_time"] else ""
             parts.append(f"• {icon} {when}{row['title']}")
+    if workout:
+        parts.append("\n🏋️ *Treino na academia previsto hoje.*")
     if overdue:
         parts.append(f"\n📌 E existem *{len(overdue)} tarefa(s) atrasada(s)* me encarando no banco. Estou repassando o olhar.")
     if groceries:
@@ -197,7 +225,7 @@ def nightly_summary(name: str, target: date | None = None) -> str:
         parts.append(f"• 🧘 Rotinas registradas hoje: *{completed_routines}/{total_routines}*")
     if protocol:
         labels = {"concluido": "✅ concluído", "faltou": "➖ falta registrada", "pendente": "⬜ sem conclusão registrada"}
-        parts.append(f"• 🏋️ {protocol}: {labels.get(protocol_status, protocol_status)}")
+        parts.append(f"• 🏋️ Treino na academia: {labels.get(protocol_status, protocol_status)}")
 
     if pending_tasks:
         parts.append("\n📌 *Ficou para trás:*")
@@ -257,7 +285,8 @@ def weekly_summary(name: str, end: date | None = None) -> str:
     with _connect() as conn:
         try:
             state = conn.execute("SELECT * FROM protocol_mass_state WHERE id = 1").fetchone()
-            if state:
+            # Antes de 'Começar os trabalhos', musculação não entra no balanço.
+            if state and state["active"]:
                 week = int(state["current_week"])
                 sessions = conn.execute(
                     "SELECT completed_at, skipped_at FROM protocol_mass_sessions WHERE week = ?",
@@ -265,7 +294,7 @@ def weekly_summary(name: str, end: date | None = None) -> str:
                 ).fetchall()
                 done = sum(1 for r in sessions if r["completed_at"])
                 skipped = sum(1 for r in sessions if r["skipped_at"])
-                parts.append(f"• 🏋️ Protocol Mass semana {week}: *{done} treino(s) concluído(s)*, *{skipped} falta(s)*")
+                parts.append(f"• 🏋️ Treino na academia — semana {week}: *{done} treino(s) concluído(s)*, *{skipped} falta(s)*")
         except sqlite3.OperationalError:
             pass
 
