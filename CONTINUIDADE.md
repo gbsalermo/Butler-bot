@@ -213,6 +213,53 @@ Arquivos principais:
 
 Personalidade: competente, informal, levemente cansada/cínica e útil. Pode provocar a situação, nunca humilhar o usuário. Day-off e situações sensíveis ficam sem sarcasmo.
 
+## 🧠 Behavior Engine v1 — personalidade baseada em comportamento real
+
+Novos arquivos:
+
+- `src/behavior_engine.py`;
+- `src/behavior_handlers.py`.
+
+Princípio: sarcasmo contextual deve nascer de fatos do histórico, não de frases aleatórias que fingem conhecer o usuário.
+
+### Tarefas
+
+`daily_items` agora possui `postpone_count`.
+
+Cada clique em `+10 min` / `+30 min` incrementa esse contador. Ao adiar ou concluir, o Butler adapta a resposta conforme:
+
+- número de adiamentos;
+- tarefa já vencida ou não;
+- conclusão após repetidas prorrogações.
+
+Exemplos de comportamento:
+
+- primeiro adiamento: resposta leve;
+- segundo/terceiro: Butler reconhece o padrão;
+- quatro ou mais: comentário explicitamente baseado no número real;
+- conclusão atrasada: reconhece o atraso sem transformar isso em sermão.
+
+### Rotinas e metas
+
+O Behavior Engine usa os logs já existentes:
+
+- `routine_logs` para calcular streak diário por rotina;
+- `goal_progress` para streak de dias com progresso registrado.
+
+Ao consultar rotinas/metas, o Butler pode destacar sequências reais e comentar constância sem inventar informação.
+
+### Protocol Mass
+
+O Behavior Engine lê:
+
+- faltas reais em `protocol_mass_sessions`;
+- motivos de falta;
+- séries/cargas em `protocol_mass_set_logs`.
+
+A tela de progresso pode comentar quantidade acumulada de faltas. Também existe cálculo de evolução de carga quando a carga foi registrada em formato numérico com `kg`; formatos livres continuam preservados e não são convertidos à força.
+
+Regra de tom: o Butler quer que o usuário se dê bem, mas demonstra isso de forma contida, irônica e observadora. Não usar sarcasmo em Day-off ou contexto sensível.
+
 ## 🏋️ Protocol Mass — somente Butler pessoal
 
 - 12 semanas;
@@ -228,24 +275,23 @@ Personalidade: competente, informal, levemente cansada/cínica e útil. Pode pro
 
 ## Próxima sequência funcional
 
-Com a etapa 0 de isolamento pronta, retomar:
+Etapa atual:
 
-1. personalidade baseada em comportamento real por usuário;
+1. ✅ personalidade baseada em comportamento real — v1 implementada;
 2. resumo diário automático individual;
 3. resumo noturno/semanal individual;
-4. metas com streak real por usuário;
+4. aprofundar streaks/metas e histórico comportamental;
 5. finanças persistentes;
 6. linguagem natural para criar/alterar ações.
 
 ## Próximos testes
 
-1. testar o Butler pessoal e confirmar que os dados antigos permanecem intactos;
-2. iniciar `src.main_generic` com um chat A e cadastrar uma tarefa/item/matéria;
-3. abrir o mesmo bot em um chat B e confirmar que nasce vazio;
-4. ativar Day-off em A e confirmar que B continua normal;
-5. criar lembretes em A e B e conferir destinatários;
-6. testar callbacks `Concluir` / `+10 min` nos dois chats;
-7. só depois avançar para personalidade comportamental.
+1. criar uma tarefa e usar `+10 min` duas ou três vezes para validar mudança de tom;
+2. concluir uma tarefa adiada e conferir comentário contextual;
+3. registrar uma rotina em dias consecutivos e abrir `📋 Ver rotinas`;
+4. registrar progresso de meta em dias consecutivos e abrir `📊 Progresso das metas`;
+5. no Butler pessoal, conferir comentário de faltas em `📈 Progresso Protocol Mass`;
+6. testar o mesmo comportamento na versão genérica com dois `chat_id` diferentes e confirmar isolamento.
 
 ## Regra de continuidade
 
