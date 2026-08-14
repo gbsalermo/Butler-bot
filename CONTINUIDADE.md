@@ -22,7 +22,8 @@ Arquivos:
 - `src/personality.py` — tons, famílias de respostas e traços recorrentes;
 - `src/context_engine.py` — contexto factual do cotidiano;
 - `src/casual_handlers.py` — pequenas conversas naturais;
-- `src/scheduler.py` — lembretes proativos agora usam a personalidade.
+- `src/personality_navigation.py` — personalidade perceptível nas telas mais usadas;
+- `src/scheduler.py` — lembretes proativos usam a personalidade.
 
 ### Personalidade desejada
 
@@ -35,55 +36,61 @@ Tons disponíveis:
 - `SARCASTICO` — provocação curta;
 - `CUIDADOSO` — sem sarcasmo.
 
-O sarcasmo não deve ser constante. O motor alterna respostas leves e sarcásticas para o personagem não ficar cansativo.
+O sarcasmo não deve ser constante. Day-off e situações sensíveis permanecem sem provocação.
 
-### Limites
+### Visibilidade da personalidade
 
-- Day-off e situações sensíveis devem usar comportamento cuidadoso, sem cobrança;
-- sarcasmo nunca deve humilhar ou atacar o usuário;
-- o Butler provoca a situação/comportamento, não a pessoa;
-- informação importante deve continuar clara mesmo quando houver piada;
-- não usar LLM para mensagens rotineiras nesta etapa.
+A primeira implementação ficou concentrada demais em lembretes. Isso foi corrigido.
+
+Agora a personalidade também aparece em:
+
+- `/start` e retorno ao menu principal;
+- entrada em `📚 Matérias`;
+- entrada em `✅ Tarefas`, `📅 Compromissos` e `📌 Pendências`;
+- entrada em `🏠 Cotidiano`;
+- área `💰 Finanças` enquanto ainda é placeholder;
+- cumprimentos e agradecimentos;
+- lembretes proativos.
+
+As telas de tarefas/compromissos/pendências usam a quantidade real de itens pendentes para escolher comentários. Não inventar contexto.
 
 ### Contexto real
 
-`context_engine.py` já observa dados reais como:
-
-- quantidade total de pendências;
-- itens previstos para hoje;
-- itens atrasados.
-
-Assim um cumprimento pode receber comentários contextuais, por exemplo:
-
-- muitas pendências: `Colecionar era para ser hobby, chefe.`;
-- atrasos: comentário sobre itens que já passaram da data;
-- nenhuma pendência: `Estranho. Silencioso demais por aqui.`
-
-Isso é o início da memória comportamental. Não inventar fatos que não estejam no banco.
+`context_engine.py` observa dados reais como quantidade total de pendências, itens previstos para hoje e itens atrasados. Isso é o início da memória comportamental.
 
 ### Traços recorrentes
 
-Butler possui pequenas características que podem reaparecer ocasionalmente. A primeira implementada é uma antipatia gratuita por terça-feira:
+Butler possui pequenas características que podem reaparecer ocasionalmente. A primeira é uma antipatia gratuita por terça-feira:
 
 `Terça-feira. Você sabe o que penso sobre isso.`
 
-Esses traços devem ser usados com moderação para criar continuidade de personagem.
+## 🧭 Organização dos menus
 
-### Eventos já humanizados
+Criado `src/ui_layout.py` para centralizar o desenho dos teclados e evitar versões divergentes em handlers antigos.
 
-- lembrete de aula;
-- tarefa/compromisso/pendência;
-- rotina/autocuidado;
-- cumprimentos simples (`oi`, `bom dia`, `fala Butler` etc.);
-- agradecimentos.
+### Menu principal
 
-Próxima evolução da personalidade:
+- `🌙 Day-off`
+- `🏋️ Musculação`
+- `📚 Matérias`
+- `✅ Tarefas`
+- `📅 Compromissos`
+- `📌 Pendências`
+- `🗓️ Hoje`
+- `🏠 Cotidiano`
 
-1. usar histórico de adiamentos e atrasos para provocações factuais;
-2. usar streaks de metas/rotinas para reconhecer constância;
-3. comparar evolução de musculação e comentar progresso real;
-4. futuramente permitir linguagem natural controlar ações do Butler;
-5. somente depois avaliar LLM opcional para conversa livre.
+Musculação foi promovida para o menu principal.
+
+### Cotidiano
+
+- `🛒 O que está faltando?`
+- `➕ Item faltando`
+- `🎯 Metas`
+- `🧘 Rotinas`
+- `💰 Finanças`
+- retorno ao menu principal
+
+Finanças saiu do menu principal e passou para Cotidiano.
 
 ## Funcionalidades consolidadas
 
@@ -115,7 +122,7 @@ Próxima evolução da personalidade:
 - lista persistente do que está faltando em casa;
 - metas gerais e progresso;
 - rotinas/autocuidado;
-- musculação;
+- finanças como módulo futuro;
 - visão `🗓️ Hoje` agregando agenda e rotina.
 
 ## 🏋️ Musculação — Protocol Mass
@@ -185,7 +192,7 @@ Para prescrições simples o Butler deduz o número de séries. Para prescriçõ
 
 ## Scheduler
 
-Atualmente trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. Os lembretes agora passam pelo Personality Engine. O Protocol Mass ainda não envia lembrete automático porque não foi definido horário fixo para musculação.
+Atualmente trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. Os lembretes passam pelo Personality Engine. O Protocol Mass ainda não envia lembrete automático porque não foi definido horário fixo para musculação.
 
 ## Finanças
 
@@ -193,7 +200,7 @@ Continua planejado, ainda sem persistência real. Direção: entradas/saídas, c
 
 ## Próximos passos sugeridos
 
-1. validar manualmente o Personality Engine e o fluxo série por série no Telegram;
+1. validar manualmente a personalidade nas telas e nos lembretes;
 2. expandir contexto comportamental com adiamentos, streaks e progresso real;
 3. permitir corrigir/apagar uma série registrada por engano;
 4. normalizar cargas e calcular evolução/volume quando seguro;
