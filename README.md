@@ -37,7 +37,7 @@ A versão genérica nasce limpa:
 - registra o `chat_id` da pessoa no `/start`;
 - pergunta como ela quer ser chamada;
 - musculação começa sem rotina cadastrada;
-- pode importar a própria grade por PDF ou imagem.
+- pode importar a própria grade por PDF textual ou arquivo `.txt`.
 
 Crie `.env.generic` a partir de `.env.generic.example` e use o token de um bot Telegram separado.
 
@@ -53,33 +53,47 @@ O valor fica persistido junto ao `chat_id`. Depois ele pode ser alterado em:
 
 As respostas casuais e lembretes proativos passam a usar esse nome/apelido quando possível.
 
-## Importação da grade por PDF/imagem
+## Importação da grade por PDF/texto
 
 Em:
 
-`📚 Matérias → 📥 Importar grade por PDF/imagem`
+`📚 Matérias → 📥 Importar grade por PDF/texto`
 
 é possível enviar:
 
-- PDF original do SIGAA;
-- PDF escaneado;
-- screenshot/foto da grade.
+- **PDF com texto pesquisável/selecionável**;
+- arquivo `.txt` contendo a grade.
 
-O Butler procura linhas com códigos SIGAA como `35M45`, `24M23` e `3T23`, traduz os códigos para dias/horários e apresenta uma **prévia antes de gravar**.
+O Butler procura códigos SIGAA como `35M45`, `24M23` e `3T23`, traduz para dias/horários completos e apresenta uma **prévia antes de gravar**.
 
 Se uma matéria já existir, a importação atualiza os horários dela em vez de criar duplicata.
 
-> A confirmação é proposital: SIGAA e OCR podem estar errados. Casos especiais, como horários corrigidos manualmente, devem ser conferidos antes de importar.
+### O que não é aceito
 
-### OCR de imagens
+Para manter o projeto simples e facilitar a futura hospedagem, o Butler **não executa OCR** e não aceita diretamente:
 
-PDFs com texto são lidos diretamente por PyMuPDF. Imagens e PDFs escaneados usam `pytesseract`, portanto o **Tesseract OCR precisa estar instalado no sistema** e disponível no `PATH`.
+- foto da grade;
+- screenshot;
+- JPG/PNG/WebP;
+- PDF que contém apenas uma imagem/scan.
 
-Depois de atualizar o projeto:
+Se a pessoa só possuir uma imagem, deve usar qualquer IA/ferramenta capaz de convertê-la para um **PDF com texto pesquisável** e então enviar esse PDF ao Butler.
 
-```bash
-pip install -r requirements.txt
-```
+O cadastro manual continua disponível em `⚙️ Gerenciar matérias` para quem preferir cadastrar matéria por matéria.
+
+Essa decisão remove a dependência de Tesseract, Pillow e `pytesseract`. PDFs textuais são extraídos com `pypdf`.
+
+## Horários SIGAA
+
+O Butler usa blocos de **horas completas** como representação oficial. Exemplos:
+
+- `M23` → `08:00–10:00`;
+- `M45` → `10:00–12:00`;
+- `T23` → `14:00–16:00`;
+- `T2345` → `14:00–18:00`;
+- `N12` → `18:00–20:00`.
+
+Correções manuais do usuário continuam tendo prioridade sobre o código exibido pelo SIGAA.
 
 ## Menu principal
 
@@ -101,7 +115,7 @@ Dentro de **Cotidiano** ficam lista de mercado, metas, rotinas, finanças e conf
 - grade persistente;
 - gerenciamento de matérias: adicionar, remover, trancar e editar;
 - tradução de códigos SIGAA;
-- importação por PDF/imagem;
+- importação por PDF textual/`.txt`;
 - lembrete automático antes das aulas.
 
 ### Tarefas, compromissos e pendências
@@ -139,12 +153,12 @@ Respostas variam entre neutras, leves e sarcásticas, sempre preservando context
 
 | Matéria | Dia | Horário | Local |
 |---|---|---|---|
-| Álgebra Linear I | Terça e quinta | 10:00–11:40 | PAV III, Sala 10 |
-| Física II | Segunda e quarta | 10:00–11:40 | PAV III, Sala 07 |
+| Álgebra Linear I | Terça e quinta | 10:00–12:00 | PAV III, Sala 10 |
+| Física II | Segunda e quarta | 10:00–12:00 | PAV III, Sala 07 |
 | Laboratório de Sistemas Digitais I | Segunda | 14:00–16:00 | PAV Eng., Sala D6 |
-| Princípios de Eletrônica Analógica | Terça e quinta | 08:01–09:40 | PAV I, Sala 104 |
-| Sistemas Digitais I | Segunda | 08:01–09:40 | PAV I, Sala 11 |
-| Sistemas Digitais I | Quarta | 08:01–09:40 | PAV I, Sala 114 |
+| Princípios de Eletrônica Analógica | Terça e quinta | 08:00–10:00 | PAV I, Sala 104 |
+| Sistemas Digitais I | Segunda | 08:00–10:00 | PAV I, Sala 11 |
+| Sistemas Digitais I | Quarta | 08:00–10:00 | PAV I, Sala 114 |
 
 ## Executar o Butler pessoal
 
