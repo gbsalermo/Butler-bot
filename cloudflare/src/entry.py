@@ -91,8 +91,6 @@ async def _handle_message(db, token: str, message: dict):
     elif text.startswith("/health"):
         reply = "✅ Butler Cloudflare está online."
     else:
-        # Esta branch começa pela infraestrutura. As intenções e menus do rolling local
-        # serão portados incrementalmente para este dispatcher sem misturar polling/SQLite.
         reply = (
             "🕴️ Recebi sua mensagem. A infraestrutura Cloudflare está ativa, mas este comando ainda não foi portado para o dispatcher de produção."
         )
@@ -100,8 +98,6 @@ async def _handle_message(db, token: str, message: dict):
 
 
 async def _run_scheduled(db, token: str):
-    # Cron inicial. A migração do scheduler local será feita por regras idempotentes
-    # usando notification_log para impedir envios duplicados.
     now = datetime.now(timezone.utc).isoformat()
     print(f"Butler scheduled tick: {now}")
 
@@ -112,7 +108,7 @@ class Default(WorkerEntrypoint):
         path = parsed.path
 
         if request.method == "GET" and path == "/health":
-            configured_owner = OWNER_CHAT_ID > 0
+            configured_owner = OWNER_CHAT_ID is not None
             return Response(
                 json.dumps({
                     "ok": True,
