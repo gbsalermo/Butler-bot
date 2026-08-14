@@ -11,6 +11,7 @@ from src.casual_handlers import register_casual_handlers
 from src.config import TELEGRAM_BOT_TOKEN, validate_config
 from src.daily_store import init_daily_store
 from src.database import init_database, seed_default_schedule
+from src.history_handlers import register_history_handlers
 from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
 from src.home_store import init_home_tables
@@ -59,6 +60,7 @@ def main() -> None:
     register_protocol_mass_handlers(application)
     register_academic_navigation(application)
     register_assistant_views(application)
+    register_history_handlers(application)
     register_behavior_handlers(application)
     register_quick_capture(application)
     register_lifestyle_handlers(application)
