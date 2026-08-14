@@ -17,29 +17,33 @@ TURN_NAMES = {
     "N": "noite",
 }
 
+# O SIGAA exibe intervalos com minutos quebrados (08:01, 08:51, 14:01 etc.),
+# mas para o Butler usamos blocos de horas completas. Isso deixa agenda,
+# lembretes e importação de grade alinhados com a forma prática de consultar
+# os horários: M23 = 08:00-10:00, M45 = 10:00-12:00, T23 = 14:00-16:00 etc.
 SLOTS = {
     "M": {
-        "1": ("07:10", "08:00"),
-        "2": ("08:01", "08:50"),
-        "3": ("08:51", "09:40"),
-        "4": ("10:00", "10:50"),
-        "5": ("10:51", "11:40"),
-        "6": ("11:41", "12:30"),
+        "1": ("07:00", "08:00"),
+        "2": ("08:00", "09:00"),
+        "3": ("09:00", "10:00"),
+        "4": ("10:00", "11:00"),
+        "5": ("11:00", "12:00"),
+        "6": ("12:00", "13:00"),
     },
     "T": {
-        "1": ("13:10", "14:00"),
-        "2": ("14:01", "14:50"),
-        "3": ("14:51", "15:40"),
-        "4": ("16:00", "16:50"),
-        "5": ("16:51", "17:40"),
-        "6": ("17:41", "18:30"),
+        "1": ("13:00", "14:00"),
+        "2": ("14:00", "15:00"),
+        "3": ("15:00", "16:00"),
+        "4": ("16:00", "17:00"),
+        "5": ("17:00", "18:00"),
+        "6": ("18:00", "19:00"),
     },
     "N": {
-        "1": ("18:05", "18:50"),
-        "2": ("18:51", "19:35"),
-        "3": ("19:36", "20:20"),
-        "4": ("20:30", "21:15"),
-        "5": ("21:16", "22:00"),
+        "1": ("18:00", "19:00"),
+        "2": ("19:00", "20:00"),
+        "3": ("20:00", "21:00"),
+        "4": ("21:00", "22:00"),
+        "5": ("22:00", "23:00"),
     },
 }
 
@@ -105,14 +109,7 @@ def _friendly_time(value: str) -> str:
     hour, minute = value.split(":")
     hour_int = int(hour)
     minute_int = int(minute)
-
-    # Os blocos do SIGAA têm pequenas diferenças de minutos entre aulas.
-    # Para a descrição ao usuário, arredondamos para a hora aproximada do bloco.
-    if minute_int <= 10:
-        return f"{hour_int}h"
-    if minute_int >= 40:
-        return f"{hour_int + 1}h"
-    return f"{hour_int}h{minute_int:02d}"
+    return f"{hour_int}h" if minute_int == 0 else f"{hour_int}h{minute_int:02d}"
 
 
 def _join_words(words: list[str]) -> str:
