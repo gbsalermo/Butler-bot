@@ -6,6 +6,7 @@ from src.academic_navigation import register_academic_navigation
 from src.assistant_state import init_assistant_state
 from src.assistant_views import register_assistant_views
 from src.bot_handlers import register_handlers
+from src.casual_handlers import register_casual_handlers
 from src.config import TELEGRAM_BOT_TOKEN, validate_config
 from src.daily_store import init_daily_store
 from src.database import init_database, seed_default_schedule
@@ -49,6 +50,7 @@ def main() -> None:
     register_lifestyle_handlers(application)
     register_home_handlers(application)
     register_handlers(application)
+    register_casual_handlers(application)
     register_scheduler(application)
 
     print("Butler iniciado em polling. Quando você descansar, ele descansa também.")
