@@ -7,7 +7,7 @@ from telegram.ext import CommandHandler, ContextTypes, ConversationHandler, Mess
 from src.config import BUTLER_TIMEZONE
 from src.daily_store import add_item
 from src.home_store import add_grocery_item
-from src.ui_layout import COTIDIANO_KEYBOARD, MAIN_KEYBOARD
+from src.ui_layout import MAIN_KEYBOARD
 
 Q_TITLE, Q_WHEN, Q_DATE, Q_TIME = range(810, 814)
 GROCERY_QUICK = 820
@@ -180,7 +180,6 @@ async def grocery_quick_start(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def grocery_quick_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = (update.message.text or "").strip()
     if text == CANCEL:
-        context.user_data.pop("quick_item", None)
         await update.message.reply_text("Cancelei.", reply_markup=MAIN_KEYBOARD)
         return ConversationHandler.END
     if len(text) < 2:
@@ -239,7 +238,7 @@ def register_quick_capture(application) -> None:
     )
     grocery_conv = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex(r"^(?:➕ |🛒 )?Item faltando$"), grocery_quick_start)
+            MessageHandler(filters.Regex(r"^(?:➕ Adicionar item|➕ Item faltando)$"), grocery_quick_start)
         ],
         states={GROCERY_QUICK: [MessageHandler(filters.TEXT & ~filters.COMMAND, grocery_quick_save)]},
         fallbacks=[CommandHandler("cancelar", quick_cancel)],
