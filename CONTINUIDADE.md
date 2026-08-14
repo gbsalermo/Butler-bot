@@ -8,7 +8,9 @@
 - `/start` registra e atualiza o `chat_id` do usuário no SQLite.
 - A grade acadêmica do semestre é carregada automaticamente no primeiro uso.
 - `/materias` e o botão `📚 Minhas matérias` listam as disciplinas cadastradas.
-- O botão `➕ Adicionar matéria` inicia um cadastro guiado pelo Telegram.
+- O menu principal possui `⚙️ Gerenciar matérias`.
+- O submenu de gerenciamento possui `📚 Ver matérias`, `➕ Adicionar matéria` e `⬅️ Voltar`.
+- O cadastro de matéria entende códigos de horário do SIGAA e também oferece modo manual.
 
 ## Grade base do semestre
 
@@ -17,6 +19,26 @@
 - Laboratório de Sistemas Digitais I: segunda, 14:00–16:00, PAV Eng. Sala D6. Horário corrigido manualmente.
 - Princípios de Eletrônica Analógica: terça e quinta, 08:01–09:40, PAV I Sala 104.
 - Sistemas Digitais I: segunda 08:01–09:40 PAV I Sala 11; quarta 08:01–09:40 PAV I Sala 114.
+
+## Tradutor de horários SIGAA
+
+Implementado em `src/sigaa_schedule.py`.
+
+Formato reconhecido:
+
+- dias antes da letra: `2` segunda, `3` terça, `4` quarta, `5` quinta, `6` sexta, `7` sábado;
+- `M`: manhã;
+- `T`: tarde;
+- `N`: noite;
+- números após a letra: blocos do turno.
+
+Exemplos:
+
+- `3T23` → terça-feira à tarde, aproximadamente 14h–16h; exato `14:01–15:40`;
+- `35M45` → terça e quinta pela manhã, aproximadamente 10h–12h; exato `10:00–11:40`;
+- `24M23` → segunda e quarta pela manhã, aproximadamente 8h–10h; exato `08:01–09:40`.
+
+O banco recebe os horários exatos do SIGAA. A tradução amigável é usada para comunicação com o usuário.
 
 ## Banco atual
 
@@ -38,15 +60,29 @@ O banco local é criado em `data/butler.db` por padrão e não é versionado.
 4. O bot entra em polling.
 5. `/start` registra o chat atual e apresenta o menu principal.
 
-### Adicionar matéria
+### Gerenciar matérias
+
+1. Pressionar `⚙️ Gerenciar matérias`.
+2. Escolher entre visualizar as matérias ou adicionar uma nova.
+3. `⬅️ Voltar` retorna ao menu principal.
+
+### Adicionar matéria por código SIGAA
 
 1. Pressionar `➕ Adicionar matéria` ou usar `/adicionar_materia`.
-2. Informar nome.
-3. Informar dias separados por vírgula, por exemplo `seg, qua`.
-4. Informar horário inicial no formato `HH:MM`.
-5. Informar horário final no formato `HH:MM`.
-6. Informar sala/local.
-7. A matéria e suas aulas são persistidas no SQLite.
+2. Informar o nome da disciplina.
+3. Informar um código como `3T23`, `35M45` ou `24M23`.
+4. O Butler traduz o código, informa a descrição amigável e guarda o horário exato.
+5. Informar sala/local.
+6. A matéria e suas aulas são persistidas no SQLite.
+
+### Adicionar matéria manualmente
+
+Após informar o nome, digitar `manual` no campo de horário. Em seguida:
+
+1. informar dias separados por vírgula;
+2. informar horário inicial em `HH:MM`;
+3. informar horário final em `HH:MM`;
+4. informar sala/local.
 
 Use `/cancelar` durante o cadastro para interromper o fluxo.
 
@@ -68,6 +104,7 @@ Depois disso, adicionar tarefas, compromissos, ônibus e autocuidado.
 - O `chat_id` deve ficar persistido porque o Butler precisará iniciar mensagens proativamente.
 - Aula é tratada separadamente de tarefa e compromisso, pois possui disciplina, recorrência semanal, horário e sala.
 - O horário de Laboratório de Sistemas Digitais I não segue o código exibido pelo SIGAA; usar 14:00–16:00 na segunda-feira até nova atualização.
+- Para códigos SIGAA, armazenar horários exatos e exibir uma descrição amigável arredondada quando isso facilitar a leitura.
 
 ## Regra de continuidade
 
