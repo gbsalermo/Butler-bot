@@ -4,7 +4,7 @@
 
 # Butler Bot
 
-Assistente pessoal via Telegram para organização acadêmica, tarefas, compromissos, pendências, casa, metas, musculação, autocuidado e finanças pessoais.
+Assistente pessoal via Telegram para organização acadêmica, tarefas, compromissos, casa, metas, musculação, autocuidado e finanças pessoais.
 
 O projeto roda inicialmente via **polling**, usa **SQLite** e possui duas formas de execução no mesmo código-base.
 
@@ -31,27 +31,65 @@ python -m src.main_generic
 
 A versão genérica nasce limpa:
 
-- **não** carrega a grade pessoal;
-- **não** carrega o Protocol Mass;
+- não carrega a grade pessoal;
+- não carrega o Protocol Mass;
 - usa banco separado (`data/butler_generic.db` por padrão);
-- registra o `chat_id` da pessoa no `/start`;
-- pergunta como ela quer ser chamada;
+- registra o `chat_id` no `/start`;
+- pergunta como a pessoa quer ser chamada;
 - musculação começa sem rotina cadastrada;
-- pode importar a própria grade por PDF textual ou arquivo `.txt`.
+- pode importar a própria grade por PDF textual ou `.txt`.
 
-Crie `.env.generic` a partir de `.env.generic.example` e use o token de um bot Telegram separado.
+## Menu principal — acesso rápido
+
+O menu inicial foi reorganizado para priorizar ações de poucos segundos:
+
+- 🌙 Day-off
+- ➕ Adicionar
+- 🗓️ Hoje
+- 🛒 Item faltando
+- 🏋️ Musculação
+- 📚 Matérias
+- 🏠 Cotidiano
+
+`➕ Adicionar` deixa escolher entre **Nova tarefa** e **Novo compromisso**.
+
+Dentro de **Cotidiano** ficam Tarefas, Compromissos, lista de mercado, metas, rotinas, finanças e configuração de como o Butler deve chamar o usuário.
+
+### Pendências
+
+Pendência não é mais um tipo criado pelo usuário. Uma **tarefa vencida e ainda não concluída** passa automaticamente a aparecer como pendência na visão `🗓️ Hoje`.
+
+## Captura rápida
+
+### Tarefas e compromissos
+
+Fluxo padrão:
+
+1. título;
+2. Hoje / Outro dia / Sem data;
+3. horário quando houver data;
+4. salvar.
+
+O fluxo rápido não pergunta observação nem antecedência. O lembrete fica para a hora marcada. Datas passadas e horários já vencidos no dia atual são rejeitados.
+
+### Item faltando
+
+Exemplos aceitos:
+
+```text
+sal
+sal, açúcar, café
+falta sal, açúcar, café
+café | 2 pacotes
+```
+
+Quantidade é opcional.
 
 ## Onboarding e nome preferido
 
-No primeiro `/start`, se ainda não houver apelido salvo, o Butler pergunta:
-
-> Como você quer que eu te chame?
-
-O valor fica persistido junto ao `chat_id`. Depois ele pode ser alterado em:
+No primeiro `/start`, se ainda não houver apelido salvo, o Butler pergunta como o usuário quer ser chamado. Depois isso pode ser alterado em:
 
 `🏠 Cotidiano → 👤 Como me chamar`
-
-As respostas casuais e lembretes proativos passam a usar esse nome/apelido quando possível.
 
 ## Importação da grade por PDF/texto
 
@@ -61,31 +99,16 @@ Em:
 
 é possível enviar:
 
-- **PDF com texto pesquisável/selecionável**;
+- PDF com texto pesquisável/selecionável;
 - arquivo `.txt` contendo a grade.
 
-O Butler procura códigos SIGAA como `35M45`, `24M23` e `3T23`, traduz para dias/horários completos e apresenta uma **prévia antes de gravar**.
+O Butler procura códigos SIGAA como `35M45`, `24M23` e `3T23`, traduz para dias/horários completos e apresenta uma prévia antes de gravar.
 
-Se uma matéria já existir, a importação atualiza os horários dela em vez de criar duplicata.
-
-### O que não é aceito
-
-Para manter o projeto simples e facilitar a futura hospedagem, o Butler **não executa OCR** e não aceita diretamente:
-
-- foto da grade;
-- screenshot;
-- JPG/PNG/WebP;
-- PDF que contém apenas uma imagem/scan.
-
-Se a pessoa só possuir uma imagem, deve usar qualquer IA/ferramenta capaz de convertê-la para um **PDF com texto pesquisável** e então enviar esse PDF ao Butler.
-
-O cadastro manual continua disponível em `⚙️ Gerenciar matérias` para quem preferir cadastrar matéria por matéria.
-
-Essa decisão remove a dependência de Tesseract, Pillow e `pytesseract`. PDFs textuais são extraídos com `pypdf`.
+Não há OCR. Foto, screenshot ou PDF escaneado sem texto devem ser convertidos antes para PDF com texto pesquisável por qualquer IA/ferramenta, ou cadastrados manualmente.
 
 ## Horários SIGAA
 
-O Butler usa blocos de **horas completas** como representação oficial. Exemplos:
+O Butler usa blocos de horas completas:
 
 - `M23` → `08:00–10:00`;
 - `M45` → `10:00–12:00`;
@@ -93,20 +116,7 @@ O Butler usa blocos de **horas completas** como representação oficial. Exemplo
 - `T2345` → `14:00–18:00`;
 - `N12` → `18:00–20:00`.
 
-Correções manuais do usuário continuam tendo prioridade sobre o código exibido pelo SIGAA.
-
-## Menu principal
-
-- 🌙 Day-off
-- 🏋️ Musculação
-- 📚 Matérias
-- ✅ Tarefas
-- 📅 Compromissos
-- 📌 Pendências
-- 🗓️ Hoje
-- 🏠 Cotidiano
-
-Dentro de **Cotidiano** ficam lista de mercado, metas, rotinas, finanças e configuração de como o Butler deve chamar o usuário.
+Correções manuais do usuário têm prioridade sobre o código exibido pelo SIGAA.
 
 ## Funcionalidades principais
 
@@ -118,19 +128,24 @@ Dentro de **Cotidiano** ficam lista de mercado, metas, rotinas, finanças e conf
 - importação por PDF textual/`.txt`;
 - lembrete automático antes das aulas.
 
-### Tarefas, compromissos e pendências
+### Tarefas e compromissos
 
-- adicionar/listar/concluir/editar/remover;
-- data, horário e observação;
-- antecedência configurável;
+- criação rápida;
+- listar/concluir/editar/remover;
+- data e horário opcionais;
 - lembretes proativos;
-- concluir ou adiar pelo próprio aviso.
+- concluir ou adiar pelo próprio aviso;
+- tarefas vencidas aparecem automaticamente como pendências.
+
+### 🗓️ Hoje
+
+Reúne aulas, tarefas e compromissos do dia, tarefas vencidas, treino cadastrado e quantidade de itens faltando em casa.
 
 ### 🏋️ Musculação — Butler pessoal
 
 O Butler pessoal possui o Protocol Mass completo de 12 semanas, com:
 
-- `🚀 Começar os trabalhos` como início único do protocolo;
+- início único por `🚀 Começar os trabalhos`;
 - treino do dia;
 - faltas com motivo;
 - exercícios substitutos oficiais;
@@ -139,7 +154,7 @@ O Butler pessoal possui o Protocol Mass completo de 12 semanas, com:
 - progresso semanal;
 - opção temporária de reiniciar o protocolo durante os testes.
 
-Na versão genérica, musculação começa vazia e usa o cadastro manual de rotina/exercícios.
+Na versão genérica, musculação começa vazia e usa o cadastro manual.
 
 ### 🌙 Day-off
 
@@ -147,7 +162,7 @@ Silencia cobranças e lembretes até o usuário chamar o Butler novamente.
 
 ### 🕴️ Personality Engine
 
-Respostas variam entre neutras, leves e sarcásticas, sempre preservando contexto importante. Em situações sensíveis/Day-off, o sarcasmo é desativado.
+Respostas variam entre neutras, leves e sarcásticas. Em situações sensíveis/Day-off, o sarcasmo é desativado.
 
 ## Grade pessoal inicial
 
