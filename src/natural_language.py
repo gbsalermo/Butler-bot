@@ -75,7 +75,7 @@ def interpret(text:str,today:date|None=None)->Intent|None:
 
     grocery_question = any(x in n for x in ("o que falta em casa","o que ta faltando em casa","o que esta faltando em casa","quais itens faltam")) or bool(re.match(r"^(?:mostra|mostrar|lista|listar)\s+(?:a\s+)?(?:lista\s+)?(?:de mercado|da feira|de compras)",n))
     if grocery_question:return Intent("grocery_query",.98)
-    if re.search(r"\b(o que|que que|como esta|minha agenda|tenho algo|tenho o que)\b",n) and any(x in n for x in ("hoje","amanha","depois de amanha","daqui a","segunda","terca","quarta","quinta","sexta","sabado","domingo","agenda")):
+    if re.search(r"\b(o que|que que|como esta|minha agenda|tenho algo|tenho o que|quais compromissos)\b",n) and any(x in n for x in ("hoje","amanha","depois de amanha","daqui a","segunda","terca","quarta","quinta","sexta","sabado","domingo","agenda","proxima semana")):
         target=parse_date(raw,today)
         if "proximos 7" in n or "proxima semana" in n:return Intent("agenda_range",.95,{"days":7})
         return Intent("agenda_query",.94 if target else .72,{"date":target})
@@ -109,7 +109,8 @@ def interpret(text:str,today:date|None=None)->Intent|None:
 
     task_markers=("me lembra de","lembra-me de","preciso ","tenho que ","anota uma tarefa","anotar uma tarefa","adiciona uma tarefa")
     if any(x in n for x in task_markers):
-        title=_clean_title(raw,"task_create"); return Intent("task_create",.95 if title else .7,{"title":title,"date":d,"time":t})
+        title=_clean_title(raw,"task_create"); reminder_request="lembra" in n
+        return Intent("task_create",.95 if title else .7,{"title":title,"date":d,"time":t,"reminder_request":reminder_request})
     return None
 
 def validate_future(target_date:date|None,target_time:str|None,now:datetime|None=None)->tuple[bool,str|None]:
