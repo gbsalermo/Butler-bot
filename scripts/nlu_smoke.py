@@ -28,6 +28,15 @@ def main():
     r = expect("bota café na lista de mercado", "grocery_add")
     assert r.data["items"] == ["café"]
 
+    r = expect("preciso comprar café", "grocery_add")
+    assert r.data["items"] == ["cafe"] or r.data["items"] == ["café"]
+
+    r = expect("tenho que comprar arroz e feijão", "grocery_add")
+    assert len(r.data["items"]) == 2
+
+    r = expect("preciso comprar um adaptador para o trabalho", "task_create")
+    assert "adaptador" in r.data["title"].lower()
+
     expect("o que falta em casa?", "grocery_query")
     expect("comprei o café", "grocery_bought")
 
