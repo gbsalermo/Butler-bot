@@ -18,6 +18,8 @@ from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
 from src.home_store import init_home_tables
 from src.lifestyle_handlers import register_lifestyle_handlers
+from src.natural_handlers import register_natural_handlers
+from src.natural_store import init_natural_tables
 from src.onboarding import register_onboarding
 from src.personality_navigation import register_personality_navigation
 from src.protocol_mass_handlers import register_protocol_mass_handlers
@@ -35,14 +37,8 @@ from src.wellbeing_handlers import register_wellbeing_handlers
 
 def main() -> None:
     validate_config()
-    init_database()
-    init_daily_store()
-    init_home_tables()
-    init_assistant_state()
-    init_finance_tables()
-    init_protocol_mass_tables()
-    seed_default_schedule()
-    apply_layout_overrides()
+    init_database(); init_daily_store(); init_home_tables(); init_assistant_state(); init_finance_tables(); init_natural_tables(); init_protocol_mass_tables()
+    seed_default_schedule(); apply_layout_overrides()
 
     logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
@@ -66,6 +62,7 @@ def main() -> None:
     register_lifestyle_handlers(application)
     register_home_handlers(application)
     register_handlers(application)
+    register_natural_handlers(application)
     register_casual_handlers(application)
     register_scheduler(application)
 
