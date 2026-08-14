@@ -4,6 +4,7 @@ from pathlib import Path
 from telegram import ReplyKeyboardMarkup, Update
 from telegram.ext import CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 
+from src.config import BUTLER_VARIANT
 from src.database import upsert_subject_schedule
 from src.schedule_importer import ImportedSubject, extract_text_from_file, parse_schedule_text
 from src.ui_layout import MAIN_KEYBOARD
@@ -11,6 +12,10 @@ from src.ui_layout import MAIN_KEYBOARD
 WAIT_FILE, CONFIRM = range(720, 722)
 WAIT_KEYBOARD = ReplyKeyboardMarkup([["❌ Cancelar ação"]], resize_keyboard=True)
 CONFIRM_KEYBOARD = ReplyKeyboardMarkup([["✅ Importar grade", "❌ Cancelar ação"]], resize_keyboard=True)
+
+PROTECTED_PERSONAL_SUBJECTS = {
+    "laboratório de sistemas digitais i",
+}
 
 
 async def import_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -108,7 +113,9 @@ async def receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data["schedule_import"] = subjects
     lines = ["📚 *Prévia da grade que eu entendi*", ""]
     for subject in subjects:
-        lines.append(f"• *{subject.name}* — `{subject.code}`")
+        protected = _is_personal_protected(subject.name)
+        suffix_note = " — 🔒 correção manual preservada" if protected else ""
+        lines.append(f"• *{subject.name}* — `{subject.code}`{suffix_note}")
         for day, start, end, location in subject.sessions:
             lines.append(f"   {day.capitalize()} • {start}–{end} • {location or 'local não identificado'}")
 
@@ -116,8 +123,15 @@ async def receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         "",
         "Confere antes de importar. PDF com texto é mais confiável que OCR, mas ainda não vou sair alterando sua vida acadêmica sem autorização.",
     ])
+    if BUTLER_VARIANT == "personal":
+        lines.append("🔒 No Butler pessoal, horários que já foram corrigidos manualmente por você permanecem protegidos.")
+
     await message.reply_text("\n".join(lines), parse_mode="Markdown", reply_markup=CONFIRM_KEYBOARD)
     return CONFIRM
+
+
+def _is_personal_protected(subject_name: str) -> bool:
+    return BUTLER_VARIANT == "personal" and subject_name.strip().casefold() in PROTECTED_PERSONAL_SUBJECTS
 
 
 async def confirm_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -128,11 +142,18 @@ async def confirm_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return ConversationHandler.END
 
     subjects: list[ImportedSubject] = context.user_data.pop("schedule_import", [])
+    imported = 0
+    preserved = 0
     for subject in subjects:
+        if _is_personal_protected(subject.name):
+            preserved += 1
+            continue
         upsert_subject_schedule(subject.name, subject.sessions)
+        imported += 1
 
+    extra = f"\n🔒 {preserved} matéria(s) com correção manual foram preservadas." if preserved else ""
     await update.message.reply_text(
-        f"✅ Grade importada: {len(subjects)} matéria(s).\n\nDigitar tudo uma por uma continua disponível, mas felizmente não foi necessário.",
+        f"✅ Grade importada: {imported} matéria(s).{extra}\n\nDigitar tudo uma por uma continua disponível, mas felizmente não foi necessário.",
         reply_markup=MAIN_KEYBOARD,
     )
     return ConversationHandler.END
