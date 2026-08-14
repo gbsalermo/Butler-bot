@@ -16,10 +16,10 @@ PRE_PROTOCOL_KEYBOARD = ReplyKeyboardMarkup(
 
 ACTIVE_PROTOCOL_KEYBOARD = ReplyKeyboardMarkup(
     [
-        ["📅 Treino de hoje", "📝 Registrar exercício"],
+        ["📅 Treino de hoje", "🏋️ Registrar séries"],
         ["🔁 Substituir exercício", "✅ Finalizar treino"],
         ["😕 Não consegui treinar hoje"],
-        ["📈 Progresso Protocol Mass"],
+        ["📈 Progresso Protocol Mass", "📊 Histórico de carga"],
         ["🔄 Reiniciar os trabalhos"],
         ["⬅️ Voltar ao cotidiano"],
     ],
@@ -40,7 +40,7 @@ async def open_protocol_mass(update: Update, context: ContextTypes.DEFAULT_TYPE)
         week = int(state["current_week"])
         await update.message.reply_text(
             f"🏋️ *Protocol Mass — Semana {week}/12*\n\n"
-            "Os trabalhos já começaram. Agora eu acompanho o protocolo dia a dia: treino, exercícios, substituições, faltas e progresso.",
+            "Os trabalhos já começaram. Agora eu acompanho o protocolo dia a dia, inclusive cada série, carga, repetição, substituição e falta.",
             parse_mode="Markdown",
             reply_markup=ACTIVE_PROTOCOL_KEYBOARD,
         )
@@ -50,7 +50,7 @@ async def open_protocol_mass(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "As 12 semanas já foram encerradas. Durante os testes, você ainda pode usar o reinício para zerar o protocolo.",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup(
-                [["📈 Progresso Protocol Mass"], ["🔄 Reiniciar os trabalhos"], ["⬅️ Voltar ao cotidiano"]],
+                [["📈 Progresso Protocol Mass", "📊 Histórico de carga"], ["🔄 Reiniciar os trabalhos"], ["⬅️ Voltar ao cotidiano"]],
                 resize_keyboard=True,
             ),
         )
