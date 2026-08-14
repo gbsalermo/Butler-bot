@@ -13,6 +13,9 @@ from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
 from src.home_store import init_home_tables
 from src.lifestyle_handlers import register_lifestyle_handlers
+from src.protocol_mass_handlers import register_protocol_mass_handlers
+from src.protocol_mass_navigation import register_protocol_mass_navigation
+from src.protocol_mass_store import init_protocol_mass_tables
 from src.scheduler import register_scheduler
 from src.wellbeing_handlers import register_wellbeing_handlers
 
@@ -23,6 +26,7 @@ def main() -> None:
     init_daily_store()
     init_home_tables()
     init_assistant_state()
+    init_protocol_mass_tables()
     seed_default_schedule()
 
     logging.basicConfig(
@@ -34,6 +38,8 @@ def main() -> None:
 
     register_wellbeing_handlers(application)
     register_home_menu(application)
+    register_protocol_mass_navigation(application)
+    register_protocol_mass_handlers(application)
     register_academic_navigation(application)
     register_assistant_views(application)
     register_lifestyle_handlers(application)
