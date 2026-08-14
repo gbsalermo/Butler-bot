@@ -27,11 +27,12 @@ from src.scheduler import register_scheduler
 from src.ui_layout import apply_layout_overrides
 from src.user_scope import register_user_scope
 from src.wellbeing_handlers import register_wellbeing_handlers
+from src.workout_import_handlers import register_workout_import
 
 def main():
     validate_config(); apply_layout_overrides()
     logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
     application=ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    register_user_scope(application); register_onboarding(application); register_schedule_import(application); register_wellbeing_handlers(application); register_quick_access(application); register_personality_navigation(application); register_finance_handlers(application); register_home_menu(application); register_academic_navigation(application); register_assistant_views(application); register_history_handlers(application); register_behavior_handlers(application); register_quick_capture(application); register_lifestyle_handlers(application); register_home_handlers(application); register_handlers(application); register_natural_handlers(application); register_casual_handlers(application); register_scheduler(application)
+    register_user_scope(application); register_onboarding(application); register_schedule_import(application); register_workout_import(application); register_wellbeing_handlers(application); register_quick_access(application); register_personality_navigation(application); register_finance_handlers(application); register_home_menu(application); register_academic_navigation(application); register_assistant_views(application); register_history_handlers(application); register_behavior_handlers(application); register_quick_capture(application); register_lifestyle_handlers(application); register_home_handlers(application); register_handlers(application); register_natural_handlers(application); register_casual_handlers(application); register_scheduler(application)
     print("Butler genérico iniciado em polling, com isolamento por chat_id."); application.run_polling(drop_pending_updates=True)
 if __name__ == "__main__": main()
