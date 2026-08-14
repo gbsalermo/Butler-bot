@@ -5,8 +5,8 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["🌙 Day-off"],
         ["➕ Adicionar", "🗓️ Hoje"],
-        ["🛒 Item faltando", "🏋️ Musculação"],
-        ["📚 Matérias", "🏠 Cotidiano"],
+        ["🛒 Item faltando", "📚 Matérias"],
+        ["🏠 Cotidiano", "🏋️ Musculação"],
     ],
     resize_keyboard=True,
 )
