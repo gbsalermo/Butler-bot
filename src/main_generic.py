@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 # O arquivo .env.generic não deve conter dados do Butler pessoal.
 load_dotenv(".env.generic", override=True)
 os.environ.setdefault("DATABASE_PATH", "data/butler_generic.db")
+os.environ.setdefault("BUTLER_VARIANT", "generic")
 
 from telegram.ext import ApplicationBuilder
 
