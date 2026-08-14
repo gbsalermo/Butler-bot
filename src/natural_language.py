@@ -5,6 +5,16 @@ from datetime import date, datetime, timedelta
 
 WEEKDAYS = {"segunda":0,"segunda-feira":0,"seg":0,"terca":1,"terça":1,"terça-feira":1,"ter":1,"quarta":2,"quarta-feira":2,"qua":2,"quinta":3,"quinta-feira":3,"qui":3,"sexta":4,"sexta-feira":4,"sex":4,"sabado":5,"sábado":5,"sab":5,"domingo":6,"dom":6}
 
+GROCERY_TERMS = {
+    "arroz", "feijao", "feijão", "acucar", "açúcar", "sal", "cafe", "café", "leite", "pao", "pão",
+    "ovo", "ovos", "frango", "carne", "peixe", "macarrao", "macarrão", "farinha", "oleo", "óleo",
+    "azeite", "manteiga", "margarina", "queijo", "presunto", "iogurte", "agua", "água", "suco",
+    "refrigerante", "biscoito", "bolacha", "fruta", "frutas", "banana", "maca", "maçã", "laranja",
+    "tomate", "cebola", "alho", "batata", "cenoura", "alface", "verdura", "verduras", "legume", "legumes",
+    "detergente", "sabao", "sabão", "sabonete", "shampoo", "condicionador", "papel higienico", "papel higiênico",
+    "desodorante", "pasta de dente", "creme dental", "esponja", "agua sanitaria", "água sanitária", "amaciante",
+}
+
 @dataclass
 class Intent:
     name: str
@@ -69,6 +79,18 @@ def _clean_title(text:str,intent:str)->str:
     for p in patterns:s=re.sub(p,"",s,flags=re.I)
     return _remove_temporal(s).strip(" ,.-")
 
+def _grocery_purchase_items(text: str) -> list[str]:
+    n = normalize(text)
+    m = re.match(r"^(?:eu\s+)?(?:preciso|tenho que)\s+comprar\s+(.+)$", n)
+    if not m:
+        return []
+    candidate = _remove_temporal(m.group(1)).strip(" ,.-")
+    parts = [x.strip() for x in re.split(r",|\s+e\s+", candidate) if x.strip()]
+    if not parts:
+        return []
+    known = {normalize(term) for term in GROCERY_TERMS}
+    return parts if all(normalize(item) in known for item in parts) else []
+
 def interpret(text:str,today:date|None=None)->Intent|None:
     raw=_strip_butler(text or ""); n=normalize(raw)
     if not n:return None
@@ -88,6 +110,10 @@ def interpret(text:str,today:date|None=None)->Intent|None:
         cleaned=re.sub(r"^(?:ta faltando|está faltando|esta faltando|falta|faltam|adiciona|adicionar|coloca|colocar|bota|botar|anota|anotar)\s+","",raw,flags=re.I)
         cleaned=re.sub(r"\s+(?:na|pra|para a)\s+lista\s+(?:de mercado|da feira|de compras).*$","",cleaned,flags=re.I)
         return Intent("grocery_add",.97,{"items":[x.strip() for x in re.split(r",|\s+e\s+",cleaned) if x.strip()]})
+
+    grocery_items = _grocery_purchase_items(raw)
+    if grocery_items:
+        return Intent("grocery_add", .94, {"items": grocery_items})
 
     if any(x in n for x in ("nao vou treinar","nao consigo treinar","nao consigo ir treinar","nao vai dar pra treinar","nao vai dar para treinar","nao vou pra academia","nao vou para academia","vou faltar o treino")):
         m=re.search(r"\bporque\s+(.+)$",raw,flags=re.I); return Intent("workout_skip",.98,{"reason":m.group(1).strip() if m else None})
