@@ -1,53 +1,64 @@
 # Butler Bot
 
-Assistente pessoal via Telegram para organização diária, tarefas, compromissos, cronograma de aulas e rotinas de autocuidado.
+Assistente pessoal via Telegram para organização acadêmica, tarefas, compromissos, pendências, autocuidado e, futuramente, finanças pessoais.
 
 O projeto começa em execução local via **polling**, com persistência em **SQLite**, e será preparado posteriormente para hospedagem 24/7.
 
-## Estado atual
+## Visão do Butler
 
-A versão inicial já possui:
+O Butler deve funcionar como um assistente cotidiano de verdade: não apenas responder comandos, mas lembrar horários, organizar responsabilidades e iniciar conversas quando houver algo importante chegando.
 
-- `/start` com registro do `chat_id` do usuário;
-- persistência local em SQLite;
+Áreas principais do menu:
+
+- 📚 Matérias
+- ✅ Tarefas
+- 📅 Compromissos
+- 📌 Pendências
+- 💰 Finanças
+- 🗓️ Hoje
+
+## Funcionalidades atuais
+
+### Acadêmico
+
+- registro do `chat_id` no `/start`;
 - grade do semestre carregada automaticamente no primeiro uso;
-- `/materias` para consultar a grade;
-- botão **📚 Minhas matérias**;
-- botão **⚙️ Gerenciar matérias**;
-- gerenciamento com quatro ações principais: **➕ Adicionar**, **🗑️ Remover**, **⏸️ Trancar** e **✏️ Editar**;
-- cadastro guiado de matérias pelo Telegram;
-- tradução automática de códigos de horário do SIGAA, como `3T23`, `35M45` e `24M23`;
-- modo manual para horários fora do padrão do SIGAA;
-- prevenção de duplicidade pelo nome da matéria.
+- consulta de matérias;
+- gerenciamento com **Adicionar**, **Remover**, **Trancar** e **Editar**;
+- tradução automática de horários SIGAA como `3T23`, `35M45` e `24M23`;
+- modo manual para horários especiais;
+- aviso automático **10 minutos antes das aulas**;
+- matérias trancadas ficam no histórico, mas são ignoradas pelos lembretes.
 
-## Gerenciar matérias
+### Tarefas, compromissos e pendências
 
-O submenu **⚙️ Gerenciar matérias** possui quatro operações principais:
+Cada categoria possui fluxo para:
 
-- **➕ Adicionar**: cadastra uma nova disciplina usando código SIGAA ou horário manual;
-- **🗑️ Remover**: exclui definitivamente a matéria e seus horários após confirmação;
-- **⏸️ Trancar**: mantém a matéria registrada no histórico, mas a retira da grade ativa e dos futuros lembretes;
-- **✏️ Editar**: permite corrigir nome, horário ou sala/local da disciplina.
+- adicionar;
+- listar itens pendentes;
+- marcar como concluído/resolvido;
+- informar data opcional;
+- informar horário opcional;
+- registrar observações;
+- enviar aviso automático 10 minutos antes quando houver data e horário.
 
-`⬅️ Voltar` retorna ao menu principal.
+O botão **🗓️ Hoje** reúne tarefas, compromissos e pendências marcados para o dia atual.
 
-## Tradução dos horários do SIGAA
+### Finanças
 
-O Butler entende códigos no padrão usado pelo SIGAA:
+O módulo já aparece no Butler como área planejada, mas ainda não registra valores.
 
-- números antes da letra: dias da semana (`2` segunda, `3` terça, ..., `7` sábado);
-- `M`: manhã;
-- `T`: tarde;
-- `N`: noite;
-- números depois da letra: blocos de aula daquele turno.
+A evolução prevista inclui:
 
-Exemplos:
-
-- `3T23` → terça-feira à tarde, aproximadamente das 14h às 16h; horário exato: `14:01–15:40`;
-- `35M45` → terça e quinta pela manhã, aproximadamente das 10h às 12h; horário exato: `10:00–11:40`;
-- `24M23` → segunda e quarta pela manhã, aproximadamente das 8h às 10h; horário exato: `08:01–09:40`.
-
-O Butler usa os horários exatos internamente para permitir lembretes precisos, mas apresenta uma tradução mais natural durante o cadastro.
+- entradas e saídas;
+- gastos por categoria;
+- saldo e gastos do mês;
+- comparação com meses anteriores;
+- identificação de aumento ou exagero de gastos;
+- valor economizado;
+- metas de economia e compras;
+- alertas quando o ritmo de gasto estiver acima do normal;
+- histórico financeiro.
 
 ## Grade inicial cadastrada
 
@@ -60,7 +71,21 @@ O Butler usa os horários exatos internamente para permitir lembretes precisos, 
 | Sistemas Digitais I | Segunda | 08:01–09:40 | PAV I, Sala 11 |
 | Sistemas Digitais I | Quarta | 08:01–09:40 | PAV I, Sala 114 |
 
-> O horário de Laboratório de Sistemas Digitais I foi corrigido manualmente para 14:00–16:00, conforme a rotina real da disciplina, em vez do código exibido no SIGAA.
+> Laboratório de Sistemas Digitais I usa manualmente 14:00–16:00, substituindo o horário inconsistente exibido no SIGAA.
+
+## Tradução dos horários do SIGAA
+
+- números antes da letra: dias (`2` segunda, `3` terça, ..., `7` sábado);
+- `M`: manhã;
+- `T`: tarde;
+- `N`: noite;
+- números depois da letra: blocos de aula.
+
+Exemplos:
+
+- `3T23` → terça à tarde, aproximadamente 14h–16h; exato `14:01–15:40`;
+- `35M45` → terça e quinta, aproximadamente 10h–12h; exato `10:00–11:40`;
+- `24M23` → segunda e quarta, aproximadamente 8h–10h; exato `08:01–09:40`.
 
 ## Estrutura
 
@@ -75,45 +100,41 @@ Butler-bot/
     ├── __init__.py
     ├── bot_handlers.py
     ├── config.py
+    ├── daily_store.py
     ├── database.py
+    ├── lifestyle_handlers.py
     ├── main.py
+    ├── scheduler.py
     └── sigaa_schedule.py
 ```
 
-## Como executar localmente
-
-### 1. Clonar o projeto
+## Como executar
 
 ```bash
 git clone https://github.com/gbsalermo/Butler-bot.git
 cd Butler-bot
+python -m venv .venv
 ```
-
-### 2. Criar o ambiente virtual
 
 Windows:
 
 ```bash
-python -m venv .venv
 .venv\Scripts\activate
 ```
 
 Linux/macOS:
 
 ```bash
-python -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Instalar dependências
+Depois:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configurar o token
-
-Copie `.env.example` para `.env` e substitua o valor de `TELEGRAM_BOT_TOKEN` pelo token fornecido pelo BotFather.
+Copie `.env.example` para `.env` e informe:
 
 ```env
 TELEGRAM_BOT_TOKEN=seu_token
@@ -121,20 +142,14 @@ BUTLER_TIMEZONE=America/Bahia
 DATABASE_PATH=data/butler.db
 ```
 
-O arquivo `.env` não deve ser commitado.
-
-### 5. Executar
-
-Na raiz do projeto:
+Execute:
 
 ```bash
 python -m src.main
 ```
 
-Depois, abra o bot no Telegram e envie `/start`.
+No Telegram, envie `/start`.
 
-O Butler criará o banco local e cadastrará automaticamente a grade inicial na primeira execução.
+## Direção de desenvolvimento
 
-## Próximas etapas
-
-A sequência planejada está registrada em `CONTINUIDADE.md`. O próximo núcleo do projeto será o sistema proativo de lembretes para aulas, compromissos, tarefas e autocuidado.
+A prioridade é ampliar as funcionalidades do Butler antes de investir em suíte de testes. A sequência planejada e as decisões atuais estão em `CONTINUIDADE.md`.
