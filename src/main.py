@@ -20,6 +20,7 @@ from src.protocol_mass_series import register_protocol_mass_series
 from src.protocol_mass_store import init_protocol_mass_tables
 from src.protocol_mass_ui import register_protocol_mass_ui
 from src.scheduler import register_scheduler
+from src.ui_layout import apply_layout_overrides
 from src.wellbeing_handlers import register_wellbeing_handlers
 
 
@@ -31,6 +32,7 @@ def main() -> None:
     init_assistant_state()
     init_protocol_mass_tables()
     seed_default_schedule()
+    apply_layout_overrides()
 
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
