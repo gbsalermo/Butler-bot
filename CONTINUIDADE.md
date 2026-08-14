@@ -13,6 +13,78 @@
 
 O Butler deve parecer um assistente presente, não um formulário. Deve reduzir carga mental, lembrar antes que o usuário precise conferir, guardar pequenas informações persistentes, conversar de forma natural e respeitar períodos de descanso sem cobrança.
 
+## 🕴️ Personality Engine v1
+
+Implementado como camada separada da regra de negócio.
+
+Arquivos:
+
+- `src/personality.py` — tons, famílias de respostas e traços recorrentes;
+- `src/context_engine.py` — contexto factual do cotidiano;
+- `src/casual_handlers.py` — pequenas conversas naturais;
+- `src/scheduler.py` — lembretes proativos agora usam a personalidade.
+
+### Personalidade desejada
+
+Butler é competente, informal, levemente cansado e cínico, mas genuinamente útil. Chama o usuário de `chefe` e pode provocar sem transformar toda mensagem em piada.
+
+Tons disponíveis:
+
+- `NEUTRO` — direto;
+- `LEVE` — informal;
+- `SARCASTICO` — provocação curta;
+- `CUIDADOSO` — sem sarcasmo.
+
+O sarcasmo não deve ser constante. O motor alterna respostas leves e sarcásticas para o personagem não ficar cansativo.
+
+### Limites
+
+- Day-off e situações sensíveis devem usar comportamento cuidadoso, sem cobrança;
+- sarcasmo nunca deve humilhar ou atacar o usuário;
+- o Butler provoca a situação/comportamento, não a pessoa;
+- informação importante deve continuar clara mesmo quando houver piada;
+- não usar LLM para mensagens rotineiras nesta etapa.
+
+### Contexto real
+
+`context_engine.py` já observa dados reais como:
+
+- quantidade total de pendências;
+- itens previstos para hoje;
+- itens atrasados.
+
+Assim um cumprimento pode receber comentários contextuais, por exemplo:
+
+- muitas pendências: `Colecionar era para ser hobby, chefe.`;
+- atrasos: comentário sobre itens que já passaram da data;
+- nenhuma pendência: `Estranho. Silencioso demais por aqui.`
+
+Isso é o início da memória comportamental. Não inventar fatos que não estejam no banco.
+
+### Traços recorrentes
+
+Butler possui pequenas características que podem reaparecer ocasionalmente. A primeira implementada é uma antipatia gratuita por terça-feira:
+
+`Terça-feira. Você sabe o que penso sobre isso.`
+
+Esses traços devem ser usados com moderação para criar continuidade de personagem.
+
+### Eventos já humanizados
+
+- lembrete de aula;
+- tarefa/compromisso/pendência;
+- rotina/autocuidado;
+- cumprimentos simples (`oi`, `bom dia`, `fala Butler` etc.);
+- agradecimentos.
+
+Próxima evolução da personalidade:
+
+1. usar histórico de adiamentos e atrasos para provocações factuais;
+2. usar streaks de metas/rotinas para reconhecer constância;
+3. comparar evolução de musculação e comentar progresso real;
+4. futuramente permitir linguagem natural controlar ações do Butler;
+5. somente depois avaliar LLM opcional para conversa livre.
+
 ## Funcionalidades consolidadas
 
 ### 🌙 Day-off
@@ -89,84 +161,31 @@ Durante o protocolo ativo, o menu diário não oferece um novo início. O botão
 
 ### Registro série por série
 
-Nova tabela: `protocol_mass_set_logs`.
+Tabela: `protocol_mass_set_logs`.
 
-Cada série guarda separadamente:
+Cada série guarda separadamente semana, dia, exercício original, exercício efetivamente realizado quando houve substituição, número da série, carga e repetições.
 
-- semana;
-- dia;
-- exercício original;
-- exercício efetivamente realizado quando houve substituição;
-- número da série;
-- carga;
-- repetições;
-- observação futura opcional.
-
-Fluxo de `🏋️ Registrar séries`:
-
-1. escolher o exercício do treino atual;
-2. para prescrições simples (`3 x ...`, `4 x ...`) o Butler deduz automaticamente o número de séries;
-3. para prescrições especiais/complexas (`1 + ...`, ciclos, cluster, bi-set etc.) o Butler mostra a prescrição original e pergunta quantas séries efetivamente serão registradas, evitando interpretar a técnica de forma errada;
-4. para cada série pergunta carga;
-5. depois pergunta repetições;
-6. salva cada série imediatamente;
-7. ao terminar, marca o exercício como registrado.
-
-Se o fluxo for cancelado no meio, as séries já gravadas permanecem salvas.
+Para prescrições simples o Butler deduz o número de séries. Para prescrições especiais/complexas ele mostra a prescrição original e pergunta quantas séries serão registradas, evitando interpretar técnica avançada de forma errada.
 
 ### Histórico de carga
 
-`📊 Histórico de carga` lista exercícios que já possuem séries registradas e mostra a evolução por semana/dia.
-
-Exemplo conceitual:
-
-- Semana 1 — Supino reto
-  - 1ª série — 40 kg x 12
-  - 2ª série — 40 kg x 10
-  - 3ª série — 40 kg x 8
-- Semana 2 — Supino reto
-  - 1ª série — 42 kg x 10
-  - 2ª série — 42 kg x 9
-  - 3ª série — 42 kg x 8
-
-O histórico preserva substituições, mostrando quando o exercício foi efetivamente realizado com outro movimento.
-
-Nesta etapa a comparação é factual/visual entre registros. Cálculos automáticos de percentual de evolução, volume e tendências ficam para evolução futura, pois cargas podem ser registradas em formatos textuais diferentes (`kg`, `cada lado`, `peso corporal` etc.).
+`📊 Histórico de carga` lista exercícios que já possuem séries registradas e mostra a evolução por semana/dia. A comparação atual é factual/visual. Percentual de evolução e volume ficam para depois da normalização das cargas.
 
 ### Exercício substituído
 
-`🔁 Substituir exercício` escolhe o exercício original e depois um substituto oficial da tabela fornecida. A substituição fica persistida e também é usada pelo registro série por série para identificar qual movimento foi efetivamente realizado.
-
-Regras:
-
-- usar somente a tabela oficial de substituições fornecida;
-- tolerar pequenas diferenças de nomenclatura;
-- nunca inventar substituto quando não houver correspondência confiável.
+`🔁 Substituir exercício` usa somente os substitutos da tabela fornecida e preserva o movimento realmente executado nos registros de séries.
 
 ### Não consegui treinar hoje
 
-`😕 Não consegui treinar hoje` registra uma falta daquele dia no protocolo.
-
-- pode guardar motivo livre ou `Sem motivo específico`;
-- o dia não conta como treino concluído;
-- a semana não avança por esse registro;
-- no progresso aparece como `➖`.
-
-Legenda do progresso:
-
-- `✅` treino concluído;
-- `➖` falta;
-- `⬜` treino ainda pendente.
+`😕 Não consegui treinar hoje` registra falta com motivo opcional. O dia não conta como treino concluído e aparece como `➖` no progresso.
 
 ### Fluxo de teste
 
-`🧪 Exemplo de treino` existe antes do início e não altera o progresso real.
-
-`🔄 Reiniciar os trabalhos` é temporário para desenvolvimento/teste e exige confirmação. Agora ele apaga também `protocol_mass_set_logs`, além de progresso, sessões, exercícios e substituições.
+`🧪 Exemplo de treino` existe antes do início e não altera o progresso real. `🔄 Reiniciar os trabalhos` é temporário e apaga também séries/cargas/repetições.
 
 ## Scheduler
 
-Atualmente trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. O Protocol Mass ainda não envia lembrete automático de horário de treino porque não foi definido um horário fixo para musculação.
+Atualmente trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. Os lembretes agora passam pelo Personality Engine. O Protocol Mass ainda não envia lembrete automático porque não foi definido horário fixo para musculação.
 
 ## Finanças
 
@@ -174,10 +193,10 @@ Continua planejado, ainda sem persistência real. Direção: entradas/saídas, c
 
 ## Próximos passos sugeridos
 
-1. validar manualmente o fluxo série por série no Telegram;
-2. permitir corrigir/apagar uma série registrada por engano;
-3. calcular evolução quando cargas puderem ser normalizadas numericamente;
-4. calcular volume por exercício quando fizer sentido (`carga × repetições`);
+1. validar manualmente o Personality Engine e o fluxo série por série no Telegram;
+2. expandir contexto comportamental com adiamentos, streaks e progresso real;
+3. permitir corrigir/apagar uma série registrada por engano;
+4. normalizar cargas e calcular evolução/volume quando seguro;
 5. remover o botão temporário `🔄 Reiniciar os trabalhos` quando o módulo estiver estável;
 6. rotinas/metas: progresso por período real e streak;
 7. resumo diário e semanal automático;
