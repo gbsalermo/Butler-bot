@@ -44,7 +44,6 @@ LEGACY_TIME_NORMALIZATION = {
     "20:30": "21:00",
     "21:15": "22:00",
     "21:16": "22:00",
-    "22:00": "23:00",
 }
 
 
@@ -66,9 +65,17 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition
 def _normalize_legacy_class_times(conn: sqlite3.Connection) -> None:
     rows = conn.execute("SELECT id, start_time, end_time FROM class_sessions").fetchall()
     for row in rows:
-        start = LEGACY_TIME_NORMALIZATION.get(row["start_time"], row["start_time"])
-        end = LEGACY_TIME_NORMALIZATION.get(row["end_time"], row["end_time"])
-        if start != row["start_time"] or end != row["end_time"]:
+        original_start = row["start_time"]
+        original_end = row["end_time"]
+        start = LEGACY_TIME_NORMALIZATION.get(original_start, original_start)
+        end = LEGACY_TIME_NORMALIZATION.get(original_end, original_end)
+
+        # 22:00 pode ser um término moderno válido (N4). Só vira 23:00 quando
+        # o início denuncia que se trata do antigo bloco noturno que chegava ao N5.
+        if original_end == "22:00" and original_start in {"20:30", "21:16"}:
+            end = "23:00"
+
+        if start != original_start or end != original_end:
             conn.execute(
                 "UPDATE class_sessions SET start_time = ?, end_time = ? WHERE id = ?",
                 (start, end, row["id"]),
