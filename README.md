@@ -6,10 +6,11 @@ O projeto começa em execução local via **polling**, com persistência em **SQ
 
 ## Visão do Butler
 
-O Butler deve reduzir carga mental: guardar o que você não quer esquecer, organizar o dia e iniciar conversas quando algo importante estiver chegando.
+O Butler deve reduzir carga mental: guardar o que você não quer esquecer, organizar o dia e iniciar conversas quando algo importante estiver chegando — mas também saber a hora de ficar quieto.
 
 Menu principal atual:
 
+- 🌙 Day-off
 - 📚 Matérias
 - ✅ Tarefas
 - 📅 Compromissos
@@ -17,6 +18,29 @@ Menu principal atual:
 - 🏠 Cotidiano
 - 🗓️ Hoje
 - 💰 Finanças
+
+## 🌙 Day-off
+
+O Day-off representa um dia em que agenda, metas e cobranças não importam. Pode ser folga, descanso ou simplesmente um dia ruim.
+
+Ao ativar **🌙 Day-off**:
+
+- o estado fica persistido no SQLite;
+- o scheduler para de enviar lembretes de aulas, tarefas e rotinas;
+- o Butler evita cobranças e responde de forma mínima;
+- o modo continua ativo mesmo se o processo do bot for reiniciado.
+
+Para trazê-lo de volta, basta dizer:
+
+```text
+Butler, preciso de você!
+```
+
+ou
+
+```text
+Chamar, Butler!
+```
 
 ## Funcionalidades atuais
 
@@ -32,7 +56,23 @@ Menu principal atual:
 
 ### Tarefas, compromissos e pendências
 
-Cada tipo permite cadastrar título, data, horário e observações, listar pendentes e concluir/resolver. Itens com data e horário podem gerar aviso automático antes do compromisso.
+Cada tipo permite:
+
+- adicionar;
+- listar;
+- concluir/resolver;
+- editar;
+- remover;
+- informar data, horário e observação;
+- configurar quantos minutos antes o Butler deve avisar.
+
+Lembretes possuem ações rápidas:
+
+- **✅ Concluir**;
+- **⏰ +10 min**;
+- **⏰ +30 min**.
+
+O adiamento fica persistido até o novo horário do aviso.
 
 ### 🗓️ Hoje
 
@@ -49,54 +89,41 @@ A visão diária reúne:
 
 #### Lista persistente de itens faltando
 
-Não é uma lista descartável de uma ida ao mercado. O Butler mantém uma lista permanente do que está faltando em casa.
+A lista não é descartável por ida ao mercado. Itens ficam salvos até serem marcados como comprados.
 
-Você pode adicionar itens conforme percebe que acabaram e, quando estiver no mercado, consultar pelo botão **🛒 O que está faltando?** ou simplesmente enviar:
+Você pode perguntar naturalmente:
 
 ```text
 O que está faltando?
 ```
 
-Ao comprar algo, use **✅ Marcar comprado** para retirá-lo da lista de faltas.
-
 #### Metas gerais
 
-Metas não ficam restritas a dinheiro. O módulo aceita qualquer categoria, incluindo bases pessoais como:
+Metas podem ser de água, alimentação, inglês, programação, musculação, estudos, financeiro ou outras categorias.
+
+Além do cadastro da meta, agora é possível **registrar progresso** e consultar um resumo acumulado.
+
+#### 🧘 Rotinas e autocuidado
+
+Rotinas recorrentes podem representar:
 
 - água;
+- remédio;
 - alimentação;
+- sono;
 - inglês;
 - programação;
-- musculação;
-- estudos;
-- financeiro.
+- autocuidado em geral.
 
-Cada meta pode ter alvo numérico, unidade e periodicidade, como `2 litros por dia`, `5 horas por semana` ou `4 treinos por semana`.
+Cada rotina pode ter horário, dias de recorrência e antecedência do lembrete. Também é possível registrar que uma rotina foi cumprida no dia.
 
-#### Musculação
+#### 🏋️ Musculação
 
-O Butler armazena uma rotina semanal por dia e foco muscular. Dentro de cada dia podem ser cadastrados exercícios com:
-
-- nome;
-- carga;
-- séries;
-- repetições.
-
-Exemplo conceitual:
-
-```text
-Segunda-feira — Peito
-• Supino reto — 4x10 — 20 kg cada lado
-• Supino inclinado — 4x12 — 16 kg cada lado
-
-Terça-feira — Costas e bíceps
-• Remada baixa — 4x12 — 50 kg
-• Rosca direta — 3x10 — 20 kg
-```
+O Butler armazena uma rotina semanal por dia e foco muscular. Dentro de cada dia podem ser cadastrados exercícios com nome, carga, séries e repetições.
 
 ### Finanças
 
-O módulo financeiro ainda está em evolução. A direção planejada inclui entradas/saídas, categorias, saldo mensal, comparação histórica, detecção de exageros, economia, metas e alertas de ritmo de gasto.
+O módulo financeiro continua preparado para uma próxima frente. A direção inclui entradas/saídas, categorias, saldo mensal, comparação histórica, detecção de exageros, economia, metas e alertas de ritmo de gasto.
 
 ## Grade inicial cadastrada
 
@@ -109,7 +136,7 @@ O módulo financeiro ainda está em evolução. A direção planejada inclui ent
 | Sistemas Digitais I | Segunda | 08:01–09:40 | PAV I, Sala 11 |
 | Sistemas Digitais I | Quarta | 08:01–09:40 | PAV I, Sala 114 |
 
-> Laboratório de Sistemas Digitais I usa manualmente 14:00–16:00, substituindo o horário inconsistente exibido no SIGAA.
+> Laboratório de Sistemas Digitais I usa manualmente 14:00–16:00.
 
 ## Estrutura
 
@@ -119,6 +146,7 @@ Butler-bot/
 ├── README.md
 ├── requirements.txt
 └── src/
+    ├── assistant_state.py
     ├── assistant_views.py
     ├── bot_handlers.py
     ├── config.py
@@ -130,7 +158,8 @@ Butler-bot/
     ├── lifestyle_handlers.py
     ├── main.py
     ├── scheduler.py
-    └── sigaa_schedule.py
+    ├── sigaa_schedule.py
+    └── wellbeing_handlers.py
 ```
 
 ## Como executar
@@ -145,4 +174,4 @@ Configure o `.env` a partir do `.env.example` com seu token do BotFather.
 
 ## Direção de desenvolvimento
 
-A prioridade atual é funcionalidade antes de suíte de testes. As decisões e o próximo bloco estão registrados em `CONTINUIDADE.md`.
+A prioridade continua sendo funcionalidade antes de suíte de testes. O estado real e o próximo bloco estão em `CONTINUIDADE.md`.
