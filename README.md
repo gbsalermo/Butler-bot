@@ -1,64 +1,102 @@
 # Butler Bot
 
-Assistente pessoal via Telegram para organização acadêmica, tarefas, compromissos, pendências, autocuidado e, futuramente, finanças pessoais.
+Assistente pessoal via Telegram para organização acadêmica, tarefas, compromissos, pendências, casa, metas, musculação, autocuidado e finanças pessoais.
 
 O projeto começa em execução local via **polling**, com persistência em **SQLite**, e será preparado posteriormente para hospedagem 24/7.
 
 ## Visão do Butler
 
-O Butler deve funcionar como um assistente cotidiano de verdade: não apenas responder comandos, mas lembrar horários, organizar responsabilidades e iniciar conversas quando houver algo importante chegando.
+O Butler deve reduzir carga mental: guardar o que você não quer esquecer, organizar o dia e iniciar conversas quando algo importante estiver chegando.
 
-Áreas principais do menu:
+Menu principal atual:
 
 - 📚 Matérias
 - ✅ Tarefas
 - 📅 Compromissos
 - 📌 Pendências
-- 💰 Finanças
+- 🏠 Cotidiano
 - 🗓️ Hoje
+- 💰 Finanças
 
 ## Funcionalidades atuais
 
 ### Acadêmico
 
-- registro do `chat_id` no `/start`;
-- grade do semestre carregada automaticamente no primeiro uso;
-- consulta de matérias;
-- gerenciamento com **Adicionar**, **Remover**, **Trancar** e **Editar**;
-- tradução automática de horários SIGAA como `3T23`, `35M45` e `24M23`;
+- `/start` registra o `chat_id`;
+- grade do semestre cadastrada automaticamente;
+- gerenciamento de matérias: adicionar, remover, trancar e editar;
+- tradução automática de códigos SIGAA (`3T23`, `35M45`, `24M23` etc.);
 - modo manual para horários especiais;
-- aviso automático **10 minutos antes das aulas**;
-- matérias trancadas ficam no histórico, mas são ignoradas pelos lembretes.
+- aviso automático aproximadamente 10 minutos antes das aulas;
+- matérias trancadas são ignoradas pelos lembretes.
 
 ### Tarefas, compromissos e pendências
 
-Cada categoria possui fluxo para:
+Cada tipo permite cadastrar título, data, horário e observações, listar pendentes e concluir/resolver. Itens com data e horário podem gerar aviso automático antes do compromisso.
 
-- adicionar;
-- listar itens pendentes;
-- marcar como concluído/resolvido;
-- informar data opcional;
-- informar horário opcional;
-- registrar observações;
-- enviar aviso automático 10 minutos antes quando houver data e horário.
+### 🗓️ Hoje
 
-O botão **🗓️ Hoje** reúne tarefas, compromissos e pendências marcados para o dia atual.
+A visão diária reúne:
+
+- aulas do dia;
+- tarefas;
+- compromissos;
+- pendências;
+- musculação programada para aquele dia;
+- quantidade de itens marcados como faltando em casa.
+
+### 🏠 Cotidiano
+
+#### Lista persistente de itens faltando
+
+Não é uma lista descartável de uma ida ao mercado. O Butler mantém uma lista permanente do que está faltando em casa.
+
+Você pode adicionar itens conforme percebe que acabaram e, quando estiver no mercado, consultar pelo botão **🛒 O que está faltando?** ou simplesmente enviar:
+
+```text
+O que está faltando?
+```
+
+Ao comprar algo, use **✅ Marcar comprado** para retirá-lo da lista de faltas.
+
+#### Metas gerais
+
+Metas não ficam restritas a dinheiro. O módulo aceita qualquer categoria, incluindo bases pessoais como:
+
+- água;
+- alimentação;
+- inglês;
+- programação;
+- musculação;
+- estudos;
+- financeiro.
+
+Cada meta pode ter alvo numérico, unidade e periodicidade, como `2 litros por dia`, `5 horas por semana` ou `4 treinos por semana`.
+
+#### Musculação
+
+O Butler armazena uma rotina semanal por dia e foco muscular. Dentro de cada dia podem ser cadastrados exercícios com:
+
+- nome;
+- carga;
+- séries;
+- repetições.
+
+Exemplo conceitual:
+
+```text
+Segunda-feira — Peito
+• Supino reto — 4x10 — 20 kg cada lado
+• Supino inclinado — 4x12 — 16 kg cada lado
+
+Terça-feira — Costas e bíceps
+• Remada baixa — 4x12 — 50 kg
+• Rosca direta — 3x10 — 20 kg
+```
 
 ### Finanças
 
-O módulo já aparece no Butler como área planejada, mas ainda não registra valores.
-
-A evolução prevista inclui:
-
-- entradas e saídas;
-- gastos por categoria;
-- saldo e gastos do mês;
-- comparação com meses anteriores;
-- identificação de aumento ou exagero de gastos;
-- valor economizado;
-- metas de economia e compras;
-- alertas quando o ritmo de gasto estiver acima do normal;
-- histórico financeiro.
+O módulo financeiro ainda está em evolução. A direção planejada inclui entradas/saídas, categorias, saldo mensal, comparação histórica, detecção de exageros, economia, metas e alertas de ritmo de gasto.
 
 ## Grade inicial cadastrada
 
@@ -73,35 +111,22 @@ A evolução prevista inclui:
 
 > Laboratório de Sistemas Digitais I usa manualmente 14:00–16:00, substituindo o horário inconsistente exibido no SIGAA.
 
-## Tradução dos horários do SIGAA
-
-- números antes da letra: dias (`2` segunda, `3` terça, ..., `7` sábado);
-- `M`: manhã;
-- `T`: tarde;
-- `N`: noite;
-- números depois da letra: blocos de aula.
-
-Exemplos:
-
-- `3T23` → terça à tarde, aproximadamente 14h–16h; exato `14:01–15:40`;
-- `35M45` → terça e quinta, aproximadamente 10h–12h; exato `10:00–11:40`;
-- `24M23` → segunda e quarta, aproximadamente 8h–10h; exato `08:01–09:40`.
-
 ## Estrutura
 
 ```text
 Butler-bot/
-├── .env.example
-├── .gitignore
 ├── CONTINUIDADE.md
 ├── README.md
 ├── requirements.txt
 └── src/
-    ├── __init__.py
+    ├── assistant_views.py
     ├── bot_handlers.py
     ├── config.py
     ├── daily_store.py
     ├── database.py
+    ├── home_handlers.py
+    ├── home_menu.py
+    ├── home_store.py
     ├── lifestyle_handlers.py
     ├── main.py
     ├── scheduler.py
@@ -111,45 +136,13 @@ Butler-bot/
 ## Como executar
 
 ```bash
-git clone https://github.com/gbsalermo/Butler-bot.git
-cd Butler-bot
-python -m venv .venv
-```
-
-Windows:
-
-```bash
-.venv\Scripts\activate
-```
-
-Linux/macOS:
-
-```bash
-source .venv/bin/activate
-```
-
-Depois:
-
-```bash
+git pull origin main
 pip install -r requirements.txt
-```
-
-Copie `.env.example` para `.env` e informe:
-
-```env
-TELEGRAM_BOT_TOKEN=seu_token
-BUTLER_TIMEZONE=America/Bahia
-DATABASE_PATH=data/butler.db
-```
-
-Execute:
-
-```bash
 python -m src.main
 ```
 
-No Telegram, envie `/start`.
+Configure o `.env` a partir do `.env.example` com seu token do BotFather.
 
 ## Direção de desenvolvimento
 
-A prioridade é ampliar as funcionalidades do Butler antes de investir em suíte de testes. A sequência planejada e as decisões atuais estão em `CONTINUIDADE.md`.
+A prioridade atual é funcionalidade antes de suíte de testes. As decisões e o próximo bloco estão registrados em `CONTINUIDADE.md`.
