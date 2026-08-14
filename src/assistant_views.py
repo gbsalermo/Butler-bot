@@ -1,4 +1,3 @@
-from collections import defaultdict
 from datetime import date, datetime
 
 from telegram import Update
@@ -6,9 +5,8 @@ from telegram.ext import ApplicationHandlerStop, ContextTypes, MessageHandler, f
 
 from src.daily_store import list_items
 from src.database import list_subjects
-from src.home_handlers import HOME_KEYBOARD
 from src.home_store import list_missing_groceries, list_workout
-from src.home_menu import MAIN_KEYBOARD
+from src.ui_layout import COTIDIANO_KEYBOARD, MAIN_KEYBOARD
 
 WEEKDAYS = {
     0: "segunda-feira",
@@ -20,20 +18,20 @@ WEEKDAYS = {
     6: "domingo",
 }
 
-ITEM_ICONS = {"tarefa": "✅", "compromisso": "📅", "pendencia": "📌"}
+ITEM_ICONS = {"tarefa": "✅", "compromisso": "📅"}
 
 
 async def whats_missing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     rows = list_missing_groceries()
     if not rows:
-        await update.message.reply_text("🛒 No momento não há nada marcado como faltando em casa.", reply_markup=HOME_KEYBOARD)
+        await update.message.reply_text("🛒 No momento não há nada marcado como faltando em casa.", reply_markup=COTIDIANO_KEYBOARD)
         raise ApplicationHandlerStop
     parts = ["🛒 *Está faltando:*\n"]
     for row in rows:
         qty = f" — {row['quantity']}" if row["quantity"] else ""
         note = f" ({row['note']})" if row["note"] else ""
         parts.append(f"• {row['name']}{qty}{note}")
-    await update.message.reply_text("\n".join(parts), parse_mode="Markdown", reply_markup=HOME_KEYBOARD)
+    await update.message.reply_text("\n".join(parts), parse_mode="Markdown", reply_markup=COTIDIANO_KEYBOARD)
     raise ApplicationHandlerStop
 
 
@@ -41,6 +39,7 @@ async def today_overview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     today = date.today()
     weekday = WEEKDAYS[today.weekday()]
     timeline: list[tuple[str, str]] = []
+    overdue_tasks = []
 
     for row in list_subjects(include_locked=False):
         if row["weekday"] == weekday:
@@ -48,6 +47,9 @@ async def today_overview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             timeline.append((row["start_time"], f"🎓 *{row['name']}* — {row['start_time']}–{row['end_time']}\n   📍 {location}"))
 
     for row in list_items(only_pending=True):
+        if row["kind"] == "tarefa" and row["due_date"] and row["due_date"] < today.isoformat():
+            overdue_tasks.append(row)
+            continue
         if row["due_date"] != today.isoformat():
             continue
         icon = ITEM_ICONS.get(row["kind"], "•")
@@ -68,7 +70,13 @@ async def today_overview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         for _, text in sorted(timeline, key=lambda item: item[0]):
             parts.append(text)
     else:
-        parts.append("Nenhuma aula, tarefa, compromisso ou pendência marcada para hoje.")
+        parts.append("Nada marcado para hoje. Suspeito, mas aceitável.")
+
+    if overdue_tasks:
+        parts.append("\n📌 *Pendências — tarefas vencidas*")
+        for row in overdue_tasks:
+            due = datetime.fromisoformat(row["due_date"]).strftime("%d/%m")
+            parts.append(f"• *{row['title']}* — venceu em {due}")
 
     if workout_focus:
         parts.append(f"\n🏋️ *Musculação — {workout_focus}*")
@@ -79,7 +87,7 @@ async def today_overview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     missing_count = len(list_missing_groceries())
     if missing_count:
-        parts.append(f"\n🛒 Há *{missing_count}* item(ns) marcado(s) como faltando em casa.")
+        parts.append(f"\n🛒 Há *{missing_count}* item(ns) faltando em casa.")
 
     await update.message.reply_text("\n".join(parts), parse_mode="Markdown", reply_markup=MAIN_KEYBOARD)
     raise ApplicationHandlerStop
