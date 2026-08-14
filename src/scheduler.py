@@ -1,28 +1,41 @@
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, ContextTypes
 
 from src.assistant_state import is_day_off, list_routines
-from src.config import BUTLER_TIMEZONE, DATABASE_PATH
+from src.config import BUTLER_TIMEZONE
 from src.daily_store import clear_snooze, list_items
 from src.database import preferred_name
 from src.personality import choose, everyday_tone
+from src.user_scope import (
+    initialize_current_user_storage,
+    multiuser_enabled,
+    registered_chat_ids,
+    resolve_database_path,
+    set_current_chat_id,
+)
 
 WEEKDAY_NAMES = {0:"segunda-feira",1:"terça-feira",2:"quarta-feira",3:"quinta-feira",4:"sexta-feira",5:"sábado",6:"domingo"}
 WEEKDAY_SHORT = {0:"seg",1:"ter",2:"qua",3:"qui",4:"sex",5:"sab",6:"dom"}
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(Path(DATABASE_PATH)); conn.row_factory = sqlite3.Row; return conn
+    conn = sqlite3.connect(resolve_database_path())
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def _chat_ids() -> list[int]:
+    if multiuser_enabled():
+        return registered_chat_ids()
     with _connect() as conn:
-        return [int(r[0]) for r in conn.execute("SELECT telegram_chat_id FROM users").fetchall()]
+        try:
+            return [int(r[0]) for r in conn.execute("SELECT telegram_chat_id FROM users").fetchall()]
+        except sqlite3.OperationalError:
+            return []
 
 
 def _active_classes(weekday: str, start_time: str) -> list[sqlite3.Row]:
@@ -44,24 +57,27 @@ def _address(text: str, chat_id: int) -> str:
     return text.replace("chefe", preferred_name(chat_id))
 
 
-async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _tick_for_chat(context: ContextTypes.DEFAULT_TYPE, chat_id: int, now: datetime, sent: set[str]) -> None:
+    set_current_chat_id(chat_id)
+    if multiuser_enabled():
+        initialize_current_user_storage()
+
     if is_day_off():
         return
-    tz = ZoneInfo(BUTLER_TIMEZONE)
-    now = datetime.now(tz).replace(second=0, microsecond=0)
-    sent: set[str] = context.application.bot_data.setdefault("sent_reminders", set())
-    chats = _chat_ids()
-    if not chats: return
 
+    tz = ZoneInfo(BUTLER_TIMEZONE)
     target = now + timedelta(minutes=10)
+
     for row in _active_classes(WEEKDAY_NAMES[target.weekday()], target.strftime("%H:%M")):
-        key = f"class:{target.date()}:{row['name']}:{row['start_time']}"
-        if key in sent: continue
+        key = f"{chat_id}:class:{target.date()}:{row['name']}:{row['start_time']}"
+        if key in sent:
+            continue
         opener = choose("class_reminder", everyday_tone())
-        text = (f"🎓 *Aula em 10 minutos*\n\n{opener}\n\n*{row['name']}*\n🕐 {row['start_time']}–{row['end_time']}\n"
-                f"📍 {row['location'] or 'local não informado'}")
-        for chat in chats:
-            await context.bot.send_message(chat_id=chat, text=_address(text, chat), parse_mode="Markdown")
+        text = (
+            f"🎓 *Aula em 10 minutos*\n\n{opener}\n\n*{row['name']}*\n"
+            f"🕐 {row['start_time']}–{row['end_time']}\n📍 {row['location'] or 'local não informado'}"
+        )
+        await context.bot.send_message(chat_id=chat_id, text=_address(text, chat_id), parse_mode="Markdown")
         sent.add(key)
 
     for item in list_items(only_pending=True):
@@ -71,45 +87,73 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
             try:
                 snooze_at = datetime.fromisoformat(item["snoozed_until"]).replace(tzinfo=tz)
                 if snooze_at == now:
-                    should_send = True; reason = "snooze"; clear_snooze(item["id"])
-            except ValueError: pass
+                    should_send = True
+                    reason = "snooze"
+                    clear_snooze(item["id"])
+            except ValueError:
+                pass
         if not should_send and item["due_date"] and item["due_time"]:
-            try: due = datetime.fromisoformat(f"{item['due_date']}T{item['due_time']}").replace(tzinfo=tz)
-            except ValueError: continue
+            try:
+                due = datetime.fromisoformat(f"{item['due_date']}T{item['due_time']}").replace(tzinfo=tz)
+            except ValueError:
+                continue
             should_send = due - timedelta(minutes=int(item["reminder_minutes"] or 0)) == now
-        if not should_send: continue
-        key = f"item:{item['id']}:{now.isoformat()}:{reason}"
-        if key in sent: continue
-        icons = {"tarefa":"✅","compromisso":"📅","pendencia":"📌"}
-        labels = {"tarefa":"Tarefa","compromisso":"Compromisso","pendencia":"Pendência"}
+        if not should_send:
+            continue
+
+        key = f"{chat_id}:item:{item['id']}:{now.isoformat()}:{reason}"
+        if key in sent:
+            continue
+        icons = {"tarefa":"✅", "compromisso":"📅"}
+        labels = {"tarefa":"Tarefa", "compromisso":"Compromisso"}
         opener = choose("task_reminder", everyday_tone())
         text = f"{icons.get(item['kind'],'🔔')} *{labels.get(item['kind'],'Lembrete')}*\n\n{opener}\n\n*{item['title']}*"
-        if item["due_time"]: text += f"\n🕐 {item['due_time']}"
-        if item["details"]: text += f"\n📝 {item['details']}"
+        if item["due_time"]:
+            text += f"\n🕐 {item['due_time']}"
+        if item["details"]:
+            text += f"\n📝 {item['details']}"
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Concluir", callback_data=f"daily_done:{item['id']}")],
             [InlineKeyboardButton("⏰ +10 min", callback_data=f"daily_snooze:{item['id']}:10"), InlineKeyboardButton("⏰ +30 min", callback_data=f"daily_snooze:{item['id']}:30")]
         ])
-        for chat in chats:
-            await context.bot.send_message(chat_id=chat, text=_address(text, chat), parse_mode="Markdown", reply_markup=keyboard)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=_address(text, chat_id),
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )
         sent.add(key)
 
     for routine in list_routines():
-        if not routine["time_hhmm"]: continue
-        if not _routine_matches(routine["weekdays"], WEEKDAY_SHORT[now.weekday()], WEEKDAY_NAMES[now.weekday()]): continue
+        if not routine["time_hhmm"]:
+            continue
+        if not _routine_matches(routine["weekdays"], WEEKDAY_SHORT[now.weekday()], WEEKDAY_NAMES[now.weekday()]):
+            continue
         try:
             due = datetime.fromisoformat(f"{now.date().isoformat()}T{routine['time_hhmm']}").replace(tzinfo=tz)
-        except ValueError: continue
+        except ValueError:
+            continue
         reminder_at = due - timedelta(minutes=int(routine["reminder_minutes"] or 0))
-        if reminder_at != now: continue
-        key = f"routine:{routine['id']}:{now.date()}"
-        if key in sent: continue
+        if reminder_at != now:
+            continue
+        key = f"{chat_id}:routine:{routine['id']}:{now.date()}"
+        if key in sent:
+            continue
         opener = choose("routine_reminder", everyday_tone())
         text = f"🧘 *Um cuidado rápido*\n\n{opener}\n\n*{routine['name']}*\nCategoria: {routine['category']}"
-        for chat in chats:
-            await context.bot.send_message(chat_id=chat, text=_address(text, chat), parse_mode="Markdown")
+        await context.bot.send_message(chat_id=chat_id, text=_address(text, chat_id), parse_mode="Markdown")
         sent.add(key)
 
+
+async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
+    tz = ZoneInfo(BUTLER_TIMEZONE)
+    now = datetime.now(tz).replace(second=0, microsecond=0)
+    sent: set[str] = context.application.bot_data.setdefault("sent_reminders", set())
+
+    for chat_id in _chat_ids():
+        await _tick_for_chat(context, chat_id, now, sent)
+
+    set_current_chat_id(None)
     if len(sent) > 2000:
         context.application.bot_data["sent_reminders"] = set(list(sent)[-500:])
 
