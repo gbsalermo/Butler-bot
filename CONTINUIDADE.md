@@ -13,6 +13,46 @@
 
 O Butler deve parecer um assistente presente, não um formulário. Deve reduzir carga mental, lembrar antes que o usuário precise conferir, guardar pequenas informações persistentes, conversar de forma natural e respeitar períodos de descanso sem cobrança.
 
+## ⚡ Captura rápida
+
+Criado `src/quick_capture.py` para reduzir atrito em ações simples e recorrentes.
+
+### Tarefas, compromissos e pendências
+
+Fluxo novo de criação:
+
+1. clicar em adicionar;
+2. informar somente o título;
+3. escolher `Hoje`, `Outro dia` ou `Sem data`;
+4. se houver data, informar o horário;
+5. salvar imediatamente.
+
+Não perguntar por padrão observação nem antecedência. O lembrete padrão dos itens criados pelo fluxo rápido é `0` minutos, ou seja, na hora marcada.
+
+Validações:
+
+- não aceitar data anterior ao dia atual;
+- para hoje, não aceitar horário anterior ou igual ao momento atual;
+- para data futura, aceitar qualquer horário válido;
+- timezone usado: `BUTLER_TIMEZONE`.
+
+Os fluxos antigos de listar, concluir, editar e remover permanecem disponíveis.
+
+### Lista do que falta em casa
+
+`➕ Item faltando` agora deve ser instantâneo.
+
+Aceita:
+
+- `sal` → salva um item;
+- `sal, açúcar, café` → salva três itens;
+- `falta sal, açúcar, café` → remove o prefixo e salva três itens;
+- `café | 2 pacotes` → quantidade opcional no mesmo envio.
+
+Não perguntar quantidade nem observação em mensagens separadas.
+
+O módulo é registrado antes dos handlers antigos no mesmo group, assumindo apenas os fluxos rápidos e preservando as demais operações existentes.
+
 ## 🧩 Dois modos de execução
 
 Existe um único código-base com dois entrypoints.
@@ -78,43 +118,21 @@ Opção atual:
 - screenshot;
 - PDF escaneado que contenha apenas imagem.
 
-O Butler **não executa OCR**. Tesseract, Pillow e `pytesseract` foram removidos das dependências.
-
-Motivo: manter o projeto simples, portátil e mais adequado à futura hospedagem.
-
-Se a pessoa só tiver uma imagem da grade, o Butler deve orientá-la a:
-
-1. usar qualquer IA/ferramenta para converter a imagem em **PDF com texto pesquisável**;
-2. enviar esse PDF ao Butler;
-3. ou cadastrar as matérias uma por uma em `⚙️ Gerenciar matérias`.
+O Butler não executa OCR. Se a pessoa só tiver uma imagem, deve ser orientada a usar qualquer IA/ferramenta para converter para PDF com texto pesquisável ou cadastrar manualmente.
 
 PDF textual é extraído com `pypdf`.
 
-### Lógica da importação
-
-O parser procura códigos SIGAA como `35M45`, `24M23`, `3T23`, usa `src/sigaa_schedule.py` e tenta identificar matéria, local/sala, código e sessões resultantes.
-
-Antes de gravar, o Butler mostra uma prévia obrigatória. Somente `✅ Importar grade` persiste os dados.
-
-Se a matéria já existir, `upsert_subject_schedule()` substitui os horários e reativa a matéria.
-
-A confirmação continua obrigatória porque o próprio documento/SIGAA pode conter informação incorreta.
+O parser procura códigos SIGAA como `35M45`, `24M23`, `3T23`, usa `src/sigaa_schedule.py` e apresenta prévia obrigatória antes de persistir.
 
 ## ⏰ Normalização dos horários SIGAA
 
-O Butler usa **horas completas** como representação oficial dos blocos acadêmicos.
-
-Exemplos:
+O Butler usa horas completas como representação oficial:
 
 - `M23` → `08:00–10:00`;
 - `M45` → `10:00–12:00`;
 - `T23` → `14:00–16:00`;
 - `T2345` → `14:00–18:00`;
 - `N12` → `18:00–20:00`.
-
-`src/sigaa_schedule.py` é a fonte da conversão para cadastro por código e importação.
-
-`init_database()` também normaliza registros antigos que ainda usam minutos quebrados do SIGAA, como `08:01–09:40` e `10:00–11:40`.
 
 O horário manual continua tendo prioridade quando o usuário corrige uma informação, como no Laboratório de Sistemas Digitais I.
 
@@ -128,11 +146,7 @@ Arquivos principais:
 - `src/personality_navigation.py`;
 - `src/scheduler.py`.
 
-Personalidade: competente, informal, levemente cansado/cínico e útil. Pode provocar a situação/comportamento, nunca humilhar o usuário.
-
-Tons: `NEUTRO`, `LEVE`, `SARCASTICO`, `CUIDADOSO`.
-
-Day-off e situações sensíveis permanecem sem sarcasmo.
+Personalidade: competente, informal, levemente cansado/cínico e útil. Pode provocar a situação/comportamento, nunca humilhar o usuário. Day-off e situações sensíveis permanecem sem sarcasmo.
 
 ## 🧭 Organização dos menus
 
@@ -184,15 +198,16 @@ Day-off e situações sensíveis permanecem sem sarcasmo.
 
 ### ✅ Tarefas, 📅 compromissos e 📌 pendências
 
-- adicionar/listar/concluir/editar/remover;
-- data, horário, detalhes e antecedência configuráveis;
+- criação rápida;
+- listar/concluir/editar/remover;
+- data e horário opcionais;
 - lembretes proativos;
 - concluir ou adiar no próprio aviso;
 - cancelamento visível durante fluxos.
 
 ### 🏠 Cotidiano
 
-- lista persistente do que falta em casa;
+- lista persistente do que falta em casa com captura rápida;
 - metas gerais e progresso;
 - rotinas/autocuidado;
 - finanças ainda como módulo futuro;
@@ -223,15 +238,15 @@ Continua planejado, ainda sem persistência real.
 
 ## Próximos passos sugeridos
 
-1. validar importação usando um PDF textual real do tipo `grade_curricular.pdf`;
-2. validar onboarding/nome preferido nas duas versões;
-3. validar que `main_generic` nasce sem grade e sem Protocol Mass;
-4. retomar resumo diário + personalidade contextual baseada em comportamento;
-5. streaks de metas/rotinas;
-6. permitir corrigir/apagar série de treino registrada por engano;
+1. validar captura rápida de tarefa para hoje em poucos minutos;
+2. validar rejeição de data/horário passado;
+3. validar captura múltipla de itens de mercado;
+4. validar importação de grade e versão genérica;
+5. retomar resumo diário + personalidade contextual baseada em comportamento;
+6. streaks de metas/rotinas;
 7. finanças persistentes;
 8. integração com ônibus;
-9. consolidar testes e hospedagem 24/7 posteriormente.
+9. consolidar testes e hospedagem posteriormente.
 
 ## Regra de continuidade
 
