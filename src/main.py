@@ -21,6 +21,7 @@ from src.protocol_mass_navigation import register_protocol_mass_navigation
 from src.protocol_mass_series import register_protocol_mass_series
 from src.protocol_mass_store import init_protocol_mass_tables
 from src.protocol_mass_ui import register_protocol_mass_ui
+from src.quick_capture import register_quick_capture
 from src.schedule_import_handlers import register_schedule_import
 from src.scheduler import register_scheduler
 from src.ui_layout import apply_layout_overrides
@@ -55,6 +56,7 @@ def main() -> None:
     register_protocol_mass_handlers(application)
     register_academic_navigation(application)
     register_assistant_views(application)
+    register_quick_capture(application)
     register_lifestyle_handlers(application)
     register_home_handlers(application)
     register_handlers(application)
