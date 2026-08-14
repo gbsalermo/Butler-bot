@@ -15,7 +15,16 @@ class ImportedSubject:
 
 _CODE_RE = re.compile(r"(?<![A-Z0-9])([2-7]{1,6})\s*([MTN])\s*([1-6]{1,6})(?![A-Z0-9])", re.I)
 _DAY_WORDS = r"(?:SEG|TER|QUA|QUI|SEX|SAB|SÁB)"
+_DAY_ONLY_RE = re.compile(rf"^(?:{_DAY_WORDS})(?:\s+E\s+(?:{_DAY_WORDS}))*$", re.I)
 _LOCATION_MARKERS = re.compile(r"\b(PAV(?:ILH[AÃ]O)?|BLOCO|SALA|LAB(?:ORAT[ÓO]RIO)?|AUDIT[ÓO]RIO|PR[ÉE]DIO|CAMPUS)\b", re.I)
+_HEADERS = {
+    "componente curricular",
+    "local",
+    "horário",
+    "horario",
+    "chat",
+    "grade de componentes curriculares",
+}
 
 
 def extract_text_from_file(path: str | Path) -> str:
@@ -72,14 +81,12 @@ def parse_schedule_text(text: str) -> list[ImportedSubject]:
         prefix = line[: match.start()].strip(" -|:")
         subject, location = _subject_location(prefix)
 
-        if not subject and i > 0:
-            subject, location = _subject_location(f"{lines[i - 1]} {prefix}".strip())
-        elif subject and not location and i > 0 and len(subject.split()) <= 2:
-            previous_subject, previous_location = _subject_location(f"{lines[i - 1]} {prefix}".strip())
-            subject = previous_subject or subject
-            location = previous_location or location
+        if not subject or _looks_like_day_text(subject):
+            context_subject, context_location = _context_before_code(lines, i)
+            subject = context_subject or subject
+            location = context_location or location
 
-        if not subject:
+        if not subject or _looks_like_day_text(subject):
             continue
 
         try:
@@ -102,6 +109,40 @@ def parse_schedule_text(text: str) -> list[ImportedSubject]:
         )
 
     return _merge_duplicates(found)
+
+
+def _context_before_code(lines: list[str], code_index: int) -> tuple[str, str]:
+    """Lê tabelas cujo PDF extrai nome, local, dias e código em linhas separadas."""
+    location_parts: list[str] = []
+    subject = ""
+
+    for j in range(code_index - 1, max(-1, code_index - 6), -1):
+        line = lines[j].strip()
+        lowered = line.casefold()
+
+        if lowered in _HEADERS or lowered.startswith("ufrb —") or lowered.startswith("ufrb -"):
+            continue
+        if _looks_like_day_text(line):
+            continue
+        if _looks_like_location(line):
+            location_parts.insert(0, line)
+            continue
+        if _CODE_RE.search(line):
+            break
+
+        subject = line
+        break
+
+    return subject, " ".join(location_parts)
+
+
+def _looks_like_day_text(value: str) -> bool:
+    return bool(_DAY_ONLY_RE.fullmatch(value.strip()))
+
+
+def _looks_like_location(value: str) -> bool:
+    cleaned = value.strip()
+    return bool(_LOCATION_MARKERS.search(cleaned) or re.match(r"^E\s+SALA\b", cleaned, re.I))
 
 
 def _clean_line(value: str) -> str:
