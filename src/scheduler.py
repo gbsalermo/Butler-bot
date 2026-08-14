@@ -10,8 +10,9 @@ from src.assistant_state import is_day_off, list_routines
 from src.config import BUTLER_TIMEZONE
 from src.daily_store import clear_snooze, list_items
 from src.database import preferred_name
+from src.morning_context import morning_summary_with_yesterday
 from src.personality import choose, everyday_tone
-from src.summary_engine import morning_summary, nightly_summary, weekly_summary
+from src.summary_engine import weekly_summary
 from src.user_scope import (
     initialize_current_user_storage,
     multiuser_enabled,
@@ -24,7 +25,6 @@ WEEKDAY_NAMES = {0:"segunda-feira",1:"terça-feira",2:"quarta-feira",3:"quinta-f
 WEEKDAY_SHORT = {0:"seg",1:"ter",2:"qua",3:"qui",4:"sex",5:"sab",6:"dom"}
 
 MORNING_SUMMARY_TIME = os.getenv("BUTLER_MORNING_SUMMARY_TIME", "07:30")
-NIGHT_SUMMARY_TIME = os.getenv("BUTLER_NIGHT_SUMMARY_TIME", "21:30")
 WEEKLY_SUMMARY_TIME = os.getenv("BUTLER_WEEKLY_SUMMARY_TIME", "20:00")
 WEEKLY_SUMMARY_WEEKDAY = int(os.getenv("BUTLER_WEEKLY_SUMMARY_WEEKDAY", "6"))  # 0=seg ... 6=dom
 
@@ -73,17 +73,7 @@ async def _automatic_summaries(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
         if key not in sent:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=morning_summary(name, now.date()),
-                parse_mode="Markdown",
-            )
-            sent.add(key)
-
-    if current == NIGHT_SUMMARY_TIME:
-        key = f"{chat_id}:summary:night:{now.date()}"
-        if key not in sent:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=nightly_summary(name, now.date()),
+                text=morning_summary_with_yesterday(name, now.date()),
                 parse_mode="Markdown",
             )
             sent.add(key)
