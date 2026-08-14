@@ -14,12 +14,14 @@ from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
 from src.home_store import init_home_tables
 from src.lifestyle_handlers import register_lifestyle_handlers
+from src.onboarding import register_onboarding
 from src.personality_navigation import register_personality_navigation
 from src.protocol_mass_handlers import register_protocol_mass_handlers
 from src.protocol_mass_navigation import register_protocol_mass_navigation
 from src.protocol_mass_series import register_protocol_mass_series
 from src.protocol_mass_store import init_protocol_mass_tables
 from src.protocol_mass_ui import register_protocol_mass_ui
+from src.schedule_import_handlers import register_schedule_import
 from src.scheduler import register_scheduler
 from src.ui_layout import apply_layout_overrides
 from src.wellbeing_handlers import register_wellbeing_handlers
@@ -42,6 +44,8 @@ def main() -> None:
 
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
+    register_onboarding(application)
+    register_schedule_import(application)
     register_wellbeing_handlers(application)
     register_personality_navigation(application)
     register_home_menu(application)
@@ -57,7 +61,7 @@ def main() -> None:
     register_casual_handlers(application)
     register_scheduler(application)
 
-    print("Butler iniciado em polling. Quando você descansar, ele descansa também.")
+    print("Butler pessoal iniciado em polling.")
     application.run_polling(drop_pending_updates=True)
 
 
