@@ -53,56 +53,89 @@ Implementado a partir das 12 planilhas semanais fornecidas e da tabela oficial d
 Arquivos principais:
 
 - `src/protocol_mass_data.py` — dados das 12 semanas + substituições;
-- `src/protocol_mass_store.py` — estado, sessões e registros de exercícios em SQLite;
-- `src/protocol_mass_handlers.py` — fluxo do Telegram;
+- `src/protocol_mass_store.py` — estado, sessões, exercícios e séries em SQLite;
+- `src/protocol_mass_handlers.py` — fluxo geral do Telegram;
+- `src/protocol_mass_series.py` — acompanhamento série por série e histórico;
 - `src/protocol_mass_navigation.py` — entrada pelo botão de musculação;
+- `src/protocol_mass_ui.py` — menus diferentes antes/durante o protocolo;
 - `src/main.py` — inicialização e registro do módulo.
 
-### Menu atual
+### Semântica de início
 
-- `🚀 Começar os trabalhos`
+`🚀 Começar os trabalhos` significa iniciar o protocolo inteiro de 12 semanas e deve aparecer somente antes do início.
+
+Durante o protocolo ativo, o menu diário não oferece um novo início. O botão `🔄 Reiniciar os trabalhos` continua apenas como ferramenta temporária de teste e zera completamente o protocolo.
+
+### Menu durante o protocolo
+
 - `📅 Treino de hoje`
-- `📝 Registrar exercício`
+- `🏋️ Registrar séries`
 - `🔁 Substituir exercício`
 - `✅ Finalizar treino`
 - `😕 Não consegui treinar hoje`
 - `📈 Progresso Protocol Mass`
-- `🧪 Exemplo de treino`
-- `🔄 Reiniciar os trabalhos` — temporário enquanto o fluxo está sendo validado
-- retorno à musculação/cotidiano
+- `📊 Histórico de carga`
+- `🔄 Reiniciar os trabalhos` — temporário para teste
+- retorno ao cotidiano
 
 ### Regras do acompanhamento
 
 - protocolo possui 12 semanas;
 - cada semana possui treinos de segunda a sábado;
 - domingo não entra na contagem;
-- `Começar os trabalhos` inicia ou retoma o estado salvo;
 - semana só avança após 6/6 treinos concluídos;
 - reiniciar o processo do bot não perde o progresso;
 - Semana 12 concluída encerra o protocolo.
 
-### Registro de exercício
+### Registro série por série
 
-Nova tabela: `protocol_mass_exercise_logs`.
+Nova tabela: `protocol_mass_set_logs`.
 
-`📝 Registrar exercício` permite escolher um exercício do treino atual e registrar um resultado livre, por exemplo:
+Cada série guarda separadamente:
 
-- `40 kg — 10/9/8`
-- `20 kg cada lado — 8/8/7`
-- ou simplesmente `feito`.
+- semana;
+- dia;
+- exercício original;
+- exercício efetivamente realizado quando houve substituição;
+- número da série;
+- carga;
+- repetições;
+- observação futura opcional.
 
-O objetivo é começar a formar histórico real de carga/repetições sem tentar interpretar automaticamente prescrições complexas como cluster, bi-set, FST-7 ou MTUT.
+Fluxo de `🏋️ Registrar séries`:
+
+1. escolher o exercício do treino atual;
+2. para prescrições simples (`3 x ...`, `4 x ...`) o Butler deduz automaticamente o número de séries;
+3. para prescrições especiais/complexas (`1 + ...`, ciclos, cluster, bi-set etc.) o Butler mostra a prescrição original e pergunta quantas séries efetivamente serão registradas, evitando interpretar a técnica de forma errada;
+4. para cada série pergunta carga;
+5. depois pergunta repetições;
+6. salva cada série imediatamente;
+7. ao terminar, marca o exercício como registrado.
+
+Se o fluxo for cancelado no meio, as séries já gravadas permanecem salvas.
+
+### Histórico de carga
+
+`📊 Histórico de carga` lista exercícios que já possuem séries registradas e mostra a evolução por semana/dia.
+
+Exemplo conceitual:
+
+- Semana 1 — Supino reto
+  - 1ª série — 40 kg x 12
+  - 2ª série — 40 kg x 10
+  - 3ª série — 40 kg x 8
+- Semana 2 — Supino reto
+  - 1ª série — 42 kg x 10
+  - 2ª série — 42 kg x 9
+  - 3ª série — 42 kg x 8
+
+O histórico preserva substituições, mostrando quando o exercício foi efetivamente realizado com outro movimento.
+
+Nesta etapa a comparação é factual/visual entre registros. Cálculos automáticos de percentual de evolução, volume e tendências ficam para evolução futura, pois cargas podem ser registradas em formatos textuais diferentes (`kg`, `cada lado`, `peso corporal` etc.).
 
 ### Exercício substituído
 
-`🔁 Substituir exercício` agora faz duas etapas:
-
-1. escolhe o exercício original do treino do dia;
-2. escolhe qual substituto oficial será usado.
-
-A escolha fica persistida no banco e aparece posteriormente em `📅 Treino de hoje` como exercício substituído.
-
-Se depois for registrado resultado/carga para aquele exercício, a informação de substituição é preservada.
+`🔁 Substituir exercício` escolhe o exercício original e depois um substituto oficial da tabela fornecida. A substituição fica persistida e também é usada pelo registro série por série para identificar qual movimento foi efetivamente realizado.
 
 Regras:
 
@@ -112,50 +145,24 @@ Regras:
 
 ### Não consegui treinar hoje
 
-`😕 Não consegui treinar hoje` registra o dia como não realizado.
+`😕 Não consegui treinar hoje` registra uma falta daquele dia no protocolo.
 
 - pode guardar motivo livre ou `Sem motivo específico`;
-- o dia NÃO conta como treino concluído;
-- a semana NÃO avança por esse registro;
-- no progresso aparece como `➖`;
-- caso o usuário depois decida treinar naquele mesmo dia, `Começar os trabalhos` limpa o status de falta e permite seguir normalmente.
+- o dia não conta como treino concluído;
+- a semana não avança por esse registro;
+- no progresso aparece como `➖`.
 
 Legenda do progresso:
 
 - `✅` treino concluído;
-- `➖` treino não realizado;
+- `➖` falta;
 - `⬜` treino ainda pendente.
 
 ### Fluxo de teste
 
-`🧪 Exemplo de treino` exibe uma simulação baseada na Semana 1 / Segunda-feira sem alterar o banco real.
+`🧪 Exemplo de treino` existe antes do início e não altera o progresso real.
 
-`🔄 Reiniciar os trabalhos` é uma opção temporária para desenvolvimento/teste e exige confirmação. Ela apaga:
-
-- progresso das semanas;
-- sessões concluídas/não realizadas;
-- resultados de exercícios;
-- substituições.
-
-Depois volta para Semana 1 ainda não iniciada.
-
-### Exibição do treino
-
-O Butler mostra, quando disponíveis nas planilhas:
-
-- exercício;
-- prescrição de séries/repetições;
-- velocidade C/E;
-- intervalo;
-- técnica;
-- resultado registrado;
-- substituição realizada.
-
-Os dados-base vêm das planilhas fornecidas. Se algum registro não puder ser localizado, o Butler deve informar a ausência em vez de inventar a ficha.
-
-### Cadastro manual anterior
-
-As tabelas antigas `workout_days` e `workout_exercises` continuam existindo. Elas podem ser reaproveitadas posteriormente para fichas próprias, exercícios extras e treinos fora do Protocol Mass.
+`🔄 Reiniciar os trabalhos` é temporário para desenvolvimento/teste e exige confirmação. Agora ele apaga também `protocol_mass_set_logs`, além de progresso, sessões, exercícios e substituições.
 
 ## Scheduler
 
@@ -167,10 +174,10 @@ Continua planejado, ainda sem persistência real. Direção: entradas/saídas, c
 
 ## Próximos passos sugeridos
 
-1. validar manualmente o novo fluxo do Protocol Mass no Telegram;
-2. após validação, substituir o campo livre de resultado por acompanhamento opcional série a série quando a prescrição permitir;
-3. histórico de evolução de carga entre semanas e comparação do mesmo exercício;
-4. permitir corrigir/apagar um registro de exercício feito por engano;
+1. validar manualmente o fluxo série por série no Telegram;
+2. permitir corrigir/apagar uma série registrada por engano;
+3. calcular evolução quando cargas puderem ser normalizadas numericamente;
+4. calcular volume por exercício quando fizer sentido (`carga × repetições`);
 5. remover o botão temporário `🔄 Reiniciar os trabalhos` quando o módulo estiver estável;
 6. rotinas/metas: progresso por período real e streak;
 7. resumo diário e semanal automático;
