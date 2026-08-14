@@ -7,12 +7,45 @@ from src.config import DATABASE_PATH
 
 
 DEFAULT_SUBJECTS = [
-    {"name": "Álgebra Linear I", "sessions": [("terça-feira", "10:00", "11:40", "PAV III, Sala 10"), ("quinta-feira", "10:00", "11:40", "PAV III, Sala 10")]},
-    {"name": "Física II", "sessions": [("segunda-feira", "10:00", "11:40", "PAV III, Sala 07"), ("quarta-feira", "10:00", "11:40", "PAV III, Sala 07")]},
+    {"name": "Álgebra Linear I", "sessions": [("terça-feira", "10:00", "12:00", "PAV III, Sala 10"), ("quinta-feira", "10:00", "12:00", "PAV III, Sala 10")]},
+    {"name": "Física II", "sessions": [("segunda-feira", "10:00", "12:00", "PAV III, Sala 07"), ("quarta-feira", "10:00", "12:00", "PAV III, Sala 07")]},
     {"name": "Laboratório de Sistemas Digitais I", "sessions": [("segunda-feira", "14:00", "16:00", "PAV Eng., Sala D6")]},
-    {"name": "Princípios de Eletrônica Analógica", "sessions": [("terça-feira", "08:01", "09:40", "PAV I, Sala 104"), ("quinta-feira", "08:01", "09:40", "PAV I, Sala 104")]},
-    {"name": "Sistemas Digitais I", "sessions": [("segunda-feira", "08:01", "09:40", "PAV I, Sala 11"), ("quarta-feira", "08:01", "09:40", "PAV I, Sala 114")]},
+    {"name": "Princípios de Eletrônica Analógica", "sessions": [("terça-feira", "08:00", "10:00", "PAV I, Sala 104"), ("quinta-feira", "08:00", "10:00", "PAV I, Sala 104")]},
+    {"name": "Sistemas Digitais I", "sessions": [("segunda-feira", "08:00", "10:00", "PAV I, Sala 11"), ("quarta-feira", "08:00", "10:00", "PAV I, Sala 114")]},
 ]
+
+LEGACY_TIME_NORMALIZATION = {
+    "07:10": "07:00",
+    "08:01": "08:00",
+    "08:50": "09:00",
+    "08:51": "09:00",
+    "09:40": "10:00",
+    "10:50": "11:00",
+    "10:51": "11:00",
+    "11:40": "12:00",
+    "11:41": "12:00",
+    "12:30": "13:00",
+    "13:10": "13:00",
+    "14:01": "14:00",
+    "14:50": "15:00",
+    "14:51": "15:00",
+    "15:40": "16:00",
+    "16:50": "17:00",
+    "16:51": "17:00",
+    "17:40": "18:00",
+    "17:41": "18:00",
+    "18:30": "19:00",
+    "18:05": "18:00",
+    "18:50": "19:00",
+    "18:51": "19:00",
+    "19:35": "20:00",
+    "19:36": "20:00",
+    "20:20": "21:00",
+    "20:30": "21:00",
+    "21:15": "22:00",
+    "21:16": "22:00",
+    "22:00": "23:00",
+}
 
 
 def _connect() -> sqlite3.Connection:
@@ -28,6 +61,18 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition
     columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in columns:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _normalize_legacy_class_times(conn: sqlite3.Connection) -> None:
+    rows = conn.execute("SELECT id, start_time, end_time FROM class_sessions").fetchall()
+    for row in rows:
+        start = LEGACY_TIME_NORMALIZATION.get(row["start_time"], row["start_time"])
+        end = LEGACY_TIME_NORMALIZATION.get(row["end_time"], row["end_time"])
+        if start != row["start_time"] or end != row["end_time"]:
+            conn.execute(
+                "UPDATE class_sessions SET start_time = ?, end_time = ? WHERE id = ?",
+                (start, end, row["id"]),
+            )
 
 
 def init_database() -> None:
@@ -65,6 +110,7 @@ def init_database() -> None:
             """
         )
         _ensure_column(conn, "users", "preferred_name", "TEXT")
+        _normalize_legacy_class_times(conn)
 
 
 def upsert_user(chat_id: int, user_id: int | None, first_name: str | None, username: str | None) -> None:
