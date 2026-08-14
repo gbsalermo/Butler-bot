@@ -3,8 +3,6 @@ import os
 
 from dotenv import load_dotenv
 
-# A versão genérica usa credenciais e banco próprios.
-# O arquivo .env.generic não deve conter dados do Butler pessoal.
 load_dotenv(".env.generic", override=True)
 os.environ.setdefault("DATABASE_PATH", "data/butler_generic.db")
 os.environ.setdefault("BUTLER_VARIANT", "generic")
@@ -25,6 +23,7 @@ from src.home_store import init_home_tables
 from src.lifestyle_handlers import register_lifestyle_handlers
 from src.onboarding import register_onboarding
 from src.personality_navigation import register_personality_navigation
+from src.quick_access import register_quick_access
 from src.quick_capture import register_quick_capture
 from src.schedule_import_handlers import register_schedule_import
 from src.scheduler import register_scheduler
@@ -38,7 +37,6 @@ def main() -> None:
     init_daily_store()
     init_home_tables()
     init_assistant_state()
-    # IMPORTANTE: sem seed_default_schedule() e sem Protocol Mass.
     apply_layout_overrides()
 
     logging.basicConfig(
@@ -51,6 +49,7 @@ def main() -> None:
     register_onboarding(application)
     register_schedule_import(application)
     register_wellbeing_handlers(application)
+    register_quick_access(application)
     register_personality_navigation(application)
     register_home_menu(application)
     register_academic_navigation(application)
