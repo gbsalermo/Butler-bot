@@ -25,7 +25,7 @@ COTIDIANO_KEYBOARD = ReplyKeyboardMarkup(
 ACADEMIC_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["📚 Minhas matérias", "⚙️ Gerenciar matérias"],
-        ["📥 Importar grade por PDF/imagem"],
+        ["📥 Importar grade por PDF/texto"],
         ["🏠 Menu principal"],
     ],
     resize_keyboard=True,
