@@ -14,65 +14,9 @@ O Butler deve parecer um assistente presente, não um conjunto de formulários. 
 
 ## 👥 Multiusuário por chat_id — etapa 0 concluída
 
-Decisão estrutural: a versão genérica é um único Butler para poucas pessoas, mas cada `chat_id` deve ter experiência e dados completamente isolados.
-
-Novo arquivo: `src/user_scope.py`.
-
-### Rolling local
-
-Na versão genérica (`python -m src.main_generic`):
-
-- `BUTLER_MULTIUSER=1` é ativado automaticamente;
-- todo update passa primeiro por `register_user_scope()`;
-- mensagens e callbacks definem o `chat_id` atual antes de qualquer regra de negócio;
-- cada chat recebe um SQLite próprio em `data/butler_generic_users/<chat_id>.db`;
-- existe um pequeno registro central `data/butler_generic_registry.db` apenas para o scheduler saber quais chats existem;
-- as tabelas do usuário são inicializadas automaticamente na primeira interação do processo.
-
-Isso isola sem reescrever toda a regra de negócio:
-
-- usuários/nome preferido;
-- matérias e horários;
-- tarefas/compromissos;
-- lista de mercado;
-- metas;
-- rotinas e logs;
-- musculação manual da versão genérica;
-- Day-off.
-
-### Scheduler multiusuário
-
-`src/scheduler.py` agora:
-
-1. obtém os chats registrados;
-2. seleciona o armazenamento daquele `chat_id`;
-3. verifica o Day-off somente daquele chat;
-4. lê aulas, tarefas e rotinas somente daquele chat;
-5. envia o lembrete exclusivamente para ele;
-6. inclui `chat_id` nas chaves internas de deduplicação.
-
-Nunca voltar ao modelo de ler um evento global e dispará-lo para todos os chats.
-
-### Butler pessoal
-
-`python -m src.main` continua usando `data/butler.db` como antes e mantém:
-
-- grade pessoal;
-- correção manual do Laboratório de Sistemas Digitais I em segunda 14:00–16:00;
-- Protocol Mass de 12 semanas;
-- histórico pessoal existente.
-
-O Protocol Mass continua exclusivo do Butler pessoal nesta etapa.
-
-### Cloudflare
-
-O isolamento por `chat_id` é regra de domínio e deve permanecer na hospedagem. O SQLite por arquivo é somente a implementação rolling local.
-
-Na migração Cloudflare, trocar a implementação de persistência por D1/armazenamento persistente, preservando a ideia de tenant por `chat_id`. Não depender do filesystem do Worker como armazenamento definitivo.
+A versão genérica é um único Butler para poucas pessoas, mas cada `chat_id` possui dados isolados. No rolling local cada chat usa `data/butler_generic_users/<chat_id>.db`; o registry central existe apenas para o scheduler. Na futura hospedagem Cloudflare, preservar o isolamento por `chat_id` e trocar SQLite local por armazenamento persistente/D1.
 
 ## ⚡ Menu principal orientado a ação
-
-`src/ui_layout.py` centraliza os teclados.
 
 Menu principal atual:
 
@@ -84,181 +28,95 @@ Menu principal atual:
 - `🏠 Cotidiano`
 - `🏋️ Musculação`
 
-`➕ Adicionar` abre somente:
+`➕ Adicionar` abre tarefa/compromisso. `🛒 Item faltando` abre adicionar/listar. Tarefas e compromissos ficam em Cotidiano para gerenciamento completo. Pendência não é tipo: é tarefa vencida e não concluída.
 
-- `✅ Nova tarefa`
-- `📅 Novo compromisso`
+## 🗓️ Agenda
 
-Tarefas e compromissos ficam em Cotidiano para gerenciamento completo.
+`src/assistant_views.py` reúne aulas, tarefas, compromissos, pendências e treino. Ao abrir `🗓️ Hoje`, oferece também:
 
-### Cotidiano
-
-- `✅ Tarefas`
-- `📅 Compromissos`
-- `🛒 O que está faltando?`
-- `➕ Item faltando`
-- `🎯 Metas`
-- `🧘 Rotinas`
-- `💰 Finanças`
-- `👤 Como me chamar`
-- retorno ao menu principal
-
-Novo arquivo: `src/quick_access.py`.
-
-## 📌 Pendência não é mais um tipo
-
-`pendencia` deixou de ser uma categoria criada pelo usuário.
-
-Agora:
-
-- tarefa = algo que precisa ser feito;
-- compromisso = evento/agendamento;
-- pendência = tarefa com data vencida e ainda não concluída.
-
-`init_daily_store()` migra registros antigos com `kind = 'pendencia'` para `kind = 'tarefa'`.
-
-## 🗓️ Hoje
-
-`src/assistant_views.py` reúne:
-
-- aulas do dia;
-- tarefas do dia;
-- compromissos do dia;
-- bloco `📌 Pendências — tarefas vencidas`;
-- musculação manual do dia quando cadastrada;
-- quantidade de itens faltando em casa.
+- `⏭️ Amanhã`;
+- `📆 Outra data` (`DD/MM` ou `DD/MM/AAAA`);
+- `🗓️ Próximos 7 dias`.
 
 ## ⚡ Captura rápida
 
-`src/quick_capture.py` reduz passos em ações simples.
-
-### Tarefa/compromisso
-
-Fluxo:
-
-1. título;
-2. `Hoje`, `Outro dia` ou `Sem data`;
-3. horário quando houver data;
-4. salva.
-
-Não pergunta observação nem antecedência por padrão. Lembrete do fluxo rápido = na hora marcada (`0` minutos).
-
-Validações:
-
-- não aceitar data passada;
-- se for hoje, não aceitar horário passado ou igual ao momento atual;
-- timezone: `BUTLER_TIMEZONE`.
-
-### Item faltando
-
-Aceita:
-
-- `sal`;
-- `sal, açúcar, café`;
-- `falta sal, açúcar, café`;
-- `café | 2 pacotes` para quantidade opcional.
+Tarefa/compromisso: título → Hoje/Outro dia/Sem data → horário → salvar. Datas/horas passadas são rejeitadas. Item faltando aceita um ou vários itens e quantidade opcional via `item | quantidade`.
 
 ## 👤 Nome preferido
 
-`src/onboarding.py` controla `/start`.
-
-- registra `chat_id`;
-- pergunta `preferred_name` quando necessário;
-- pode ser alterado em `🏠 Cotidiano → 👤 Como me chamar`;
-- respostas casuais e lembretes usam o nome preferido quando possível.
-
-Na versão genérica, esse registro vive dentro do armazenamento isolado daquele chat.
+`src/onboarding.py` registra `chat_id` e `preferred_name`; respostas e lembretes usam o nome quando possível.
 
 ## 📥 Importação da grade
 
-Opção:
+Aceita PDF com texto pesquisável e `.txt`. Sem OCR. Códigos SIGAA são traduzidos em blocos de horas completas; correções manuais têm prioridade.
 
-`📚 Matérias → 📥 Importar grade por PDF/texto`
-
-Aceitos:
-
-- PDF com texto pesquisável;
-- `.txt`.
-
-Não aceitos:
-
-- imagem/foto/screenshot;
-- PDF escaneado sem camada de texto.
-
-Sem OCR/Tesseract. Se a pessoa só tiver imagem, o Butler orienta converter em IA/ferramenta para PDF com texto pesquisável ou cadastrar manualmente.
-
-O parser procura códigos SIGAA (`35M45`, `24M23`, `3T23` etc.) e sempre mostra prévia antes de persistir.
-
-## ⏰ Horários SIGAA
-
-Representação oficial por horas completas:
-
-- `M23` → `08:00–10:00`;
-- `M45` → `10:00–12:00`;
-- `T23` → `14:00–16:00`;
-- `T2345` → `14:00–18:00`;
-- `N12` → `18:00–20:00`.
-
-Correções manuais do usuário têm prioridade.
-
-## 🕴️ Personality Engine
+## 🕴️ Personality + Behavior Engine
 
 Arquivos principais:
 
 - `src/personality.py`;
+- `src/behavior_engine.py`;
+- `src/behavior_handlers.py`;
 - `src/context_engine.py`;
-- `src/casual_handlers.py`;
-- `src/personality_navigation.py`;
 - `src/scheduler.py`.
 
-Personalidade: competente, informal, levemente cansada/cínica e útil. Pode provocar a situação, nunca humilhar o usuário. Day-off e situações sensíveis ficam sem sarcasmo.
+O Butler é competente, provocativo, levemente cínico e claramente torce pelo usuário sem admitir. Sarcasmo contextual nasce de dados reais: adiamentos, atraso, streaks, faltas e evolução de carga. Emojis aparecem com moderação. Day-off e contextos sensíveis desligam cobrança/sarcasmo.
 
-## 🧠 Behavior Engine v1 — personalidade baseada em comportamento real
+`daily_items.postpone_count` registra adiamentos reais. Rotinas usam `routine_logs`, metas usam `goal_progress`, e Protocol Mass usa sessões/séries existentes.
 
-Novos arquivos:
+## ☀️🌙 Resumos automáticos — etapas 2 e 3 concluídas
 
-- `src/behavior_engine.py`;
-- `src/behavior_handlers.py`.
+Novo arquivo: `src/summary_engine.py`.
 
-Princípio: sarcasmo contextual deve nascer de fatos do histórico, não de frases aleatórias que fingem conhecer o usuário.
+O scheduler gera três resumos por `chat_id`, sempre respeitando Day-off e o timezone configurado:
 
-### Tarefas
+### Resumo da manhã
 
-`daily_items` agora possui `postpone_count`.
+Padrão: `07:30`, configurável por `BUTLER_MORNING_SUMMARY_TIME`.
 
-Cada clique em `+10 min` / `+30 min` incrementa esse contador. Ao adiar ou concluir, o Butler adapta a resposta conforme:
+Inclui:
 
-- número de adiamentos;
-- tarefa já vencida ou não;
-- conclusão após repetidas prorrogações.
+- aulas do dia com horário/local;
+- tarefas e compromissos;
+- tarefas já atrasadas;
+- treino previsto/manual ou Protocol Mass quando aplicável;
+- itens faltando em casa;
+- comentário contextual do Butler.
 
-Exemplos de comportamento:
+### Fechamento noturno
 
-- primeiro adiamento: resposta leve;
-- segundo/terceiro: Butler reconhece o padrão;
-- quatro ou mais: comentário explicitamente baseado no número real;
-- conclusão atrasada: reconhece o atraso sem transformar isso em sermão.
+Padrão: `21:30`, configurável por `BUTLER_NIGHT_SUMMARY_TIME`.
 
-### Rotinas e metas
+Inclui:
 
-O Behavior Engine usa os logs já existentes:
+- tarefas concluídas x previstas no dia;
+- compromissos previstos;
+- rotinas registradas;
+- situação do treino/Protocol Mass;
+- tarefas que ficaram abertas;
+- melhor sequência ativa quando houver;
+- comentário contextual conforme o resultado do dia.
 
-- `routine_logs` para calcular streak diário por rotina;
-- `goal_progress` para streak de dias com progresso registrado.
+### Fechamento semanal
 
-Ao consultar rotinas/metas, o Butler pode destacar sequências reais e comentar constância sem inventar informação.
+Padrão: domingo às `20:00`.
 
-### Protocol Mass
+Configuração:
 
-O Behavior Engine lê:
+- `BUTLER_WEEKLY_SUMMARY_TIME=20:00`;
+- `BUTLER_WEEKLY_SUMMARY_WEEKDAY=6` (`0=segunda ... 6=domingo`).
 
-- faltas reais em `protocol_mass_sessions`;
-- motivos de falta;
-- séries/cargas em `protocol_mass_set_logs`.
+Usa os últimos 7 dias e resume:
 
-A tela de progresso pode comentar quantidade acumulada de faltas. Também existe cálculo de evolução de carga quando a carga foi registrada em formato numérico com `kg`; formatos livres continuam preservados e não são convertidos à força.
+- tarefas concluídas/previstas;
+- compromissos;
+- registros de rotinas;
+- pendências vencidas ainda abertas;
+- estado da semana atual do Protocol Mass no Butler pessoal;
+- destaque de constância;
+- comentário final conforme o desempenho real.
 
-Regra de tom: o Butler quer que o usuário se dê bem, mas demonstra isso de forma contida, irônica e observadora. Não usar sarcasmo em Day-off ou contexto sensível.
+As chaves de deduplicação incluem `chat_id` + tipo de resumo + data, evitando envio duplicado no tick de 30 segundos.
 
 ## 🏋️ Protocol Mass — somente Butler pessoal
 
@@ -275,23 +133,20 @@ Regra de tom: o Butler quer que o usuário se dê bem, mas demonstra isso de for
 
 ## Próxima sequência funcional
 
-Etapa atual:
-
-1. ✅ personalidade baseada em comportamento real — v1 implementada;
-2. resumo diário automático individual;
-3. resumo noturno/semanal individual;
-4. aprofundar streaks/metas e histórico comportamental;
+1. ✅ personalidade baseada em comportamento real;
+2. ✅ resumo diário automático;
+3. ✅ resumo noturno/semanal;
+4. aprofundar metas com streak/histórico;
 5. finanças persistentes;
 6. linguagem natural para criar/alterar ações.
 
 ## Próximos testes
 
-1. criar uma tarefa e usar `+10 min` duas ou três vezes para validar mudança de tom;
-2. concluir uma tarefa adiada e conferir comentário contextual;
-3. registrar uma rotina em dias consecutivos e abrir `📋 Ver rotinas`;
-4. registrar progresso de meta em dias consecutivos e abrir `📊 Progresso das metas`;
-5. no Butler pessoal, conferir comentário de faltas em `📈 Progresso Protocol Mass`;
-6. testar o mesmo comportamento na versão genérica com dois `chat_id` diferentes e confirmar isolamento.
+1. validar resumo matinal com aula/tarefa/mercado cadastrados;
+2. validar fechamento noturno com uma tarefa concluída e outra aberta;
+3. validar fechamento semanal no horário de teste alterando temporariamente o `.env`;
+4. confirmar que Day-off silencia os três resumos;
+5. confirmar isolamento dos resumos entre dois `chat_id` na versão genérica.
 
 ## Regra de continuidade
 
