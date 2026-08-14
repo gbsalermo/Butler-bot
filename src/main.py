@@ -5,6 +5,7 @@ from telegram.ext import ApplicationBuilder
 from src.academic_navigation import register_academic_navigation
 from src.assistant_state import init_assistant_state
 from src.assistant_views import register_assistant_views
+from src.behavior_handlers import register_behavior_handlers
 from src.bot_handlers import register_handlers
 from src.casual_handlers import register_casual_handlers
 from src.config import TELEGRAM_BOT_TOKEN, validate_config
@@ -58,6 +59,7 @@ def main() -> None:
     register_protocol_mass_handlers(application)
     register_academic_navigation(application)
     register_assistant_views(application)
+    register_behavior_handlers(application)
     register_quick_capture(application)
     register_lifestyle_handlers(application)
     register_home_handlers(application)
