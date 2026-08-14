@@ -23,7 +23,7 @@ AGENDA_DATE = 720
 AGENDA_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["⏭️ Amanhã", "📆 Outra data"],
-        ["🗓️ Próximos 7 dias"],
+        ["🗓️ Próximos 7 dias", "📚 Histórico"],
         ["🏠 Menu principal"],
     ],
     resize_keyboard=True,
