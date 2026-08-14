@@ -15,72 +15,54 @@ O Butler deve parecer um assistente presente, não um formulário. Deve reduzir 
 
 ## 🧩 Dois modos de execução
 
-A partir desta etapa existe **um único código-base com dois entrypoints**. Não criar fork separado enquanto não houver necessidade real.
+Existe **um único código-base com dois entrypoints**.
 
 ### Butler pessoal
 
-Entry point:
-
 `python -m src.main`
 
-Características:
-
-- usa o banco pessoal padrão `data/butler.db`;
-- mantém a grade acadêmica já cadastrada;
+- banco `data/butler.db`;
+- mantém a grade pessoal já cadastrada;
 - mantém a correção manual de Laboratório de Sistemas Digitais I (segunda 14:00–16:00);
-- mantém o Protocol Mass de 12 semanas e histórico de treino;
-- continua sendo a versão principal de desenvolvimento.
+- mantém o Protocol Mass de 12 semanas e histórico de treino.
 
 ### Butler genérico
 
-Entry point:
-
 `python -m src.main_generic`
 
-Configuração:
-
-- `.env.generic`, criado a partir de `.env.generic.example`;
+- usa `.env.generic`;
 - token Telegram próprio;
-- banco separado `data/butler_generic.db` por padrão.
-
-Regras:
-
+- banco separado `data/butler_generic.db` por padrão;
 - não chama `seed_default_schedule()`;
 - não inicializa/expõe Protocol Mass;
 - não contém grade ou treino pessoal;
-- `/start` registra o `chat_id` da pessoa;
-- pergunta como ela quer ser chamada;
-- musculação começa vazia e usa o cadastro manual disponível no código-base;
-- tarefas, compromissos, pendências, Day-off, metas, rotinas, lista de mercado, personalidade e scheduler continuam disponíveis.
-
-A separação por banco/token impede que os dados pessoais do Butler principal sejam enviados para a outra instância.
+- `/start` registra o `chat_id` e pergunta como a pessoa quer ser chamada;
+- musculação começa vazia.
 
 ## 👤 Nome preferido / onboarding
 
-Novo arquivo: `src/onboarding.py`.
+`src/onboarding.py` controla `/start`.
 
-A tabela `users` ganhou `preferred_name` por migração compatível com bancos existentes.
+A tabela `users` possui `preferred_name`.
 
 Fluxo:
 
-1. `/start` registra/atualiza `chat_id`, Telegram user id, nome e username;
+1. registra/atualiza `chat_id`, Telegram user id, nome e username;
 2. se não existir `preferred_name`, pergunta como a pessoa quer ser chamada;
 3. salva o nome/apelido;
 4. abre o menu principal;
-5. o valor pode ser alterado depois em `🏠 Cotidiano → 👤 Como me chamar`.
+5. pode ser alterado em `🏠 Cotidiano → 👤 Como me chamar`.
 
-O `/start` antigo foi removido de `home_menu.py`; onboarding agora é o único dono desse comando.
-
-Respostas casuais e lembretes proativos já substituem `chefe` pelo nome preferido quando possível.
+Respostas casuais e lembretes proativos usam o nome preferido quando possível.
 
 ## 📥 Importação de grade por PDF/imagem
 
-Novos arquivos:
+Arquivos:
 
-- `src/schedule_importer.py` — extração e interpretação;
-- `src/schedule_import_handlers.py` — fluxo Telegram com prévia/confirmação.
+- `src/schedule_importer.py`;
+- `src/schedule_import_handlers.py`.
 
-A opção aparece em:
+Opção:
 
 `📚 Matérias → 📥 Importar grade por PDF/imagem`
 
@@ -90,36 +72,33 @@ Formatos:
 - PDF escaneado: renderização + OCR;
 - JPG/PNG/WebP/foto: OCR via `pytesseract` + Pillow.
 
-Dependências adicionadas ao `requirements.txt`:
-
-- `PyMuPDF`;
-- `Pillow`;
-- `pytesseract`.
-
-Observação operacional: `pytesseract` exige que o executável **Tesseract OCR** esteja instalado no sistema para imagens/PDFs escaneados.
+`pytesseract` exige o executável Tesseract OCR instalado no sistema para imagens/PDFs escaneados.
 
 ### Lógica da importação
 
-O parser procura códigos SIGAA como:
-
-- `35M45`;
-- `24M23`;
-- `3T23`.
-
-Usa `src/sigaa_schedule.py` para transformar os códigos em dias e horários.
-
-A importação tenta identificar:
-
-- nome da matéria;
-- local/sala;
-- código SIGAA;
-- sessões resultantes.
+O parser procura códigos SIGAA como `35M45`, `24M23`, `3T23`, usa `src/sigaa_schedule.py` e tenta identificar matéria, local/sala, código e sessões resultantes.
 
 Antes de gravar, o Butler mostra uma **prévia obrigatória**. Somente `✅ Importar grade` persiste os dados.
 
-Se a matéria já existir, `upsert_subject_schedule()` substitui os horários daquela matéria e a reativa. Não cria duplicata.
+Se a matéria já existir, `upsert_subject_schedule()` substitui os horários daquela matéria e a reativa.
 
-A confirmação é importante porque OCR e o próprio SIGAA podem estar errados. Não remover essa etapa. O caso do laboratório pessoal demonstra por que um horário manual pode ser mais correto que o código exibido.
+A confirmação é obrigatória porque OCR e o próprio SIGAA podem conter informação errada.
+
+## ⏰ Normalização dos horários SIGAA
+
+Decisão atual: o Butler usa **horas completas** como representação oficial dos blocos acadêmicos, em vez dos minutos quebrados exibidos pelo SIGAA.
+
+Exemplos:
+
+- `M23` → `08:00–10:00`;
+- `M45` → `10:00–12:00`;
+- `T23` → `14:00–16:00`;
+- `T2345` → `14:00–18:00`;
+- `N12` → `18:00–20:00`.
+
+Essa normalização acontece diretamente em `src/sigaa_schedule.py`, portanto vale tanto para cadastro por código quanto para importação por PDF/imagem.
+
+O horário manual continua tendo prioridade quando o usuário corrige uma informação do SIGAA, como no caso do Laboratório de Sistemas Digitais I.
 
 ## 🕴️ Personality Engine v1
 
@@ -133,16 +112,9 @@ Arquivos:
 
 Personalidade: competente, informal, levemente cansado/cínico e útil. Pode provocar a situação/comportamento, nunca humilhar o usuário.
 
-Tons:
-
-- `NEUTRO`;
-- `LEVE`;
-- `SARCASTICO`;
-- `CUIDADOSO`.
+Tons: `NEUTRO`, `LEVE`, `SARCASTICO`, `CUIDADOSO`.
 
 Day-off e situações sensíveis permanecem sem sarcasmo.
-
-A personalidade aparece em menus frequentes, cumprimentos, agradecimentos e lembretes. O contexto atual já observa pendências/atrasos e há um traço recorrente de antipatia por terça-feira.
 
 ## 🧭 Organização dos menus
 
@@ -187,7 +159,7 @@ A personalidade aparece em menus frequentes, cumprimentos, agradecimentos e lemb
 ### 📚 Acadêmico
 
 - grade persistente;
-- tradução de códigos SIGAA;
+- tradução de códigos SIGAA em horas completas;
 - adicionar/remover/trancar/editar matérias;
 - importação por PDF/imagem com confirmação;
 - matérias trancadas não geram lembretes.
@@ -225,18 +197,18 @@ A versão genérica não registra os módulos Protocol Mass e começa com muscul
 
 ## Scheduler
 
-Trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. Lembretes passam pelo Personality Engine e já usam `preferred_name` quando cadastrado.
+Trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. Lembretes passam pelo Personality Engine e usam `preferred_name` quando cadastrado.
 
 ## Finanças
 
-Continua planejado, ainda sem persistência real. Direção: entradas/saídas, categorias, saldo mensal, histórico, detecção de excesso, economia e metas.
+Continua planejado, ainda sem persistência real.
 
 ## Próximos passos sugeridos
 
 1. validar importação de grade com screenshot/PDF real no Telegram;
-2. validar o onboarding/nome preferido nas duas versões;
+2. validar onboarding/nome preferido nas duas versões;
 3. validar que `main_generic` nasce realmente sem grade e sem Protocol Mass;
-4. depois retomar resumo diário + personalidade contextual baseada em comportamento;
+4. retomar resumo diário + personalidade contextual baseada em comportamento;
 5. streaks de metas/rotinas;
 6. permitir corrigir/apagar série de treino registrada por engano;
 7. finanças persistentes;
