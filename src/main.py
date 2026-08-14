@@ -14,6 +14,7 @@ from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
 from src.home_store import init_home_tables
 from src.lifestyle_handlers import register_lifestyle_handlers
+from src.personality_navigation import register_personality_navigation
 from src.protocol_mass_handlers import register_protocol_mass_handlers
 from src.protocol_mass_navigation import register_protocol_mass_navigation
 from src.protocol_mass_series import register_protocol_mass_series
@@ -42,6 +43,7 @@ def main() -> None:
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
     register_wellbeing_handlers(application)
+    register_personality_navigation(application)
     register_home_menu(application)
     register_protocol_mass_series(application)
     register_protocol_mass_ui(application)
