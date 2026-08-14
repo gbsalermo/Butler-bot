@@ -1,248 +1,133 @@
 # Continuidade do desenvolvimento
 
-## Estado ao encerrar o dia
+## Estado atual
 
 - Desenvolvimento concentrado na `main`.
 - Stack: Python, `python-telegram-bot[job-queue]`, SQLite e `python-dotenv`.
 - Execução local via polling.
-- Butler já possui scheduler proativo e `chat_id` persistido.
-- Prioridade atual continua sendo funcionalidade antes de suíte de testes.
-
-## Identidade do bot no Telegram
-
-- Nome: `Butler`
-- Username atual: `@ButlerSal_BOT`
-
-Usar esses dados como referência nas próximas etapas, documentação e futura hospedagem.
-
-## Menu principal
-
-O primeiro item é propositalmente:
-
-- `🌙 Day-off`
-
-Depois:
-
-- `📚 Matérias`
-- `✅ Tarefas`
-- `📅 Compromissos`
-- `📌 Pendências`
-- `🏠 Cotidiano`
-- `🗓️ Hoje`
-- `💰 Finanças`
-
-## Day-off
-
-Implementado em `src/assistant_state.py` + `src/wellbeing_handlers.py`.
-
-Objetivo: representar um dia de folga real do usuário e do Butler, inclusive quando o usuário não estiver bem ou simplesmente não quiser pensar em obrigações.
-
-Regras:
-
-- estado persistido em `assistant_state`;
-- scheduler consulta esse estado antes de qualquer lembrete;
-- em Day-off não há lembretes proativos de aulas, tarefas ou rotinas;
-- respostas ficam mínimas e sem cobrança;
-- o estado sobrevive a reinício do bot;
-- frases de retorno:
-  - `Butler, preciso de você!`
-  - `Chamar, Butler!`
-
-A sensação desejada é de chamar novamente uma pessoa que estava deixando o usuário descansar.
-
-## Acadêmico
-
-Gerenciamento de matérias:
-
-- adicionar;
-- remover;
-- trancar;
-- editar.
-
-Regras preservadas:
-
-- remover = exclusão definitiva;
-- trancar = histórico com `active = 0`;
-- matérias trancadas não geram lembretes;
-- códigos SIGAA continuam traduzidos automaticamente;
-- Laboratório de Sistemas Digitais I permanece manualmente na segunda, 14:00–16:00.
-
-## Tarefas, compromissos e pendências
-
-Persistência em `daily_items`.
-
-A etapa antes pendente foi concluída:
-
-- adicionar;
-- listar;
-- concluir/resolver;
-- editar;
-- remover;
-- escolher antecedência do lembrete por item;
-- adiar um lembrete;
-- concluir diretamente pelo lembrete.
-
-### Lembretes interativos
-
-Quando um item chega, o Telegram recebe botões:
-
-- `✅ Concluir`
-- `⏰ +10 min`
-- `⏰ +30 min`
-
-O adiamento usa `snoozed_until` no SQLite.
-
-## Scheduler
-
-`src/scheduler.py` agora trata:
-
-1. aulas ativas;
-2. tarefas, compromissos e pendências;
-3. itens adiados;
-4. rotinas/autocuidado;
-5. Day-off global.
-
-Em Day-off, o scheduler retorna imediatamente sem notificar.
-
-## 🏠 Cotidiano
-
-### Lista persistente de itens faltando
-
-Continua implementada em `grocery_items`.
-
-Fluxos:
-
-- adicionar item faltando;
-- consultar por botão;
-- perguntar naturalmente `O que está faltando?`;
-- marcar comprado.
-
-### Metas gerais
-
-Tabela base: `goals`.
-
-Nova tabela: `goal_progress`.
-
-Agora é possível registrar progresso numérico das metas e consultar progresso acumulado.
-
-Categorias centrais:
-
-- água;
-- alimentação;
-- inglês;
-- programação;
-- musculação;
-- estudos;
-- financeiro;
-- outras livres.
-
-Observação para evolução futura: hoje o progresso é acumulado; depois deverá considerar corretamente a periodicidade (`dia`, `semana`, `mês`) e histórico por período.
-
-### 🧘 Rotinas e autocuidado
-
-Novas tabelas:
-
-- `routines`;
-- `routine_logs`.
-
-Cada rotina pode ter:
-
-- nome;
-- categoria;
-- horário;
-- dias de recorrência;
-- antecedência de lembrete;
-- status ativo.
-
-Exemplos:
-
-- beber água;
-- tomar remédio;
-- refeição;
-- horário de dormir;
-- inglês;
-- programação;
-- outros cuidados pessoais.
-
-Também é possível registrar que uma rotina foi cumprida no dia.
-
-### 🏋️ Musculação
-
-Permanece com:
-
-- divisão por dia da semana;
-- foco muscular;
-- exercícios;
-- carga;
-- séries;
-- repetições;
-- exibição automática do treino em `🗓️ Hoje`.
-
-## 🗓️ Hoje
-
-`src/assistant_views.py` reúne:
-
-- aulas;
-- tarefas;
-- compromissos;
-- pendências;
-- musculação do dia;
-- quantidade de itens faltando em casa.
-
-## Finanças
-
-Continua propositalmente sem persistência real nesta etapa.
-
-Direção preservada:
-
-- entradas/saídas;
-- categorias;
-- saldo do mês;
-- comparação histórica;
-- detecção de aumento/exagero;
-- economia;
-- metas financeiras integradas às metas gerais;
-- alertas de ritmo de gasto.
-
-## Arquivos principais novos/alterados nesta etapa
-
-- `src/assistant_state.py`
-- `src/wellbeing_handlers.py`
-- `src/daily_store.py`
-- `src/lifestyle_handlers.py`
-- `src/scheduler.py`
-- `src/home_menu.py`
-- `src/main.py`
-- `README.md`
-
-## Próxima retomada sugerida
-
-Ao voltar ao desenvolvimento, não começar por testes ainda. Priorizar:
-
-1. musculação: editar/remover exercícios e registrar execução/evolução de carga;
-2. metas: progresso por período real (dia/semana/mês), streak e histórico;
-3. rotinas: editar/remover, mais de um horário por rotina e confirmação direto no lembrete;
-4. resumo diário automático e resumo semanal;
-5. persistência financeira real;
-6. inteligência de gastos e comparação histórica;
-7. integração futura com ônibus e outras rotinas recorrentes;
-8. só depois consolidar testes automatizados e preparar hospedagem 24/7.
+- Nome do bot: `Butler`.
+- Username atual: `@ButlerSal_BOT`.
+- Prioridade continua sendo funcionalidade antes de suíte de testes.
 
 ## Filosofia do produto
 
-O Butler deve parecer um assistente presente, não um formulário com comandos.
+O Butler deve parecer um assistente presente, não um formulário. Deve reduzir carga mental, lembrar antes que o usuário precise conferir, guardar pequenas informações persistentes, conversar de forma natural e respeitar períodos de descanso sem cobrança.
 
-Princípios:
+## Funcionalidades consolidadas
 
-- reduzir carga mental;
-- lembrar antes que o usuário precise conferir;
-- guardar pequenas informações persistentes;
-- conversar de forma natural;
-- distinguir obrigação, compromisso, pendência, meta, rotina e descanso;
-- respeitar Day-off sem culpa ou cobrança;
-- permitir que o usuário literalmente “chame o Butler” quando quiser ajuda novamente;
-- evitar notificações inúteis;
-- transformar histórico em orientação prática.
+### 🌙 Day-off
+
+- estado persistente;
+- silencia o scheduler;
+- permanece após reinício;
+- retorno por frases como `Butler, preciso de você!` e `Chamar, Butler!`.
+
+### 📚 Acadêmico
+
+- grade inicial persistida;
+- tradução de códigos SIGAA;
+- adicionar/remover/trancar/editar matérias;
+- matérias trancadas não geram lembretes;
+- navegação possui retorno para o menu acadêmico/principal.
+
+### ✅ Tarefas, 📅 compromissos e 📌 pendências
+
+- adicionar/listar/concluir/editar/remover;
+- data, horário, detalhes e antecedência configuráveis;
+- lembretes proativos;
+- concluir ou adiar no próprio aviso;
+- botão `❌ Cancelar ação` durante fluxos de cadastro/edição.
+
+### 🏠 Cotidiano
+
+- lista persistente do que está faltando em casa;
+- metas gerais e progresso;
+- rotinas/autocuidado;
+- musculação;
+- visão `🗓️ Hoje` agregando agenda e rotina.
+
+## 🏋️ Musculação — Protocol Mass
+
+Implementado a partir das 12 planilhas semanais fornecidas e da tabela oficial de exercícios substitutos.
+
+Arquivos:
+
+- `src/protocol_mass_data.py` — dados das 12 semanas + substituições;
+- `src/protocol_mass_store.py` — estado e cumprimento persistidos em SQLite;
+- `src/protocol_mass_handlers.py` — fluxo do Telegram;
+- `src/protocol_mass_navigation.py` — entrada pelo botão de musculação;
+- `src/main.py` — inicialização e registro do módulo.
+
+### Fluxo principal
+
+Ao abrir `🏋️ Musculação`, o Butler direciona para o Protocol Mass.
+
+Opções:
+
+- `🚀 Começar os trabalhos`
+- `📅 Treino de hoje`
+- `✅ Finalizar treino`
+- `📈 Progresso Protocol Mass`
+- `🔁 Substitutos`
+- retorno ao cotidiano
+
+### Regras do acompanhamento
+
+- protocolo possui 12 semanas;
+- cada semana possui treinos de segunda a sábado;
+- domingo não entra na contagem;
+- `Começar os trabalhos` inicia o protocolo se ainda não começou ou retoma o estado salvo;
+- o treino do dia é marcado como iniciado;
+- `Finalizar treino` marca o dia como cumprido;
+- cada semana exige 6/6 dias concluídos antes de avançar;
+- ao completar os seis dias, o Butler avança automaticamente para a próxima semana;
+- ao completar a Semana 12, o protocolo é marcado como concluído;
+- progresso fica persistido mesmo com reinício do bot.
+
+### Exibição do treino
+
+O Butler mostra, quando disponíveis nas planilhas:
+
+- exercício;
+- prescrição de séries/repetições;
+- velocidade C/E;
+- intervalo;
+- técnica.
+
+Os dados foram extraídos das planilhas fornecidas. Se algum registro não puder ser localizado, o Butler deve informar a ausência em vez de inventar a ficha.
+
+### Exercícios substitutos
+
+O botão `🔁 Substitutos` mostra os exercícios do treino atual e pede qual precisa ser trocado.
+
+Regras:
+
+- usar somente a tabela de substituições fornecida com o Protocol Mass;
+- busca tolera pequenas diferenças de grafia/nomenclatura entre as planilhas e a tabela;
+- se não houver correspondência confiável, responder que não há substituto localizado, sem inventar um exercício.
+
+### Cadastro manual anterior
+
+As tabelas antigas `workout_days` e `workout_exercises` continuam existindo. Elas não foram apagadas porque podem servir posteriormente para fichas próprias, exercícios extras e evolução de carga fora do Protocol Mass.
+
+## Scheduler
+
+Atualmente trata aulas, tarefas/compromissos/pendências, itens adiados, rotinas e Day-off. O Protocol Mass ainda não envia lembrete automático de horário de treino porque não foi definido um horário fixo para musculação.
+
+## Finanças
+
+Continua planejado, ainda sem persistência real. Direção: entradas/saídas, categorias, saldo mensal, histórico, detecção de excesso, economia e metas.
+
+## Próximos passos sugeridos
+
+1. Protocol Mass: registrar carga e repetições realmente executadas em cada série/exercício;
+2. Protocol Mass: histórico de evolução de carga entre semanas;
+3. Protocol Mass: permitir marcar exercício individual como feito/substituído;
+4. rotinas/metas: progresso por período real e streak;
+5. resumo diário e semanal automático;
+6. finanças persistentes;
+7. integração com ônibus;
+8. depois consolidar testes e preparar hospedagem 24/7.
 
 ## Regra de continuidade
 
