@@ -49,6 +49,21 @@ def init_protocol_mass_tables() -> None:
                 updated_at TEXT NOT NULL,
                 UNIQUE(week, weekday, exercise_name)
             );
+
+            CREATE TABLE IF NOT EXISTS protocol_mass_set_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                week INTEGER NOT NULL,
+                weekday TEXT NOT NULL,
+                exercise_name TEXT NOT NULL,
+                performed_exercise TEXT,
+                set_number INTEGER NOT NULL,
+                load TEXT,
+                reps TEXT,
+                note TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(week, weekday, exercise_name, set_number)
+            );
             """
         )
         conn.execute("INSERT OR IGNORE INTO protocol_mass_state (id, current_week, active) VALUES (1, 1, 0)")
@@ -88,6 +103,7 @@ def reset_protocol(conn: sqlite3.Connection | None = None) -> None:
     own_conn = conn is None
     db = conn or _connect()
     try:
+        db.execute("DELETE FROM protocol_mass_set_logs")
         db.execute("DELETE FROM protocol_mass_exercise_logs")
         db.execute("DELETE FROM protocol_mass_sessions")
         db.execute(
@@ -204,6 +220,75 @@ def exercise_logs(week: int, weekday: str) -> list[sqlite3.Row]:
             """,
             (week, weekday),
         ).fetchall()
+
+
+def log_set(
+    week: int,
+    weekday: str,
+    exercise_name: str,
+    set_number: int,
+    load: str | None,
+    reps: str | None,
+    performed_exercise: str | None = None,
+    note: str | None = None,
+) -> None:
+    now = datetime.now().isoformat(timespec="seconds")
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO protocol_mass_set_logs
+                (week, weekday, exercise_name, performed_exercise, set_number, load, reps, note, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(week, weekday, exercise_name, set_number) DO UPDATE SET
+                performed_exercise = excluded.performed_exercise,
+                load = excluded.load,
+                reps = excluded.reps,
+                note = excluded.note,
+                updated_at = excluded.updated_at
+            """,
+            (week, weekday, exercise_name, performed_exercise, set_number, load, reps, note, now, now),
+        )
+
+
+def set_logs(week: int, weekday: str, exercise_name: str) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        return conn.execute(
+            """
+            SELECT set_number, load, reps, note, performed_exercise
+            FROM protocol_mass_set_logs
+            WHERE week = ? AND weekday = ? AND exercise_name = ?
+            ORDER BY set_number
+            """,
+            (week, weekday, exercise_name),
+        ).fetchall()
+
+
+def exercise_history(exercise_name: str) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        return conn.execute(
+            """
+            SELECT week, weekday, exercise_name, performed_exercise, set_number, load, reps, note
+            FROM protocol_mass_set_logs
+            WHERE lower(exercise_name) = lower(?) OR lower(performed_exercise) = lower(?)
+            ORDER BY week, CASE weekday
+                WHEN 'segunda-feira' THEN 1 WHEN 'terça-feira' THEN 2 WHEN 'quarta-feira' THEN 3
+                WHEN 'quinta-feira' THEN 4 WHEN 'sexta-feira' THEN 5 WHEN 'sábado' THEN 6 ELSE 7 END,
+                set_number
+            """,
+            (exercise_name, exercise_name),
+        ).fetchall()
+
+
+def logged_exercise_names() -> list[str]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT COALESCE(performed_exercise, exercise_name) AS name
+            FROM protocol_mass_set_logs
+            ORDER BY name
+            """
+        ).fetchall()
+        return [str(row["name"]) for row in rows if row["name"]]
 
 
 def week_progress(week: int) -> list[sqlite3.Row]:
