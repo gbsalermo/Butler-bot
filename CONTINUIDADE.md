@@ -2,14 +2,15 @@
 
 ## Estado atual
 
-- Desenvolvimento inicial concentrado na `main`.
+- Desenvolvimento concentrado na `main`.
 - Stack: Python, `python-telegram-bot[job-queue]`, SQLite e `python-dotenv`.
 - Execução local via polling.
 - `/start` registra o `chat_id` e abre o menu geral do Butler.
 - Scheduler proativo executa junto ao bot.
 - Grade acadêmica base carregada automaticamente.
-- Tarefas, compromissos e pendências já possuem persistência e fluxos básicos.
-- Finanças já aparece como módulo planejado no menu, sem persistência financeira por enquanto.
+- Tarefas, compromissos e pendências possuem persistência e lembretes.
+- Cotidiano agora possui lista persistente de itens faltando, metas gerais e musculação.
+- Finanças continua visível como módulo planejado, ainda sem persistência de valores.
 
 ## Menu geral
 
@@ -17,8 +18,9 @@
 - `✅ Tarefas`
 - `📅 Compromissos`
 - `📌 Pendências`
-- `💰 Finanças`
+- `🏠 Cotidiano`
 - `🗓️ Hoje`
+- `💰 Finanças`
 
 ## Acadêmico
 
@@ -45,111 +47,148 @@ Grade base:
 - Princípios de Eletrônica Analógica: terça/quinta, 08:01–09:40, PAV I Sala 104.
 - Sistemas Digitais I: segunda 08:01–09:40 Sala 11; quarta 08:01–09:40 Sala 114.
 
-### Scheduler acadêmico
+## Scheduler
 
 Implementado em `src/scheduler.py`.
 
-- verifica periodicamente os horários;
 - consulta apenas matérias ativas;
-- envia mensagem ao `chat_id` salvo aproximadamente 10 minutos antes;
-- inclui disciplina, horário e sala;
+- avisa aproximadamente 10 minutos antes das aulas;
+- também considera tarefas/compromissos/pendências com data e hora;
+- utiliza o `chat_id` persistido;
 - utiliza `BUTLER_TIMEZONE`.
 
-## Organização cotidiana
+## Tarefas, compromissos e pendências
 
 Persistência em `daily_items`, criada por `src/daily_store.py`.
 
-Tipos:
+Cada registro pode ter título, observação, data, hora, antecedência de lembrete e status.
 
-- `tarefa`
-- `compromisso`
-- `pendencia`
-
-Cada registro pode ter:
-
-- título;
-- observação;
-- data opcional;
-- hora opcional;
-- antecedência do lembrete;
-- status pendente/concluído;
-- datas de criação e conclusão.
-
-Fluxos já disponíveis:
+Fluxos atuais:
 
 1. adicionar;
 2. listar pendentes;
 3. concluir/resolver;
-4. lembrar automaticamente 10 minutos antes quando houver data e hora;
-5. `🗓️ Hoje` consolida os itens do dia.
+4. lembrar automaticamente antes quando houver data e hora.
 
-## Finanças — desenho funcional
+## 🗓️ Hoje
 
-Ainda não persistir valores nesta etapa, mas preservar esta visão para a implementação.
+A visão diária foi ampliada em `src/assistant_views.py`.
 
-### Movimentações
+Atualmente reúne:
 
-- entradas;
-- gastos/saídas;
-- categoria;
-- data;
-- descrição;
-- forma de pagamento futuramente.
+- aulas do dia em ordem de horário;
+- tarefas;
+- compromissos;
+- pendências;
+- treino de musculação correspondente ao dia da semana;
+- quantidade de itens que estão faltando em casa.
 
-### Visão mensal
+## 🏠 Cotidiano
 
-- total de entradas;
-- total de gastos;
-- saldo do mês;
-- quanto foi economizado;
-- divisão dos gastos por categoria.
+Implementado principalmente em `src/home_store.py` e `src/home_handlers.py`.
 
-### Inteligência de gastos
+### Lista persistente de itens faltando
 
-O Butler deverá comparar o comportamento atual com o histórico e produzir avisos úteis, por exemplo:
+Tabela: `grocery_items`.
 
-- gasto em alimentação acima da média histórica;
-- ritmo de gasto do mês incompatível com o orçamento disponível;
-- aumento forte em uma categoria;
-- gasto recorrente esquecido;
-- possibilidade de alcançar ou não uma meta no ritmo atual.
+Objetivo: não criar uma lista descartável de compras. O usuário vai adicionando itens conforme percebe que estão acabando/faltando, e a lista continua salva até marcar cada item como comprado.
 
-Evitar tom moralista. O papel é informar, contextualizar e ajudar na decisão.
+Fluxos:
 
-### Metas
+- `➕ Item faltando`;
+- `🛒 O que está faltando?`;
+- texto natural `O que está faltando?`;
+- `✅ Marcar comprado`.
 
-Exemplos:
+Cada item pode ter quantidade/tamanho e observação.
 
-- economizar R$ X até determinada data;
-- guardar valor mensal;
-- juntar para compra específica;
-- acompanhar progresso percentual;
-- estimar quanto falta e qual ritmo mensal necessário.
+### Metas gerais
+
+Tabela: `goals`.
+
+As metas NÃO são somente financeiras. Categorias centrais para o projeto:
+
+- água;
+- alimentação;
+- inglês;
+- programação;
+- musculação;
+- estudos;
+- financeiro;
+- outras categorias livres.
+
+Cada meta pode registrar nome, categoria, valor-alvo, unidade e periodicidade.
+
+Exemplos futuros:
+
+- 2 litros de água por dia;
+- 5 horas de inglês por semana;
+- 7 horas de programação por semana;
+- 4 treinos por semana;
+- economizar R$ 300 por mês.
+
+Nesta etapa a meta é cadastrada/listada; acompanhamento de progresso vem depois.
+
+### Musculação
+
+Tabelas:
+
+- `workout_days`;
+- `workout_exercises`.
+
+Modelo:
+
+- cada dia da semana possui um foco, como `segunda — peito`, `terça — costas e bíceps`, `quarta — perna`;
+- cada dia pode ter vários exercícios;
+- cada exercício guarda nome, carga, séries e repetições;
+- `📋 Ver rotina` mostra a divisão semanal completa;
+- a visão `🗓️ Hoje` mostra automaticamente o treino do dia.
+
+## Finanças — visão preservada
+
+Ainda não persistir valores nesta etapa.
+
+Planejado:
+
+- entradas e saídas;
+- categorias;
+- saldo mensal;
+- economia;
+- comparação histórica;
+- detecção de aumento/exagero de gastos;
+- metas financeiras integradas ao sistema geral de metas;
+- avisos de ritmo de gasto;
+- histórico mensal.
+
+O Butler deve informar e contextualizar sem tom moralista.
 
 ## Próximas funcionalidades prioritárias
 
-A prioridade atual é funcionalidade, não testes automatizados.
+Continuar priorizando funcionalidade antes de testes automatizados.
 
-1. melhorar o painel `🗓️ Hoje` para incluir também aulas do dia em ordem cronológica;
-2. permitir editar/remover tarefas, compromissos e pendências;
-3. permitir antecedência de lembrete configurável por item;
-4. adicionar adiar/soneca em lembretes;
-5. adicionar rotinas e autocuidado (água, remédio, alimentação, sono etc.);
-6. iniciar persistência financeira real;
-7. criar resumo diário e resumo semanal;
-8. posteriormente integrar horários de ônibus e outras rotinas recorrentes.
+1. editar/remover tarefas, compromissos e pendências;
+2. antecedência de lembrete configurável por item;
+3. botões de `Concluído`, `Adiar` e `Lembrar depois` nas notificações;
+4. criar rotinas recorrentes de autocuidado: água, alimentação, remédios, sono e outras;
+5. transformar metas em acompanhamento real de progresso e histórico;
+6. musculação: editar/remover exercícios, registrar execução do treino e evolução de carga;
+7. lista de faltas: categorias e histórico opcional de itens recorrentes;
+8. iniciar persistência financeira real e integrar finanças às metas;
+9. criar resumo diário automático e resumo semanal;
+10. posteriormente integrar ônibus e outras rotinas recorrentes.
 
 ## Filosofia do produto
 
-O Butler deve evoluir para um assistente que reduz carga mental. Sempre que possível ele deve:
+O Butler deve reduzir carga mental. Sempre que possível ele deve:
 
 - lembrar antes que o usuário precise conferir;
+- guardar pequenas informações persistentes do cotidiano;
 - reunir informações espalhadas em uma única visão;
-- distinguir obrigação, compromisso, pendência e rotina;
+- distinguir obrigação, compromisso, pendência, meta e rotina;
 - manter histórico quando isso trouxer contexto útil;
 - iniciar mensagens proativamente quando houver ação relevante;
 - evitar notificações inúteis ou excessivas;
-- transformar dados em orientação prática para o cotidiano.
+- transformar dados em orientação prática.
 
 ## Regra de continuidade
 
