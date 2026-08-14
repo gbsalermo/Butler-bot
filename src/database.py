@@ -24,6 +24,12 @@ def _connect() -> sqlite3.Connection:
     return connection
 
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_database() -> None:
     with _connect() as conn:
         conn.executescript(
@@ -34,6 +40,7 @@ def init_database() -> None:
                 telegram_user_id INTEGER,
                 first_name TEXT,
                 username TEXT,
+                preferred_name TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -57,6 +64,7 @@ def init_database() -> None:
             );
             """
         )
+        _ensure_column(conn, "users", "preferred_name", "TEXT")
 
 
 def upsert_user(chat_id: int, user_id: int | None, first_name: str | None, username: str | None) -> None:
@@ -76,6 +84,30 @@ def upsert_user(chat_id: int, user_id: int | None, first_name: str | None, usern
         )
 
 
+def get_user(chat_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute("SELECT * FROM users WHERE telegram_chat_id = ?", (chat_id,)).fetchone()
+
+
+def set_preferred_name(chat_id: int, preferred_name: str) -> bool:
+    value = preferred_name.strip()
+    if not value:
+        return False
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE users SET preferred_name = ?, updated_at = ? WHERE telegram_chat_id = ?",
+            (value, datetime.now().isoformat(timespec="seconds"), chat_id),
+        )
+        return cur.rowcount > 0
+
+
+def preferred_name(chat_id: int, fallback: str = "chefe") -> str:
+    row = get_user(chat_id)
+    if row and row["preferred_name"]:
+        return str(row["preferred_name"])
+    return fallback
+
+
 def add_subject(name: str, sessions: Iterable[tuple[str, str, str, str]]) -> int:
     now = datetime.now().isoformat(timespec="seconds")
     with _connect() as conn:
@@ -83,9 +115,20 @@ def add_subject(name: str, sessions: Iterable[tuple[str, str, str, str]]) -> int
         subject_id = int(cursor.lastrowid)
         conn.executemany(
             "INSERT INTO class_sessions (subject_id, weekday, start_time, end_time, location) VALUES (?, ?, ?, ?, ?)",
-            [(subject_id, weekday, start_time, end_time, location.strip()) for weekday, start_time, end_time, location in sessions],
+            [(subject_id, weekday, start_time, end_time, (location or "").strip()) for weekday, start_time, end_time, location in sessions],
         )
         return subject_id
+
+
+def upsert_subject_schedule(name: str, sessions: Iterable[tuple[str, str, str, str]]) -> int:
+    sessions_list = list(sessions)
+    existing = get_subject_by_name(name)
+    if existing:
+        replace_subject_sessions(name, sessions_list)
+        with _connect() as conn:
+            conn.execute("UPDATE subjects SET active = 1 WHERE id = ?", (existing["id"],))
+        return int(existing["id"])
+    return add_subject(name, sessions_list)
 
 
 def seed_default_schedule() -> None:
@@ -150,7 +193,7 @@ def replace_subject_sessions(name: str, sessions: Iterable[tuple[str, str, str, 
         conn.execute("DELETE FROM class_sessions WHERE subject_id = ?", (subject_id,))
         conn.executemany(
             "INSERT INTO class_sessions (subject_id, weekday, start_time, end_time, location) VALUES (?, ?, ?, ?, ?)",
-            [(subject_id, weekday, start_time, end_time, location.strip()) for weekday, start_time, end_time, location in sessions],
+            [(subject_id, weekday, start_time, end_time, (location or "").strip()) for weekday, start_time, end_time, location in sessions],
         )
     return True
 
