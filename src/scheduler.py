@@ -9,6 +9,7 @@ from telegram.ext import Application, ContextTypes
 from src.assistant_state import is_day_off, list_routines
 from src.config import BUTLER_TIMEZONE, DATABASE_PATH
 from src.daily_store import clear_snooze, list_items
+from src.personality import choose, everyday_tone
 
 WEEKDAY_NAMES = {0:"segunda-feira",1:"terça-feira",2:"quarta-feira",3:"quinta-feira",4:"sexta-feira",5:"sábado",6:"domingo"}
 WEEKDAY_SHORT = {0:"seg",1:"ter",2:"qua",3:"qui",4:"sex",5:"sab",6:"dom"}
@@ -47,17 +48,16 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
     chats = _chat_ids()
     if not chats: return
 
-    # Aulas: 10 minutos antes.
     target = now + timedelta(minutes=10)
     for row in _active_classes(WEEKDAY_NAMES[target.weekday()], target.strftime("%H:%M")):
         key = f"class:{target.date()}:{row['name']}:{row['start_time']}"
         if key in sent: continue
-        text = (f"🎓 *Aula em 10 minutos*\n\n*{row['name']}*\n🕐 {row['start_time']}–{row['end_time']}\n"
-                f"📍 {row['location'] or 'local não informado'}\n\nHora de se organizar para a aula.")
+        opener = choose("class_reminder", everyday_tone())
+        text = (f"🎓 *Aula em 10 minutos*\n\n{opener}\n\n*{row['name']}*\n🕐 {row['start_time']}–{row['end_time']}\n"
+                f"📍 {row['location'] or 'local não informado'}")
         for chat in chats: await context.bot.send_message(chat_id=chat, text=text, parse_mode="Markdown")
         sent.add(key)
 
-    # Tarefas, compromissos e pendências.
     for item in list_items(only_pending=True):
         should_send = False
         reason = "normal"
@@ -76,7 +76,8 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
         if key in sent: continue
         icons = {"tarefa":"✅","compromisso":"📅","pendencia":"📌"}
         labels = {"tarefa":"Tarefa","compromisso":"Compromisso","pendencia":"Pendência"}
-        text = f"{icons.get(item['kind'],'🔔')} *{labels.get(item['kind'],'Lembrete')}*\n\n*{item['title']}*"
+        opener = choose("task_reminder", everyday_tone())
+        text = f"{icons.get(item['kind'],'🔔')} *{labels.get(item['kind'],'Lembrete')}*\n\n{opener}\n\n*{item['title']}*"
         if item["due_time"]: text += f"\n🕐 {item['due_time']}"
         if item["details"]: text += f"\n📝 {item['details']}"
         keyboard = InlineKeyboardMarkup([
@@ -86,7 +87,6 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
         for chat in chats: await context.bot.send_message(chat_id=chat, text=text, parse_mode="Markdown", reply_markup=keyboard)
         sent.add(key)
 
-    # Rotinas e autocuidado.
     for routine in list_routines():
         if not routine["time_hhmm"]: continue
         if not _routine_matches(routine["weekdays"], WEEKDAY_SHORT[now.weekday()], WEEKDAY_NAMES[now.weekday()]): continue
@@ -97,7 +97,8 @@ async def proactive_tick(context: ContextTypes.DEFAULT_TYPE) -> None:
         if reminder_at != now: continue
         key = f"routine:{routine['id']}:{now.date()}"
         if key in sent: continue
-        text = f"🧘 *Um cuidado rápido*\n\n*{routine['name']}*\nCategoria: {routine['category']}"
+        opener = choose("routine_reminder", everyday_tone())
+        text = f"🧘 *Um cuidado rápido*\n\n{opener}\n\n*{routine['name']}*\nCategoria: {routine['category']}"
         for chat in chats: await context.bot.send_message(chat_id=chat, text=text, parse_mode="Markdown")
         sent.add(key)
 
