@@ -1,18 +1,20 @@
 # Continuidade do desenvolvimento
 
-## Estado atual
+## Estado ao encerrar o dia
 
 - Desenvolvimento concentrado na `main`.
 - Stack: Python, `python-telegram-bot[job-queue]`, SQLite e `python-dotenv`.
 - Execução local via polling.
-- `/start` registra o `chat_id` e abre o menu geral do Butler.
-- Scheduler proativo executa junto ao bot.
-- Grade acadêmica base carregada automaticamente.
-- Tarefas, compromissos e pendências possuem persistência e lembretes.
-- Cotidiano agora possui lista persistente de itens faltando, metas gerais e musculação.
-- Finanças continua visível como módulo planejado, ainda sem persistência de valores.
+- Butler já possui scheduler proativo e `chat_id` persistido.
+- Prioridade atual continua sendo funcionalidade antes de suíte de testes.
 
-## Menu geral
+## Menu principal
+
+O primeiro item é propositalmente:
+
+- `🌙 Day-off`
+
+Depois:
 
 - `📚 Matérias`
 - `✅ Tarefas`
@@ -22,91 +24,101 @@
 - `🗓️ Hoje`
 - `💰 Finanças`
 
+## Day-off
+
+Implementado em `src/assistant_state.py` + `src/wellbeing_handlers.py`.
+
+Objetivo: representar um dia de folga real do usuário e do Butler, inclusive quando o usuário não estiver bem ou simplesmente não quiser pensar em obrigações.
+
+Regras:
+
+- estado persistido em `assistant_state`;
+- scheduler consulta esse estado antes de qualquer lembrete;
+- em Day-off não há lembretes proativos de aulas, tarefas ou rotinas;
+- respostas ficam mínimas e sem cobrança;
+- o estado sobrevive a reinício do bot;
+- frases de retorno:
+  - `Butler, preciso de você!`
+  - `Chamar, Butler!`
+
+A sensação desejada é de chamar novamente uma pessoa que estava deixando o usuário descansar.
+
 ## Acadêmico
 
 Gerenciamento de matérias:
 
-- `➕ Adicionar`
-- `🗑️ Remover`
-- `⏸️ Trancar`
-- `✏️ Editar`
+- adicionar;
+- remover;
+- trancar;
+- editar.
 
-Regras:
+Regras preservadas:
 
 - remover = exclusão definitiva;
-- trancar = manter histórico com `active = 0`;
-- matérias trancadas são ignoradas pelo scheduler;
-- códigos SIGAA são traduzidos em `src/sigaa_schedule.py`;
-- horários especiais podem ser cadastrados manualmente.
-
-Grade base:
-
-- Álgebra Linear I: terça/quinta, 10:00–11:40, PAV III Sala 10.
-- Física II: segunda/quarta, 10:00–11:40, PAV III Sala 07.
-- Laboratório de Sistemas Digitais I: segunda, 14:00–16:00, PAV Eng. Sala D6.
-- Princípios de Eletrônica Analógica: terça/quinta, 08:01–09:40, PAV I Sala 104.
-- Sistemas Digitais I: segunda 08:01–09:40 Sala 11; quarta 08:01–09:40 Sala 114.
-
-## Scheduler
-
-Implementado em `src/scheduler.py`.
-
-- consulta apenas matérias ativas;
-- avisa aproximadamente 10 minutos antes das aulas;
-- também considera tarefas/compromissos/pendências com data e hora;
-- utiliza o `chat_id` persistido;
-- utiliza `BUTLER_TIMEZONE`.
+- trancar = histórico com `active = 0`;
+- matérias trancadas não geram lembretes;
+- códigos SIGAA continuam traduzidos automaticamente;
+- Laboratório de Sistemas Digitais I permanece manualmente na segunda, 14:00–16:00.
 
 ## Tarefas, compromissos e pendências
 
-Persistência em `daily_items`, criada por `src/daily_store.py`.
+Persistência em `daily_items`.
 
-Cada registro pode ter título, observação, data, hora, antecedência de lembrete e status.
+A etapa antes pendente foi concluída:
 
-Fluxos atuais:
+- adicionar;
+- listar;
+- concluir/resolver;
+- editar;
+- remover;
+- escolher antecedência do lembrete por item;
+- adiar um lembrete;
+- concluir diretamente pelo lembrete.
 
-1. adicionar;
-2. listar pendentes;
-3. concluir/resolver;
-4. lembrar automaticamente antes quando houver data e hora.
+### Lembretes interativos
 
-## 🗓️ Hoje
+Quando um item chega, o Telegram recebe botões:
 
-A visão diária foi ampliada em `src/assistant_views.py`.
+- `✅ Concluir`
+- `⏰ +10 min`
+- `⏰ +30 min`
 
-Atualmente reúne:
+O adiamento usa `snoozed_until` no SQLite.
 
-- aulas do dia em ordem de horário;
-- tarefas;
-- compromissos;
-- pendências;
-- treino de musculação correspondente ao dia da semana;
-- quantidade de itens que estão faltando em casa.
+## Scheduler
+
+`src/scheduler.py` agora trata:
+
+1. aulas ativas;
+2. tarefas, compromissos e pendências;
+3. itens adiados;
+4. rotinas/autocuidado;
+5. Day-off global.
+
+Em Day-off, o scheduler retorna imediatamente sem notificar.
 
 ## 🏠 Cotidiano
 
-Implementado principalmente em `src/home_store.py` e `src/home_handlers.py`.
-
 ### Lista persistente de itens faltando
 
-Tabela: `grocery_items`.
-
-Objetivo: não criar uma lista descartável de compras. O usuário vai adicionando itens conforme percebe que estão acabando/faltando, e a lista continua salva até marcar cada item como comprado.
+Continua implementada em `grocery_items`.
 
 Fluxos:
 
-- `➕ Item faltando`;
-- `🛒 O que está faltando?`;
-- texto natural `O que está faltando?`;
-- `✅ Marcar comprado`.
-
-Cada item pode ter quantidade/tamanho e observação.
+- adicionar item faltando;
+- consultar por botão;
+- perguntar naturalmente `O que está faltando?`;
+- marcar comprado.
 
 ### Metas gerais
 
-Tabela: `goals`.
+Tabela base: `goals`.
 
-As metas NÃO são somente financeiras. Categorias centrais para o projeto:
+Nova tabela: `goal_progress`.
+
+Agora é possível registrar progresso numérico das metas e consultar progresso acumulado.
+
+Categorias centrais:
 
 - água;
 - alimentação;
@@ -115,84 +127,119 @@ As metas NÃO são somente financeiras. Categorias centrais para o projeto:
 - musculação;
 - estudos;
 - financeiro;
-- outras categorias livres.
+- outras livres.
 
-Cada meta pode registrar nome, categoria, valor-alvo, unidade e periodicidade.
+Observação para evolução futura: hoje o progresso é acumulado; depois deverá considerar corretamente a periodicidade (`dia`, `semana`, `mês`) e histórico por período.
 
-Exemplos futuros:
+### 🧘 Rotinas e autocuidado
 
-- 2 litros de água por dia;
-- 5 horas de inglês por semana;
-- 7 horas de programação por semana;
-- 4 treinos por semana;
-- economizar R$ 300 por mês.
+Novas tabelas:
 
-Nesta etapa a meta é cadastrada/listada; acompanhamento de progresso vem depois.
+- `routines`;
+- `routine_logs`.
 
-### Musculação
+Cada rotina pode ter:
 
-Tabelas:
+- nome;
+- categoria;
+- horário;
+- dias de recorrência;
+- antecedência de lembrete;
+- status ativo.
 
-- `workout_days`;
-- `workout_exercises`.
+Exemplos:
 
-Modelo:
+- beber água;
+- tomar remédio;
+- refeição;
+- horário de dormir;
+- inglês;
+- programação;
+- outros cuidados pessoais.
 
-- cada dia da semana possui um foco, como `segunda — peito`, `terça — costas e bíceps`, `quarta — perna`;
-- cada dia pode ter vários exercícios;
-- cada exercício guarda nome, carga, séries e repetições;
-- `📋 Ver rotina` mostra a divisão semanal completa;
-- a visão `🗓️ Hoje` mostra automaticamente o treino do dia.
+Também é possível registrar que uma rotina foi cumprida no dia.
 
-## Finanças — visão preservada
+### 🏋️ Musculação
 
-Ainda não persistir valores nesta etapa.
+Permanece com:
 
-Planejado:
+- divisão por dia da semana;
+- foco muscular;
+- exercícios;
+- carga;
+- séries;
+- repetições;
+- exibição automática do treino em `🗓️ Hoje`.
 
-- entradas e saídas;
+## 🗓️ Hoje
+
+`src/assistant_views.py` reúne:
+
+- aulas;
+- tarefas;
+- compromissos;
+- pendências;
+- musculação do dia;
+- quantidade de itens faltando em casa.
+
+## Finanças
+
+Continua propositalmente sem persistência real nesta etapa.
+
+Direção preservada:
+
+- entradas/saídas;
 - categorias;
-- saldo mensal;
-- economia;
+- saldo do mês;
 - comparação histórica;
-- detecção de aumento/exagero de gastos;
-- metas financeiras integradas ao sistema geral de metas;
-- avisos de ritmo de gasto;
-- histórico mensal.
+- detecção de aumento/exagero;
+- economia;
+- metas financeiras integradas às metas gerais;
+- alertas de ritmo de gasto.
 
-O Butler deve informar e contextualizar sem tom moralista.
+## Arquivos principais novos/alterados nesta etapa
 
-## Próximas funcionalidades prioritárias
+- `src/assistant_state.py`
+- `src/wellbeing_handlers.py`
+- `src/daily_store.py`
+- `src/lifestyle_handlers.py`
+- `src/scheduler.py`
+- `src/home_menu.py`
+- `src/main.py`
+- `README.md`
 
-Continuar priorizando funcionalidade antes de testes automatizados.
+## Próxima retomada sugerida
 
-1. editar/remover tarefas, compromissos e pendências;
-2. antecedência de lembrete configurável por item;
-3. botões de `Concluído`, `Adiar` e `Lembrar depois` nas notificações;
-4. criar rotinas recorrentes de autocuidado: água, alimentação, remédios, sono e outras;
-5. transformar metas em acompanhamento real de progresso e histórico;
-6. musculação: editar/remover exercícios, registrar execução do treino e evolução de carga;
-7. lista de faltas: categorias e histórico opcional de itens recorrentes;
-8. iniciar persistência financeira real e integrar finanças às metas;
-9. criar resumo diário automático e resumo semanal;
-10. posteriormente integrar ônibus e outras rotinas recorrentes.
+Ao voltar ao desenvolvimento, não começar por testes ainda. Priorizar:
+
+1. musculação: editar/remover exercícios e registrar execução/evolução de carga;
+2. metas: progresso por período real (dia/semana/mês), streak e histórico;
+3. rotinas: editar/remover, mais de um horário por rotina e confirmação direto no lembrete;
+4. resumo diário automático e resumo semanal;
+5. persistência financeira real;
+6. inteligência de gastos e comparação histórica;
+7. integração futura com ônibus e outras rotinas recorrentes;
+8. só depois consolidar testes automatizados e preparar hospedagem 24/7.
 
 ## Filosofia do produto
 
-O Butler deve reduzir carga mental. Sempre que possível ele deve:
+O Butler deve parecer um assistente presente, não um formulário com comandos.
 
+Princípios:
+
+- reduzir carga mental;
 - lembrar antes que o usuário precise conferir;
-- guardar pequenas informações persistentes do cotidiano;
-- reunir informações espalhadas em uma única visão;
-- distinguir obrigação, compromisso, pendência, meta e rotina;
-- manter histórico quando isso trouxer contexto útil;
-- iniciar mensagens proativamente quando houver ação relevante;
-- evitar notificações inúteis ou excessivas;
-- transformar dados em orientação prática.
+- guardar pequenas informações persistentes;
+- conversar de forma natural;
+- distinguir obrigação, compromisso, pendência, meta, rotina e descanso;
+- respeitar Day-off sem culpa ou cobrança;
+- permitir que o usuário literalmente “chame o Butler” quando quiser ajuda novamente;
+- evitar notificações inúteis;
+- transformar histórico em orientação prática.
 
 ## Regra de continuidade
 
-Ao concluir uma etapa relevante:
+Ao concluir nova etapa:
 
 1. atualizar este arquivo com o estado real;
 2. atualizar o README quando funcionalidades ou execução mudarem;
