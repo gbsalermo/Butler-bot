@@ -49,15 +49,55 @@ O D1 usa um único banco com `user_id` em todas as entidades relevantes. `telegr
 
 ## Proprietário
 
-Antes do deploy, substituir em `src/settings.py`:
+Antes de ativar o webhook em produção, preencher em `src/settings.py`:
 
 ```python
-OWNER_CHAT_ID = 0
+OWNER_CHAT_ID: int | None = 123456789
 ```
 
-pelo `chat_id` numérico real do proprietário.
+com o `chat_id` numérico real do proprietário.
+
+Não existe mais placeholder numérico fingindo ser configuração válida: enquanto o valor estiver `None`, `/health` informa que o proprietário ainda não está configurado.
 
 Quando esse chat fizer `/start`, o Worker associa o perfil pessoal e semeia a grade acadêmica definida em `owner_profile.py`. Qualquer outro chat começa limpo.
+
+## Importação de grade e treino
+
+A regra de arquivos do Butler permanece simples:
+
+- PDF com texto pesquisável/selecionável;
+- `.txt`;
+- sem OCR/Tesseract;
+- imagens e PDFs escaneados precisam ser convertidos antes.
+
+Além da grade acadêmica, a versão genérica agora possui importação de **ficha de musculação** com prévia antes de gravar.
+
+Formato recomendado:
+
+```text
+SEGUNDA — Peito
+Supino reto | 4x8-10 | 40 kg
+Crucifixo | 3x12 | 12 kg
+
+TERÇA — Costas e bíceps
+Puxada frente | 4x10 | 45 kg
+Rosca direta | 3x8-10 | 20 kg
+```
+
+O parser também aceita `;` como separador e formas compactas como `Supino reto 4x8-10 40 kg`.
+
+Ao confirmar, a ficha importada substitui a rotina manual atual daquele usuário; usuários diferentes continuam isolados.
+
+O Worker terá `pypdf` como dependência para preservar a leitura de PDF textual quando o fluxo de upload for portado para o dispatcher HTTP.
+
+## Limpeza pré-deploy
+
+- usuários genéricos não recebem grade/treino pessoal;
+- não existem dados fictícios de usuário semeados no D1;
+- `OWNER_CHAT_ID` não usa valor de teste;
+- o antigo exemplo de treino não faz parte do fluxo planejado de produção;
+- **Reiniciar treinos** permanece como funcionalidade real para quem quiser zerar progresso e recomeçar;
+- limites financeiros padrão são regras funcionais, não massa de teste.
 
 ## Desenvolvimento
 
@@ -99,7 +139,7 @@ https://<worker>.workers.dev/telegram/webhook
 
 ## Scheduler
 
-`wrangler.jsonc` possui Cron Trigger de 1 minuto. `entry.py` já expõe `scheduled()`. A próxima etapa é portar as regras atuais de lembretes/resumos do JobQueue local para operações idempotentes em D1, usando `notification_log` para evitar mensagens duplicadas.
+`wrangler.jsonc` possui Cron Trigger de 1 minuto. `entry.py` já expõe `scheduled()`. As regras de lembretes/resumos do JobQueue local devem ser portadas para operações idempotentes em D1, usando `notification_log` para evitar mensagens duplicadas.
 
 ## Estado da migração
 
@@ -114,17 +154,20 @@ Já preparado:
 - perfil proprietário condicionado a `chat_id`;
 - usuários comuns limpos;
 - Cron Trigger/scheduled handler;
-- `TELEGRAM_BOT_TOKEN` como único secret obrigatório.
+- `TELEGRAM_BOT_TOKEN` como único secret obrigatório;
+- parser/importação de treino no código-base genérico;
+- dependência `pypdf` preparada para o Worker.
 
-Ainda precisa ser portado antes de produção funcional completa:
+Ainda precisa ser portado para o dispatcher HTTP antes de chamar a versão Cloudflare de funcionalmente equivalente ao rolling local:
 
 - menus/callbacks;
 - tarefas/compromissos;
-- grade e importação;
+- grade e upload de arquivo;
+- importação de treino pelo webhook;
 - linguagem natural;
 - mercado;
 - metas/streaks;
-- musculação;
+- musculação e reinício de progresso;
 - finanças;
 - personalidade comportamental;
 - lembretes;
