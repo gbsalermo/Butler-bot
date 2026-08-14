@@ -10,7 +10,65 @@
 
 ## Filosofia
 
-O Butler deve parecer um assistente presente, não um conjunto de formulários. A tela inicial deve priorizar ações rápidas e recorrentes; módulos menos urgentes ficam em `🏠 Cotidiano`.
+O Butler deve parecer um assistente presente, não um conjunto de formulários. A tela inicial prioriza ações rápidas e recorrentes; módulos menos urgentes ficam em `🏠 Cotidiano`.
+
+## 👥 Multiusuário por chat_id — etapa 0 concluída
+
+Decisão estrutural: a versão genérica é um único Butler para poucas pessoas, mas cada `chat_id` deve ter experiência e dados completamente isolados.
+
+Novo arquivo: `src/user_scope.py`.
+
+### Rolling local
+
+Na versão genérica (`python -m src.main_generic`):
+
+- `BUTLER_MULTIUSER=1` é ativado automaticamente;
+- todo update passa primeiro por `register_user_scope()`;
+- mensagens e callbacks definem o `chat_id` atual antes de qualquer regra de negócio;
+- cada chat recebe um SQLite próprio em `data/butler_generic_users/<chat_id>.db`;
+- existe um pequeno registro central `data/butler_generic_registry.db` apenas para o scheduler saber quais chats existem;
+- as tabelas do usuário são inicializadas automaticamente na primeira interação do processo.
+
+Isso isola sem reescrever toda a regra de negócio:
+
+- usuários/nome preferido;
+- matérias e horários;
+- tarefas/compromissos;
+- lista de mercado;
+- metas;
+- rotinas e logs;
+- musculação manual da versão genérica;
+- Day-off.
+
+### Scheduler multiusuário
+
+`src/scheduler.py` agora:
+
+1. obtém os chats registrados;
+2. seleciona o armazenamento daquele `chat_id`;
+3. verifica o Day-off somente daquele chat;
+4. lê aulas, tarefas e rotinas somente daquele chat;
+5. envia o lembrete exclusivamente para ele;
+6. inclui `chat_id` nas chaves internas de deduplicação.
+
+Nunca voltar ao modelo de ler um evento global e dispará-lo para todos os chats.
+
+### Butler pessoal
+
+`python -m src.main` continua usando `data/butler.db` como antes e mantém:
+
+- grade pessoal;
+- correção manual do Laboratório de Sistemas Digitais I em segunda 14:00–16:00;
+- Protocol Mass de 12 semanas;
+- histórico pessoal existente.
+
+O Protocol Mass continua exclusivo do Butler pessoal nesta etapa.
+
+### Cloudflare
+
+O isolamento por `chat_id` é regra de domínio e deve permanecer na hospedagem. O SQLite por arquivo é somente a implementação rolling local.
+
+Na migração Cloudflare, trocar a implementação de persistência por D1/armazenamento persistente, preservando a ideia de tenant por `chat_id`. Não depender do filesystem do Worker como armazenamento definitivo.
 
 ## ⚡ Menu principal orientado a ação
 
@@ -22,16 +80,16 @@ Menu principal atual:
 - `➕ Adicionar`
 - `🗓️ Hoje`
 - `🛒 Item faltando`
-- `🏋️ Musculação`
 - `📚 Matérias`
 - `🏠 Cotidiano`
+- `🏋️ Musculação`
 
 `➕ Adicionar` abre somente:
 
 - `✅ Nova tarefa`
 - `📅 Novo compromisso`
 
-Tarefas e compromissos deixaram o menu principal e passaram para Cotidiano.
+Tarefas e compromissos ficam em Cotidiano para gerenciamento completo.
 
 ### Cotidiano
 
@@ -49,7 +107,7 @@ Novo arquivo: `src/quick_access.py`.
 
 ## 📌 Pendência não é mais um tipo
 
-Decisão estrutural: `pendencia` deixou de ser uma categoria que o usuário cria.
+`pendencia` deixou de ser uma categoria criada pelo usuário.
 
 Agora:
 
@@ -58,8 +116,6 @@ Agora:
 - pendência = tarefa com data vencida e ainda não concluída.
 
 `init_daily_store()` migra registros antigos com `kind = 'pendencia'` para `kind = 'tarefa'`.
-
-Botões antigos de Pendências, caso ainda apareçam num teclado antigo do Telegram, apenas explicam a nova regra e direcionam para `➕ Adicionar` / `🗓️ Hoje`.
 
 ## 🗓️ Hoje
 
@@ -71,8 +127,6 @@ Botões antigos de Pendências, caso ainda apareçam num teclado antigo do Teleg
 - bloco `📌 Pendências — tarefas vencidas`;
 - musculação manual do dia quando cadastrada;
 - quantidade de itens faltando em casa.
-
-Pendências são calculadas automaticamente a partir de tarefas vencidas.
 
 ## ⚡ Captura rápida
 
@@ -95,8 +149,6 @@ Validações:
 - se for hoje, não aceitar horário passado ou igual ao momento atual;
 - timezone: `BUTLER_TIMEZONE`.
 
-Depois de salvar, volta para o menu principal.
-
 ### Item faltando
 
 Aceita:
@@ -106,31 +158,6 @@ Aceita:
 - `falta sal, açúcar, café`;
 - `café | 2 pacotes` para quantidade opcional.
 
-Depois de salvar, volta para o menu principal.
-
-## 🧩 Dois modos de execução
-
-### Butler pessoal
-
-`python -m src.main`
-
-- banco `data/butler.db`;
-- grade pessoal;
-- correção manual do Laboratório de Sistemas Digitais I em segunda 14:00–16:00;
-- Protocol Mass de 12 semanas e histórico de treino.
-
-### Butler genérico
-
-`python -m src.main_generic`
-
-- `.env.generic`;
-- token próprio;
-- banco `data/butler_generic.db`;
-- sem grade pessoal;
-- sem Protocol Mass;
-- pergunta no `/start` como a pessoa quer ser chamada;
-- musculação começa vazia.
-
 ## 👤 Nome preferido
 
 `src/onboarding.py` controla `/start`.
@@ -139,6 +166,8 @@ Depois de salvar, volta para o menu principal.
 - pergunta `preferred_name` quando necessário;
 - pode ser alterado em `🏠 Cotidiano → 👤 Como me chamar`;
 - respostas casuais e lembretes usam o nome preferido quando possível.
+
+Na versão genérica, esse registro vive dentro do armazenamento isolado daquele chat.
 
 ## 📥 Importação da grade
 
@@ -197,15 +226,26 @@ Personalidade: competente, informal, levemente cansada/cínica e útil. Pode pro
 - progresso semanal;
 - reinício temporário para testes.
 
+## Próxima sequência funcional
+
+Com a etapa 0 de isolamento pronta, retomar:
+
+1. personalidade baseada em comportamento real por usuário;
+2. resumo diário automático individual;
+3. resumo noturno/semanal individual;
+4. metas com streak real por usuário;
+5. finanças persistentes;
+6. linguagem natural para criar/alterar ações.
+
 ## Próximos testes
 
-1. `/menu` e conferir o novo painel de acesso rápido;
-2. `➕ Adicionar → Nova tarefa` para alguns minutos à frente;
-3. tentar horário passado e confirmar bloqueio;
-4. `🛒 Item faltando` com um e vários itens;
-5. deixar uma tarefa vencer e confirmar que aparece como `📌 Pendência` em `🗓️ Hoje`;
-6. validar versão genérica e importação da grade;
-7. depois retomar resumo diário + personalidade comportamental.
+1. testar o Butler pessoal e confirmar que os dados antigos permanecem intactos;
+2. iniciar `src.main_generic` com um chat A e cadastrar uma tarefa/item/matéria;
+3. abrir o mesmo bot em um chat B e confirmar que nasce vazio;
+4. ativar Day-off em A e confirmar que B continua normal;
+5. criar lembretes em A e B e conferir destinatários;
+6. testar callbacks `Concluir` / `+10 min` nos dois chats;
+7. só depois avançar para personalidade comportamental.
 
 ## Regra de continuidade
 
