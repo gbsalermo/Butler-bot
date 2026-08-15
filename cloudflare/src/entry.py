@@ -7,6 +7,7 @@ import app
 import runtime_guard
 from academic_intelligence import handle_message as handle_academic_message, install as install_academic_intelligence
 from academic_polish import install as install_academic_polish
+from attendance_patch import dispatch_class_attendance, handle_callback as handle_attendance_callback, handle_message as handle_attendance_message, install as install_attendance
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
@@ -37,6 +38,7 @@ install_personality_variants()
 install_reminder_policy()
 install_ux_bugfixes()
 install_task_context()
+install_attendance()
 
 
 def _optional_env(env, name):
@@ -94,6 +96,10 @@ class Default(WorkerEntrypoint):
                     "contextual_task_postpone": True,
                     "task_list_retention_hours": 24,
                     "task_list_ephemeral_numbering": True,
+                    "attendance_tracking": True,
+                    "attendance_class_prompt": True,
+                    "attendance_limit_per_subject": True,
+                    "attendance_duration_based": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -113,12 +119,16 @@ class Default(WorkerEntrypoint):
             token = self.env.TELEGRAM_BOT_TOKEN
             callback = update.get("callback_query")
             if callback:
-                await handle_context_callback(self.env.DB, token, callback)
+                handled = await handle_attendance_callback(self.env.DB, token, callback)
+                if not handled:
+                    await handle_context_callback(self.env.DB, token, callback)
                 return Response("ok")
 
             message = update.get("message") or update.get("edited_message")
             if message:
                 handled = await handle_global_navigation(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_attendance_message(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
                 if not handled:
@@ -148,6 +158,10 @@ class Default(WorkerEntrypoint):
 
     async def scheduled(self, controller, env, ctx):
         await dispatch_due_reminders(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
+        try:
+            await dispatch_class_attendance(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
+        except Exception:
+            pass
         try:
             await app.scheduled_tick(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
         except Exception:
