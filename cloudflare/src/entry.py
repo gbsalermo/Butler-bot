@@ -5,7 +5,8 @@ from workers import Response, WorkerEntrypoint
 
 import app
 import runtime_guard
-from add_intent_patch import install_add_intent_patch
+from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
+from natural_add_layer import handle_natural_add
 from performance_patch import install_performance_patches
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
@@ -14,7 +15,7 @@ from settings import OWNER_CHAT_ID
 install_performance_patches()
 install_scheduler_patches()
 install_routine_integration()
-install_add_intent_patch()
+install_conversation_layer()
 
 
 def _optional_env(env, name):
@@ -42,6 +43,9 @@ class Default(WorkerEntrypoint):
                     "fast_path": True,
                     "routine_agenda": True,
                     "natural_add_intents": True,
+                    "contextual_conversation": True,
+                    "inline_actions": True,
+                    "smart_agenda": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -59,9 +63,21 @@ class Default(WorkerEntrypoint):
                 return Response("invalid json", status=400)
 
             token = self.env.TELEGRAM_BOT_TOKEN
+            callback = update.get("callback_query")
+            if callback:
+                handled = await handle_context_callback(self.env.DB, token, callback)
+                if not handled:
+                    # Callbacks desconhecidos não devem derrubar o webhook.
+                    return Response("ok")
+                return Response("ok")
+
             message = update.get("message") or update.get("edited_message")
             if message:
-                handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
+                handled = await handle_context_message(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_natural_add(self.env.DB, token, message)
+                if not handled:
+                    handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
                 if not handled:
                     await app.handle_message(self.env.DB, token, message)
             return Response("ok")
