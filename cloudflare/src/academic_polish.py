@@ -1,3 +1,5 @@
+from datetime import date
+
 import app
 import quality_patch
 import academic_intelligence
@@ -34,7 +36,13 @@ def install():
     original_agenda = app.agenda_text
 
     async def agenda_with_exam_section(db, uid, target, include_overdue=False):
-        base = await original_agenda(db, uid, target, include_overdue)
+        # Pendência é relativa ao momento atual, não à data futura consultada.
+        # Se o usuário abre, por exemplo, a agenda da próxima segunda,
+        # uma tarefa de amanhã ainda não venceu e não deve aparecer como atraso.
+        today = app.now_local().date() if hasattr(app, "now_local") else date.today()
+        effective_overdue = bool(include_overdue and target <= today)
+
+        base = await original_agenda(db, uid, target, effective_overdue)
         exams = await _rows(db.prepare(
             "SELECT id,title,due_time,status FROM daily_items "
             "WHERE user_id=? AND due_date=? AND status!='cancelado' AND details LIKE 'exam:%' "
