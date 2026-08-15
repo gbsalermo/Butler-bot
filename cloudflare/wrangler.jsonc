@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "butler-bot",
+  "name": "salbutler-bot",
   "main": "src/entry.py",
   "compatibility_date": "2026-08-14",
   "compatibility_flags": ["python_workers"],
