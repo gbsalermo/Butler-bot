@@ -15,6 +15,7 @@ from performance_patch import install_performance_patches
 from personality_variants import install as install_personality_variants
 from quality_patch import handle_message as handle_quality_message, install as install_quality_patch
 from reference_patch import handle_reference
+from reliable_reminders import dispatch_due_reminders
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
 from settings import OWNER_CHAT_ID
@@ -76,6 +77,8 @@ class Default(WorkerEntrypoint):
                     "natural_exam_phrases": True,
                     "exam_cancel": True,
                     "exam_wizard_cancel": True,
+                    "reliable_reminders": True,
+                    "reminder_grace_minutes": 10,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -124,4 +127,10 @@ class Default(WorkerEntrypoint):
         return Response("Not found", status=404)
 
     async def scheduled(self, controller, env, ctx):
-        await app.scheduled_tick(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
+        # Lembretes críticos primeiro, isolados da cadeia geral de scheduler.
+        await dispatch_due_reminders(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
+        try:
+            await app.scheduled_tick(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
+        except Exception:
+            # Um erro em resumo/rotina/prova não deve impedir os lembretes já processados.
+            return
