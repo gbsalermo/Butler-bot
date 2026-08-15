@@ -8,8 +8,10 @@ import runtime_guard
 from academic_intelligence import handle_message as handle_academic_message, install as install_academic_intelligence
 from academic_polish import install as install_academic_polish
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
+from exam_phrase_patch import handle_message as handle_exam_phrase
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
+from personality_variants import install as install_personality_variants
 from quality_patch import handle_message as handle_quality_message, install as install_quality_patch
 from reference_patch import handle_reference
 from routine_integration import install_routine_integration
@@ -24,6 +26,7 @@ install_quality_patch()
 install_recurrence_patch()
 install_academic_intelligence()
 install_academic_polish()
+install_personality_variants()
 
 
 def _optional_env(env, name):
@@ -66,7 +69,9 @@ class Default(WorkerEntrypoint):
                     "exam_reminders_days": [7, 3, 1, 0],
                     "exam_agenda_section": True,
                     "full_routine_completion": True,
-                    "sarcasm_v2": True,
+                    "sarcasm_v3": True,
+                    "varied_reminder_personality": True,
+                    "natural_exam_phrases": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -94,6 +99,8 @@ class Default(WorkerEntrypoint):
                 handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_reference(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_exam_phrase(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_academic_message(self.env.DB, token, message)
                 # Estado ativo (rotina/tarefa em andamento) tem prioridade sobre inferência genérica.
