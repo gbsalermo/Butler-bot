@@ -5,7 +5,10 @@ from workers import Response, WorkerEntrypoint
 
 from app import handle_message, scheduled_tick
 from runtime_guard import ensure_runtime_schema, handle_pre_dispatch
+from scheduler_patch import install_scheduler_patches
 from settings import OWNER_CHAT_ID
+
+install_scheduler_patches()
 
 
 class Default(WorkerEntrypoint):
