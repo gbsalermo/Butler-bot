@@ -20,6 +20,7 @@ from reminder_policy import install as install_reminder_policy
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
 from settings import OWNER_CHAT_ID
+from ux_bugfixes import handle_global_navigation, install as install_ux_bugfixes
 
 install_performance_patches()
 install_scheduler_patches()
@@ -32,6 +33,7 @@ install_academic_polish()
 install_exam_cancel()
 install_personality_variants()
 install_reminder_policy()
+install_ux_bugfixes()
 
 
 def _optional_env(env, name):
@@ -82,6 +84,9 @@ class Default(WorkerEntrypoint):
                     "reliable_reminders": True,
                     "reminder_grace_minutes": 10,
                     "single_reminder_policy": True,
+                    "global_back_navigation": True,
+                    "workout_exercise_progress": True,
+                    "workout_auto_refresh_on_completion": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -106,7 +111,9 @@ class Default(WorkerEntrypoint):
 
             message = update.get("message") or update.get("edited_message")
             if message:
-                handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
+                handled = await handle_global_navigation(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_reference(self.env.DB, token, message)
                 if not handled:
