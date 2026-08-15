@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from workers import Response, WorkerEntrypoint
 
 from app import handle_message, scheduled_tick
+from runtime_schema import ensure_runtime_schema
 from settings import OWNER_CHAT_ID
 
 
@@ -31,6 +32,7 @@ class Default(WorkerEntrypoint):
             except Exception:
                 return Response("invalid json", status=400)
 
+            await ensure_runtime_schema(self.env.DB)
             token = self.env.TELEGRAM_BOT_TOKEN
             message = update.get("message") or update.get("edited_message")
             if message:
@@ -40,4 +42,5 @@ class Default(WorkerEntrypoint):
         return Response("Not found", status=404)
 
     async def scheduled(self, controller, env, ctx):
+        await ensure_runtime_schema(self.env.DB)
         await scheduled_tick(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
