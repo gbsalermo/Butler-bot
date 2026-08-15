@@ -9,6 +9,7 @@ from academic_intelligence import handle_message as handle_academic_message, ins
 from academic_polish import install as install_academic_polish
 from attendance_patch import dispatch_class_attendance, handle_message as handle_attendance_message, install as install_attendance
 from attendance_enhancement import ensure_schema as ensure_attendance_schema, handle_callback as handle_attendance_callback, install as install_attendance_enhancement
+from attendance_management import handle_message as handle_attendance_management, install as install_attendance_management
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
@@ -42,6 +43,7 @@ install_ux_bugfixes()
 install_task_context()
 install_attendance()
 install_attendance_enhancement()
+install_attendance_management()
 install_task_emoji_patch()
 
 
@@ -108,6 +110,9 @@ class Default(WorkerEntrypoint):
                     "attendance_schema_guard": True,
                     "attendance_humor_thresholds": [30, 50, 75, 100],
                     "attendance_lost_when_over_limit": True,
+                    "attendance_edit_limit": True,
+                    "attendance_delete_absence": True,
+                    "attendance_delete_confirmation": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -137,6 +142,8 @@ class Default(WorkerEntrypoint):
                 handled = await handle_global_navigation(self.env.DB, token, message)
                 if not handled:
                     await ensure_attendance_schema(self.env.DB)
+                    handled = await handle_attendance_management(self.env.DB, token, message)
+                if not handled:
                     handled = await handle_attendance_message(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
