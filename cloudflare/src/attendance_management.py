@@ -43,23 +43,25 @@ def _absence_label(row, index=None):
     prefix = f"{index}. " if index is not None else ""
     date_value = attendance._row(row, "class_date") or ""
     date_text = f"{date_value[8:10]}/{date_value[5:7]}/{date_value[:4]}" if len(date_value) >= 10 else date_value
+    count = int(attendance._row(row, "absence_count", 1) or 1)
+    unit = "falta" if count == 1 else "faltas"
     return (
         f"{prefix}{attendance._row(row,'name')} — {date_text} "
         f"{attendance._row(row,'start_time')}–{attendance._row(row,'end_time')} "
-        f"(+{attendance._row(row,'absence_count')} falta(s))"
+        f"({count} {unit})"
     )
 
 
 async def _show_delete_list(db, token, chat_id, uid, rows):
     if not rows:
-        await send_message(token, chat_id, "🗑️ Não há faltas registradas para excluir. Pela primeira vez, ausência de falta é uma boa notícia.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
+        await send_message(token, chat_id, "🗑️ Não há aulas faltadas registradas para excluir. Pela primeira vez, ausência de falta é uma boa notícia.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
         return
     ids = [int(attendance._row(r, "id")) for r in rows]
     await app.set_state(db, uid, "attendance_delete_choose", {"absence_ids": ids})
-    out = ["🗑️ Qual falta você quer excluir?"]
+    out = ["🗑️ Qual aula faltada você quer remover do histórico?"]
     for i, row in enumerate(rows, 1):
         out.append(f"• {_absence_label(row, i)}")
-    out.append("\nManda o número. Nada será apagado antes de eu confirmar com você.")
+    out.append("\nCada item representa uma aula inteira. Se a aula durou 2h, remover esse registro desconta 2 faltas.\nManda o número; nada será apagado antes da confirmação.")
     buttons = [[str(i)] for i in range(1, min(len(rows), 10) + 1)]
     buttons.append(["❌ Cancelar ação"])
     await send_message(token, chat_id, "\n".join(out), reply_markup=_kb(buttons))
@@ -85,7 +87,7 @@ async def handle_message(db, token, message):
     if state == "attendance_delete_choose":
         if n in {"cancelar", "cancelar acao"}:
             await app.clear_state(db, uid)
-            await send_message(token, chat_id, "Certo. Nenhuma falta foi mexida.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
+            await send_message(token, chat_id, "Certo. Nenhuma aula faltada foi mexida.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
             return True
         if not re.fullmatch(r"\d{1,2}", n):
             await send_message(token, chat_id, "Escolha pelo número da lista ou cancele.")
@@ -102,13 +104,17 @@ async def handle_message(db, token, message):
         """).bind(ids[idx], uid).first()
         if not row:
             await app.clear_state(db, uid)
-            await send_message(token, chat_id, "Essa falta já não existe mais.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
+            await send_message(token, chat_id, "Esse registro de aula faltada já não existe mais.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
             return True
+        count = int(attendance._row(row, "absence_count", 1) or 1)
+        unit = "falta" if count == 1 else "faltas"
         await app.set_state(db, uid, "attendance_delete_confirm", {"absence_id": int(attendance._row(row, "id"))})
         await send_message(
             token,
             chat_id,
-            "⚠️ Confirma excluir esta falta?\n\n" + _absence_label(row) + "\n\nEla deixará de contar no total da matéria.",
+            "⚠️ Confirma remover esta aula faltada?\n\n"
+            + _absence_label(row)
+            + f"\n\nAo confirmar, esse bloco inteiro será removido e {count} {unit} deixarão de contar no total da matéria.",
             reply_markup=_kb([["✅ Confirmar exclusão"], ["❌ Cancelar ação"]]),
         )
         return True
@@ -116,7 +122,7 @@ async def handle_message(db, token, message):
     if state == "attendance_delete_confirm":
         if n in {"cancelar", "cancelar acao", "nao", "não"}:
             await app.clear_state(db, uid)
-            await send_message(token, chat_id, "Cancelado. A falta continua onde estava.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
+            await send_message(token, chat_id, "Cancelado. A aula faltada continua contabilizada.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
             return True
         if text != "✅ Confirmar exclusão" and n not in {"confirmar exclusao", "confirmar", "sim", "excluir"}:
             await send_message(token, chat_id, "Confirme a exclusão ou cancele.")
@@ -129,15 +135,17 @@ async def handle_message(db, token, message):
         """).bind(absence_id, uid).first()
         if not row:
             await app.clear_state(db, uid)
-            await send_message(token, chat_id, "Essa falta já tinha sido removida.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
+            await send_message(token, chat_id, "Esse registro já tinha sido removido.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
             return True
+        removed = int(attendance._row(row, "absence_count", 1) or 1)
         await db.prepare("DELETE FROM subject_absences WHERE id=? AND user_id=?").bind(absence_id, uid).run()
         total = await attendance._total_absences(db, uid, int(attendance._row(row, "subject_id")))
+        unit = "falta" if removed == 1 else "faltas"
         await app.clear_state(db, uid)
         await send_message(
             token,
             chat_id,
-            f"✅ Falta removida de {attendance._row(row,'name')}: -{attendance._row(row,'absence_count')}. Total agora: {total}.\nProfessor perdoou, sistema também. A burocracia perdeu uma. 😌",
+            f"✅ Aula faltada removida de {attendance._row(row,'name')}: -{removed} {unit}. Total agora: {total}.\nProfessor perdoou, sistema também. A burocracia perdeu uma. 😌",
             reply_markup=_kb(MANAGE_ATTENDANCE_KB),
         )
         return True
@@ -186,17 +194,17 @@ async def handle_message(db, token, message):
         await send_message(token, chat_id, "✏️ De qual matéria você quer alterar o limite?", reply_markup=_kb(await attendance._subject_keyboard(db, uid)))
         return True
 
-    if text == "🗑️ Excluir falta" or n in {"excluir falta", "remover falta", "apagar falta", "corrigir falta"}:
+    if text == "🗑️ Excluir falta" or n in {"excluir falta", "remover falta", "apagar falta", "corrigir falta", "excluir aula faltada", "remover aula faltada"}:
         await _show_delete_list(db, token, chat_id, uid, await _recent_absences(db, uid))
         return True
 
-    m = re.search(r"(?:excluir|remove|remover|apaga|apagar|tirar|tira|retirar|retira|corrigir)\s+(?:a\s+)?falta\s+(?:de|em)\s+(.+)$", n)
+    m = re.search(r"(?:excluir|remove|remover|apaga|apagar|tirar|tira|retirar|retira|corrigir)\s+(?:a\s+)?(?:falta|aula faltada)\s+(?:de|em)\s+(.+)$", n)
     if not m:
-        m = re.search(r"(?:professor|professora).*?(?:tirou|retirou|removeu|perdoou).*?falta\s+(?:de|em)\s+(.+)$", n)
+        m = re.search(r"(?:professor|professora).*?(?:tirou|retirou|removeu|perdoou).*?(?:falta|aula faltada)\s+(?:de|em)\s+(.+)$", n)
     if m:
         subject, _ = await _resolve_subject(db, uid, m.group(1))
         if not subject:
-            await send_message(token, chat_id, "Não consegui identificar a matéria dessa falta.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
+            await send_message(token, chat_id, "Não consegui identificar a matéria dessa aula faltada.", reply_markup=_kb(MANAGE_ATTENDANCE_KB))
             return True
         rows = await _recent_absences(db, uid, int(attendance._row(subject, "id")))
         await _show_delete_list(db, token, chat_id, uid, rows)
