@@ -6,7 +6,6 @@ from workers import Response, WorkerEntrypoint
 import app
 import runtime_guard
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
-from natural_add_layer import handle_natural_add
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
 from quality_patch import handle_message as handle_quality_message, install as install_quality_patch
@@ -92,8 +91,6 @@ class Default(WorkerEntrypoint):
                     handled = await handle_quality_message(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_context_message(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_natural_add(self.env.DB, token, message)
                 if not handled:
                     await app.handle_message(self.env.DB, token, message)
                     await remember_after_message(self.env.DB, message)
