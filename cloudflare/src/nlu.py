@@ -50,6 +50,18 @@ def clean_title(text,kind):
 def interpret(text,today=None):
     raw=strip_butler(text);n=normalize(raw);today=today or date.today()
     if not n:return None
+
+    # Intenções explícitas de abrir um fluxo de cadastro, mesmo sem conteúdo ainda.
+    add_prefix=r"(?:quero|gostaria de|preciso|pode|da pra|dá pra)?\s*(?:adicionar|adiciona|criar|cria|cadastrar|cadastra|colocar|coloca|botar|bota|anotar|anota|marcar|marca)"
+    if re.match(rf"^{add_prefix}\s+(?:uma?\s+)?tarefa\b\s*$",n):return("open_add",{"kind":"tarefa"})
+    if re.match(rf"^{add_prefix}\s+(?:um\s+)?compromisso\b\s*$",n):return("open_add",{"kind":"compromisso"})
+    if re.match(rf"^{add_prefix}\s+(?:uma?\s+)?rotina\b\s*$",n):return("open_add",{"kind":"rotina"})
+    if re.match(rf"^{add_prefix}\s+(?:um\s+)?(?:item|item faltando|item de mercado|item da feira|item de compras)\b\s*$",n):return("open_add",{"kind":"mercado"})
+    if re.match(r"^(?:quero|preciso|gostaria de)\s+(?:uma?\s+)?tarefa\b\s*$",n):return("open_add",{"kind":"tarefa"})
+    if re.match(r"^(?:quero|preciso|gostaria de)\s+(?:um\s+)?compromisso\b\s*$",n):return("open_add",{"kind":"compromisso"})
+    if re.match(r"^(?:quero|preciso|gostaria de)\s+(?:uma?\s+)?rotina\b\s*$",n):return("open_add",{"kind":"rotina"})
+    if re.match(r"^(?:quero|preciso|gostaria de)\s+(?:um\s+)?item\b\s*$",n):return("open_add",{"kind":"mercado"})
+
     if any(x in n for x in ("o que falta em casa","o que ta faltando em casa","o que esta faltando em casa","quais itens faltam")) or re.match(r"^(?:mostra|lista|listar).*(?:mercado|feira|compras)",n):return("grocery_query",{})
     if any(x in n for x in ("o que ficou pendente","quais pendencias","tarefas atrasadas","o que esta atrasado")):return("overdue_query",{})
     if any(x in n for x in ("quanto gastei","relatorio de gastos","relatorio financeiro","como estao minhas financas","quanto sobrou","quanto tenho guardado","dinheiro guardado")):return("finance_report",{})
@@ -63,6 +75,11 @@ def interpret(text,today=None):
     if m:
         parts=[x.strip() for x in re.split(r",|\s+e\s+",remove_temporal(m.group(1))) if x.strip()];known={normalize(x) for x in GROCERY_TERMS}
         if parts and all(normalize(x) in known for x in parts):return("grocery_add",{"items":parts})
+    m=re.match(r"^(?:quero|pode|da pra|dá pra)?\s*(?:adicionar|adiciona|colocar|coloca|botar|bota|anotar|anota)\s+(.+)$",raw,flags=re.I)
+    if m:
+        value=remove_temporal(m.group(1)).strip(" ,.-")
+        parts=[x.strip() for x in re.split(r",|\s+e\s+",value) if x.strip()];known={normalize(x) for x in GROCERY_TERMS}
+        if parts and all(normalize(x) in known for x in parts):return("grocery_add",{"items":parts})
     if any(x in n for x in ("nao vou treinar","nao consigo treinar","nao vai dar pra treinar","nao vai dar para treinar","nao vou pra academia","nao vou para academia")):
         m=re.search(r"\bporque\s+(.+)$",raw,flags=re.I);return("workout_skip",{"reason":m.group(1).strip() if m else None})
     if any(x in n for x in ("vou me atrasar","vou chegar atrasado","estou atrasado","to atrasado")):
@@ -74,7 +91,6 @@ def interpret(text,today=None):
     m=re.search(r"\b(?:recebi|entrou|ganhei)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:reais?)?\s*(?:de|da|do)?\s*(.*)$",n)
     if m:return("finance_add",{"kind":"entrada","amount":float(m.group(1).replace(",",".")),"description":m.group(2).strip() or None})
     d,t=parse_date(raw,today),parse_time(raw)
-    # Lembrete em ordem natural: "me lembra hoje às 22:33 de que eu tô bem".
     m=re.match(r"^(?:me\s+)?(?:lembra|lembre)(?:-me)?\b(.*)$",raw,flags=re.I)
     if m:
         body=m.group(1).strip();title=None
