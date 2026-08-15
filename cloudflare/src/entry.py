@@ -9,6 +9,7 @@ from conversation_layer import handle_callback as handle_context_callback, handl
 from natural_add_layer import handle_natural_add
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
+from reference_patch import handle_reference
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
 from settings import OWNER_CHAT_ID
@@ -50,6 +51,7 @@ class Default(WorkerEntrypoint):
                     "smart_agenda": True,
                     "flexible_routines": True,
                     "simple_reminders": True,
+                    "natural_references": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -75,6 +77,8 @@ class Default(WorkerEntrypoint):
             message = update.get("message") or update.get("edited_message")
             if message:
                 handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_reference(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_context_message(self.env.DB, token, message)
                 if not handled:
