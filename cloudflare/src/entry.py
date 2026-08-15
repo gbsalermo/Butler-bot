@@ -10,6 +10,7 @@ from academic_polish import install as install_academic_polish
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
+from grocery_phrase_patch import handle_message as handle_grocery_phrase
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
 from personality_variants import install as install_personality_variants
@@ -70,6 +71,7 @@ class Default(WorkerEntrypoint):
                     "task_reminder_minutes": 0,
                     "appointment_reminder_minutes": 5,
                     "informal_grocery": True,
+                    "informal_grocery_suffix": True,
                     "late_routine_confirmation": True,
                     "natural_agenda_queries": True,
                     "academic_exams": True,
@@ -124,6 +126,8 @@ class Default(WorkerEntrypoint):
                     handled = await handle_academic_message(self.env.DB, token, message)
                 if not handled:
                     handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_grocery_phrase(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_quality_message(self.env.DB, token, message)
                 if not handled:
