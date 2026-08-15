@@ -16,6 +16,7 @@ from personality_variants import install as install_personality_variants
 from quality_patch import handle_message as handle_quality_message, install as install_quality_patch
 from reference_patch import handle_reference
 from reliable_reminders import dispatch_due_reminders
+from reminder_policy import install as install_reminder_policy
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
 from settings import OWNER_CHAT_ID
@@ -30,6 +31,7 @@ install_academic_intelligence()
 install_academic_polish()
 install_exam_cancel()
 install_personality_variants()
+install_reminder_policy()
 
 
 def _optional_env(env, name):
@@ -63,7 +65,7 @@ class Default(WorkerEntrypoint):
                     "flexible_routines": True,
                     "simple_reminders": True,
                     "natural_references": True,
-                    "task_reminder_minutes": 10,
+                    "task_reminder_minutes": 0,
                     "appointment_reminder_minutes": 5,
                     "informal_grocery": True,
                     "late_routine_confirmation": True,
@@ -79,6 +81,7 @@ class Default(WorkerEntrypoint):
                     "exam_wizard_cancel": True,
                     "reliable_reminders": True,
                     "reminder_grace_minutes": 10,
+                    "single_reminder_policy": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -112,7 +115,6 @@ class Default(WorkerEntrypoint):
                     handled = await handle_exam_phrase(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_academic_message(self.env.DB, token, message)
-                # Estado ativo (rotina/tarefa em andamento) tem prioridade sobre inferência genérica.
                 if not handled:
                     handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
                 if not handled:
@@ -127,10 +129,8 @@ class Default(WorkerEntrypoint):
         return Response("Not found", status=404)
 
     async def scheduled(self, controller, env, ctx):
-        # Lembretes críticos primeiro, isolados da cadeia geral de scheduler.
         await dispatch_due_reminders(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
         try:
             await app.scheduled_tick(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
         except Exception:
-            # Um erro em resumo/rotina/prova não deve impedir os lembretes já processados.
             return
