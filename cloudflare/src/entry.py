@@ -6,6 +6,7 @@ from workers import Response, WorkerEntrypoint
 import app
 import runtime_guard
 from academic_intelligence import handle_message as handle_academic_message, install as install_academic_intelligence
+from academic_polish import install as install_academic_polish
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
@@ -22,6 +23,7 @@ install_conversation_layer()
 install_quality_patch()
 install_recurrence_patch()
 install_academic_intelligence()
+install_academic_polish()
 
 
 def _optional_env(env, name):
@@ -62,6 +64,7 @@ class Default(WorkerEntrypoint):
                     "natural_agenda_queries": True,
                     "academic_exams": True,
                     "exam_reminders_days": [7, 3, 1, 0],
+                    "exam_agenda_section": True,
                     "full_routine_completion": True,
                     "sarcasm_v2": True,
                 }),
