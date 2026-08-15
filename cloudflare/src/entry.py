@@ -21,6 +21,7 @@ from reminder_policy import install as install_reminder_policy
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
 from settings import OWNER_CHAT_ID
+from task_context_patch import handle_message as handle_task_context, install as install_task_context
 from ux_bugfixes import handle_global_navigation, install as install_ux_bugfixes
 
 install_performance_patches()
@@ -35,6 +36,7 @@ install_exam_cancel()
 install_personality_variants()
 install_reminder_policy()
 install_ux_bugfixes()
+install_task_context()
 
 
 def _optional_env(env, name):
@@ -89,6 +91,9 @@ class Default(WorkerEntrypoint):
                     "global_back_navigation": True,
                     "workout_exercise_progress": True,
                     "workout_auto_refresh_on_completion": True,
+                    "contextual_task_postpone": True,
+                    "task_list_retention_hours": 24,
+                    "task_list_ephemeral_numbering": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -124,6 +129,8 @@ class Default(WorkerEntrypoint):
                     handled = await handle_exam_phrase(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_academic_message(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_task_context(self.env.DB, token, message)
                 if not handled:
                     handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
                 if not handled:
