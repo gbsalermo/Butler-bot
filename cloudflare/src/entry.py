@@ -5,6 +5,7 @@ from workers import Response, WorkerEntrypoint
 
 import app
 import runtime_guard
+from academic_intelligence import handle_message as handle_academic_message, install as install_academic_intelligence
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
@@ -20,6 +21,7 @@ install_routine_integration()
 install_conversation_layer()
 install_quality_patch()
 install_recurrence_patch()
+install_academic_intelligence()
 
 
 def _optional_env(env, name):
@@ -57,6 +59,11 @@ class Default(WorkerEntrypoint):
                     "appointment_reminder_minutes": 5,
                     "informal_grocery": True,
                     "late_routine_confirmation": True,
+                    "natural_agenda_queries": True,
+                    "academic_exams": True,
+                    "exam_reminders_days": [7, 3, 1, 0],
+                    "full_routine_completion": True,
+                    "sarcasm_v2": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -84,6 +91,8 @@ class Default(WorkerEntrypoint):
                 handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_reference(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_academic_message(self.env.DB, token, message)
                 # Estado ativo (rotina/tarefa em andamento) tem prioridade sobre inferência genérica.
                 if not handled:
                     handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
