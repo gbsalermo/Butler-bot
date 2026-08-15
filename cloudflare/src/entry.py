@@ -7,7 +7,8 @@ import app
 import runtime_guard
 from academic_intelligence import handle_message as handle_academic_message, install as install_academic_intelligence
 from academic_polish import install as install_academic_polish
-from attendance_patch import dispatch_class_attendance, handle_callback as handle_attendance_callback, handle_message as handle_attendance_message, install as install_attendance
+from attendance_patch import dispatch_class_attendance, handle_message as handle_attendance_message, install as install_attendance
+from attendance_enhancement import ensure_schema as ensure_attendance_schema, handle_callback as handle_attendance_callback, install as install_attendance_enhancement
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
@@ -23,6 +24,7 @@ from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
 from settings import OWNER_CHAT_ID
 from task_context_patch import handle_message as handle_task_context, install as install_task_context
+from task_emoji_patch import install as install_task_emoji_patch
 from ux_bugfixes import handle_global_navigation, install as install_ux_bugfixes
 
 install_performance_patches()
@@ -39,6 +41,8 @@ install_reminder_policy()
 install_ux_bugfixes()
 install_task_context()
 install_attendance()
+install_attendance_enhancement()
+install_task_emoji_patch()
 
 
 def _optional_env(env, name):
@@ -96,10 +100,14 @@ class Default(WorkerEntrypoint):
                     "contextual_task_postpone": True,
                     "task_list_retention_hours": 24,
                     "task_list_ephemeral_numbering": True,
+                    "task_agenda_emoji": "📝",
                     "attendance_tracking": True,
                     "attendance_class_prompt": True,
                     "attendance_limit_per_subject": True,
                     "attendance_duration_based": True,
+                    "attendance_schema_guard": True,
+                    "attendance_humor_thresholds": [30, 50, 75, 100],
+                    "attendance_lost_when_over_limit": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -128,6 +136,7 @@ class Default(WorkerEntrypoint):
             if message:
                 handled = await handle_global_navigation(self.env.DB, token, message)
                 if not handled:
+                    await ensure_attendance_schema(self.env.DB)
                     handled = await handle_attendance_message(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
@@ -159,6 +168,7 @@ class Default(WorkerEntrypoint):
     async def scheduled(self, controller, env, ctx):
         await dispatch_due_reminders(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
         try:
+            await ensure_attendance_schema(self.env.DB)
             await dispatch_class_attendance(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
         except Exception:
             pass
