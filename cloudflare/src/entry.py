@@ -9,6 +9,7 @@ from conversation_layer import handle_callback as handle_context_callback, handl
 from natural_add_layer import handle_natural_add
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
+from quality_patch import handle_message as handle_quality_message, install as install_quality_patch
 from reference_patch import handle_reference
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
@@ -18,6 +19,7 @@ install_performance_patches()
 install_scheduler_patches()
 install_routine_integration()
 install_conversation_layer()
+install_quality_patch()
 install_recurrence_patch()
 
 
@@ -52,6 +54,10 @@ class Default(WorkerEntrypoint):
                     "flexible_routines": True,
                     "simple_reminders": True,
                     "natural_references": True,
+                    "task_reminder_minutes": 10,
+                    "appointment_reminder_minutes": 5,
+                    "informal_grocery": True,
+                    "late_routine_confirmation": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -82,6 +88,8 @@ class Default(WorkerEntrypoint):
                 # Estado ativo (rotina/tarefa em andamento) tem prioridade sobre inferência genérica.
                 if not handled:
                     handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_quality_message(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_context_message(self.env.DB, token, message)
                 if not handled:
