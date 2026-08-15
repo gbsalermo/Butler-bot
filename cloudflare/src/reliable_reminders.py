@@ -42,8 +42,13 @@ def _inline(rows):
 async def dispatch_due_reminders(db, token):
     """Dispara lembretes por janela de tolerância, não por igualdade exata de minuto.
 
-    Isso torna o cron resiliente a atrasos de execução e a falhas pontuais de outros schedulers.
-    A chave de notification_log continua garantindo idempotência.
+    Regras atuais:
+    - lembrete simples: no horário exato;
+    - tarefa: no horário exato;
+    - compromisso: 5 minutos antes.
+
+    A janela de tolerância torna o cron resiliente a atrasos de execução e a falhas
+    pontuais de outros schedulers. A chave de notification_log garante idempotência.
     """
     now = _now()
     today = now.date()
@@ -69,7 +74,7 @@ async def dispatch_due_reminders(db, token):
             kind = _row(item, "kind")
             details = _row(item, "details") or ""
 
-            # Provas têm scheduler acadêmico próprio e não entram na regra 10/5.
+            # Provas têm scheduler acadêmico próprio.
             if details.startswith("exam:"):
                 continue
 
@@ -82,11 +87,10 @@ async def dispatch_due_reminders(db, token):
             due = datetime.combine(today, datetime.min.time()).replace(
                 hour=h, minute=m, tzinfo=LOCAL_TZ
             )
-            advance = 0 if simple else (10 if kind == "tarefa" else 5)
+            advance = 5 if (kind == "compromisso" and not simple) else 0
             desired = due - timedelta(minutes=advance)
             late = now - desired
 
-            # Ainda não chegou ou já passou demais da janela de recuperação.
             if late.total_seconds() < 0 or late > timedelta(minutes=GRACE_MINUTES):
                 continue
 
@@ -105,7 +109,7 @@ async def dispatch_due_reminders(db, token):
                     [("✅ Feito", f"item:done:{iid}"), ("⏰ +30 min", f"item:snooze:{iid}:30")],
                     [("🚫 Cancelar", f"item:cancel:{iid}")],
                 ])
-                text = f"✅ {_row(item,'title')} às {_row(item,'due_time')}. Faltam 10 minutos. Dá tempo de parar de fingir que esqueceu. 😌"
+                text = f"✅ {_row(item,'title')} — {_row(item,'due_time')}. Chegou a hora. Agora a tarefa saiu oficialmente da categoria 'problema do eu do futuro'. 😏"
             else:
                 markup = _inline([
                     [("👌 Ciente", f"item:done:{iid}"), ("⏰ +30 min", f"item:snooze:{iid}:30")]
@@ -113,7 +117,6 @@ async def dispatch_due_reminders(db, token):
                 text = f"📅 {_row(item,'title')} às {_row(item,'due_time')}. Faltam 5 minutos. Se organize."
 
             await conversation_layer._remember(db, uid, "lembrete" if simple else kind, iid)
-            # quality_patch.send_message já passa pela personalidade variada instalada.
             await quality_patch.send_message(token, chat, text, reply_markup=markup)
             await db.prepare(
                 "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
