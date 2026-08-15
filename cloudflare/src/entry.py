@@ -5,6 +5,7 @@ from workers import Response, WorkerEntrypoint
 
 import app
 import runtime_guard
+from add_intent_patch import install_add_intent_patch
 from performance_patch import install_performance_patches
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
@@ -13,6 +14,7 @@ from settings import OWNER_CHAT_ID
 install_performance_patches()
 install_scheduler_patches()
 install_routine_integration()
+install_add_intent_patch()
 
 
 def _optional_env(env, name):
@@ -39,6 +41,7 @@ class Default(WorkerEntrypoint):
                     "webhook_secret_configured": bool(_optional_env(self.env, "TELEGRAM_WEBHOOK_SECRET")),
                     "fast_path": True,
                     "routine_agenda": True,
+                    "natural_add_intents": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
