@@ -15,8 +15,9 @@ OWNER_SUBJECTS = [
     {"name": "Sistemas Digitais I", "weekday": "quarta-feira", "start": "08:00", "end": "10:00", "location": "PAV I, Sala 114"},
 ]
 
+# Chaves sem acentos porque categorias informadas pelo usuário são normalizadas antes de persistir.
 DEFAULT_FINANCE_LIMITS = {
-    "alimentação": 450.0,
+    "alimentacao": 450.0,
     "lazer": 200.0,
     "transporte": 180.0,
     "compras": 250.0,
