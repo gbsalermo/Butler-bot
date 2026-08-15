@@ -4,10 +4,12 @@ from urllib.parse import urlparse
 from workers import Response, WorkerEntrypoint
 
 from app import handle_message, scheduled_tick
-from runtime_guard import ensure_runtime_schema, handle_pre_dispatch
+from performance_patch import install_performance_patches
+from runtime_guard import handle_pre_dispatch
 from scheduler_patch import install_scheduler_patches
 from settings import OWNER_CHAT_ID
 
+install_performance_patches()
 install_scheduler_patches()
 
 
@@ -33,6 +35,7 @@ class Default(WorkerEntrypoint):
                     "owner_chat_id_configured": OWNER_CHAT_ID is not None,
                     "dispatcher": "functional-v1",
                     "webhook_secret_configured": bool(_optional_env(self.env, "TELEGRAM_WEBHOOK_SECRET")),
+                    "fast_path": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -50,7 +53,6 @@ class Default(WorkerEntrypoint):
                 return Response("invalid json", status=400)
 
             token = self.env.TELEGRAM_BOT_TOKEN
-            await ensure_runtime_schema(self.env.DB)
             message = update.get("message") or update.get("edited_message")
             if message:
                 handled = await handle_pre_dispatch(self.env.DB, token, message)
@@ -61,5 +63,4 @@ class Default(WorkerEntrypoint):
         return Response("Not found", status=404)
 
     async def scheduled(self, controller, env, ctx):
-        await ensure_runtime_schema(self.env.DB)
         await scheduled_tick(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
