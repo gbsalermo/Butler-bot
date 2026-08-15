@@ -11,6 +11,13 @@ from settings import OWNER_CHAT_ID
 install_scheduler_patches()
 
 
+def _optional_env(env, name):
+    try:
+        return getattr(env, name)
+    except Exception:
+        return None
+
+
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
         parsed = urlparse(request.url)
@@ -25,11 +32,18 @@ class Default(WorkerEntrypoint):
                     "d1": True,
                     "owner_chat_id_configured": OWNER_CHAT_ID is not None,
                     "dispatcher": "functional-v1",
+                    "webhook_secret_configured": bool(_optional_env(self.env, "TELEGRAM_WEBHOOK_SECRET")),
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
 
         if request.method == "POST" and path == "/telegram/webhook":
+            webhook_secret = _optional_env(self.env, "TELEGRAM_WEBHOOK_SECRET")
+            if webhook_secret:
+                supplied = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+                if supplied != webhook_secret:
+                    return Response("forbidden", status=403)
+
             try:
                 update = await request.json()
             except Exception:
