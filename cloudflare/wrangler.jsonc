@@ -5,6 +5,11 @@
   "compatibility_date": "2026-08-14",
   "compatibility_flags": ["python_workers"],
   "keep_vars": true,
+  "secrets": {
+    "required": [
+      "TELEGRAM_BOT_TOKEN"
+    ]
+  },
   "d1_databases": [
     {
       "binding": "DB",
