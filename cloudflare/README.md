@@ -1,176 +1,210 @@
 # Butler Bot — Cloudflare Worker
 
-Esta pasta é a adaptação de produção do Butler para Cloudflare Workers, seguindo o mesmo princípio usado no BusiVS: a versão local permanece separada e o Worker recebe updates do Telegram via HTTP/webhook.
+Produção do Butler via Telegram Webhook + Cloudflare Python Worker + D1.
 
-## Branches
+## Estrutura de produção
 
-- `local`: rolling local atual, com polling/SQLite e dados pessoais existentes.
-- `cloudflare`: adaptação limpa para Worker/D1. Usuários comuns começam vazios. Os dados pessoais do proprietário só são semeados quando o `chat_id` recebido corresponde a `OWNER_CHAT_ID`.
+- branch de produção: `main`;
+- fallback local preservado: `local`;
+- Worker: `salbutler-bot`;
+- root directory do build: `cloudflare/`;
+- deploy command: `uv run pywrangler deploy`;
+- D1: `butler-db`;
+- único secret obrigatório: `TELEGRAM_BOT_TOKEN`;
+- identificação do proprietário por `chat_id = 7882764998`;
+- cron Cloudflare a cada minuto.
 
-## Segurança/configuração
-
-O único secret obrigatório do Worker é:
+## Arquivos centrais
 
 ```text
-TELEGRAM_BOT_TOKEN
-```
+src/entry.py
+→ HTTP, /health, webhook e scheduled()
 
-O `chat_id` do proprietário não é considerado segredo e fica em `src/settings.py`.
+src/app.py
+→ menus, regras, D1, linguagem funcional e scheduler
 
-Não colocar o token no repositório. Configure-o com Wrangler:
+src/nlu.py
+→ interpretação determinística de texto natural
 
-```bash
-cd cloudflare
-uv sync
-uv run pywrangler secret put TELEGRAM_BOT_TOKEN
+src/telegram_api.py
+→ Bot API + download de arquivos
+
+src/owner_profile.py
+→ grade e dados iniciais do proprietário
+
+src/protocol_mass_data.py
+→ protocolo pessoal de treino preservado da versão local
+
+src/runtime_schema.py
+→ cria de forma idempotente as tabelas incrementais necessárias
 ```
 
 ## D1
 
-Crie o banco:
+O schema inicial foi aplicado em `0001_initial.sql`.
 
-```bash
-npx wrangler d1 create butler-db
-```
-
-Copie o `database_id` retornado para `wrangler.jsonc`, substituindo:
+Também existe:
 
 ```text
-REPLACE_AFTER_D1_CREATE
+migrations/0002_app_state.sql
 ```
 
-Aplique o schema:
+com estado conversacional e histórico de treino. O Worker possui `runtime_schema.py` para garantir essas tabelas de forma idempotente mesmo antes de uma aplicação manual da migration.
+
+Aplicação manual, quando desejado:
 
 ```bash
-npx wrangler d1 execute butler-db --remote --file=migrations/0001_initial.sql
+npx wrangler d1 execute butler-db --remote --file=migrations/0002_app_state.sql
 ```
 
-O D1 usa um único banco com `user_id` em todas as entidades relevantes. `telegram_chat_id` identifica cada perfil e impede que dados de usuários diferentes sejam misturados.
+## Funcionalidades portadas ao Worker
 
-## Proprietário
+### Interface e identidade
 
-Antes de ativar o webhook em produção, preencher em `src/settings.py`:
+- `/start`;
+- menu principal;
+- Cotidiano;
+- identificação individual por `chat_id`;
+- usuário proprietário recebe o perfil pessoal;
+- usuário comum começa vazio e informa como quer ser chamado;
+- alteração posterior do nome preferido.
 
-```python
-OWNER_CHAT_ID: int | None = 123456789
-```
+### Day-off
 
-com o `chat_id` numérico real do proprietário.
+- `🌙 Day-off` silencia cobranças daquele usuário;
+- reativação com `Chamar, Butler!`;
+- estado isolado por usuário.
 
-Não existe mais placeholder numérico fingindo ser configuração válida: enquanto o valor estiver `None`, `/health` informa que o proprietário ainda não está configurado.
+### Tarefas e compromissos
 
-Quando esse chat fizer `/start`, o Worker associa o perfil pessoal e semeia a grade acadêmica definida em `owner_profile.py`. Qualquer outro chat começa limpo.
+- fluxo curto por botão;
+- validação de data/horário;
+- agenda de hoje;
+- amanhã;
+- outra data;
+- próximos 7 dias;
+- pendências;
+- histórico de tarefas;
+- conclusão por linguagem natural;
+- personalidade contextual baseada em adiamentos/eventos existentes no D1.
 
-## Importação de grade e treino
+### Acadêmico
 
-A regra de arquivos do Butler permanece simples:
-
-- PDF com texto pesquisável/selecionável;
-- `.txt`;
+- grade pessoal semeada somente para o proprietário;
+- usuário comum começa sem matérias;
+- listar matérias;
+- adicionar;
+- trancar;
+- remover;
+- importação por PDF textual ou `.txt`;
 - sem OCR/Tesseract;
-- imagens e PDFs escaneados precisam ser convertidos antes.
+- tradução básica dos blocos SIGAA para horas completas;
+- horário e local na agenda e nos lembretes.
 
-Além da grade acadêmica, a versão genérica agora possui importação de **ficha de musculação** com prévia antes de gravar.
+### Mercado
 
-Formato recomendado:
+- adicionar item;
+- listar itens faltando;
+- marcar item como comprado por texto;
+- `preciso comprar café` é tratado como mercado quando o objeto é doméstico.
 
-```text
-SEGUNDA — Peito
-Supino reto | 4x8-10 | 40 kg
-Crucifixo | 3x12 | 12 kg
+### Metas / streaks
 
-TERÇA — Costas e bíceps
-Puxada frente | 4x10 | 45 kg
-Rosca direta | 3x8-10 | 20 kg
-```
+Categorias-base:
 
-O parser também aceita `;` como separador e formas compactas como `Supino reto 4x8-10 40 kg`.
+- Inglês;
+- Programação;
+- Água;
+- Alimentação;
+- Musculação.
 
-Ao confirmar, a ficha importada substitui a rotina manual atual daquele usuário; usuários diferentes continuam isolados.
+A versão Cloudflare registra progresso e mostra sequência atual, recorde, total e os últimos 7 dias.
 
-O Worker terá `pypdf` como dependência para preservar a leitura de PDF textual quando o fluxo de upload for portado para o dispatcher HTTP.
+### Finanças
 
-## Limpeza pré-deploy
+- entrada;
+- saída;
+- categoria;
+- descrição opcional;
+- relatório mensal;
+- saldo registrado;
+- agrupamento por categoria;
+- limites simples;
+- alertas de excesso;
+- frases naturais como `gastei 35 com lanche`.
 
-- usuários genéricos não recebem grade/treino pessoal;
-- não existem dados fictícios de usuário semeados no D1;
-- `OWNER_CHAT_ID` não usa valor de teste;
-- o antigo exemplo de treino não faz parte do fluxo planejado de produção;
-- **Reiniciar treinos** permanece como funcionalidade real para quem quiser zerar progresso e recomeçar;
-- limites financeiros padrão são regras funcionais, não massa de teste.
+### Musculação
 
-## Desenvolvimento
+- dados estáticos das 12 semanas do proprietário levados para o Worker;
+- `🚀 Começar os trabalhos`;
+- treino do dia;
+- registro série por série com carga/repetições;
+- falta com motivo;
+- finalizar treino;
+- progresso;
+- reiniciar treinos sem apagar o plano;
+- importação de treino por PDF textual/`.txt` para usuários que precisam cadastrar ficha;
+- usuários comuns mantêm plano próprio em D1.
 
-```bash
-cd cloudflare
-uv sync
-uv run pywrangler dev
-```
+### Linguagem natural
 
-Saúde:
-
-```bash
-curl http://localhost:8787/health
-```
-
-Webhook local/manual:
-
-```text
-POST /telegram/webhook
-```
-
-## Deploy
-
-```bash
-uv run pywrangler deploy
-```
-
-Depois valide:
+O dispatcher reconhece, entre outras formas:
 
 ```text
-https://<worker>.workers.dev/health
+Butler, amanhã tenho dentista às 15h
+me lembra de entregar o relatório amanhã às 18h
+preciso comprar café
+falta sal, açúcar e café
+o que tenho daqui a 3 dias?
+o que ficou pendente?
+já fiz o relatório
+vou me atrasar para o dentista
+hoje não vou treinar porque estou cansado
+gastei 35 com lanche
+recebi 540 de bolsa
+quanto gastei esse mês?
 ```
 
-Somente após `/health` responder corretamente, registre no Telegram:
+A regra continua sendo: agir quando estiver claro e evitar inventar quando houver ambiguidade.
+
+## Scheduler Cloudflare
+
+O cron roda a cada minuto e utiliza `notification_log` para idempotência.
+
+Atualmente cobre:
+
+- aula: aviso 10 minutos antes;
+- compromisso: aviso 10 minutos antes;
+- tarefa com horário: aviso no horário;
+- resumo matinal: 07:30, horário local configurado;
+- fechamento semanal: domingo 20:00;
+- Day-off bloqueia esses envios.
+
+Não existe fechamento automático noturno.
+
+## Saúde
 
 ```text
-https://<worker>.workers.dev/telegram/webhook
+GET /health
 ```
 
-## Scheduler
+Versão funcional deve retornar também:
 
-`wrangler.jsonc` possui Cron Trigger de 1 minuto. `entry.py` já expõe `scheduled()`. As regras de lembretes/resumos do JobQueue local devem ser portadas para operações idempotentes em D1, usando `notification_log` para evitar mensagens duplicadas.
+```json
+"dispatcher": "functional-v1"
+```
 
-## Estado da migração
+## Segurança
 
-Já preparado:
+O token não deve entrar no GitHub. `wrangler.jsonc` usa `keep_vars` e declara `TELEGRAM_BOT_TOKEN` como secret obrigatório.
 
-- Python Worker;
-- `/health`;
-- `/telegram/webhook`;
-- envio direto pela Telegram Bot API;
-- binding D1;
-- schema multiusuário;
-- perfil proprietário condicionado a `chat_id`;
-- usuários comuns limpos;
-- Cron Trigger/scheduled handler;
-- `TELEGRAM_BOT_TOKEN` como único secret obrigatório;
-- parser/importação de treino no código-base genérico;
-- dependência `pypdf` preparada para o Worker.
+## Fluxo normal daqui para frente
 
-Ainda precisa ser portado para o dispatcher HTTP antes de chamar a versão Cloudflare de funcionalmente equivalente ao rolling local:
+```text
+alteração em main
+→ Cloudflare Build detecta o push
+→ pywrangler deploy
+→ Worker atualizado
+```
 
-- menus/callbacks;
-- tarefas/compromissos;
-- grade e upload de arquivo;
-- importação de treino pelo webhook;
-- linguagem natural;
-- mercado;
-- metas/streaks;
-- musculação e reinício de progresso;
-- finanças;
-- personalidade comportamental;
-- lembretes;
-- resumo matinal e semanal.
-
-A regra é portar por paridade com o rolling local, sem redesenhar funcionalidades durante a migração.
+A branch `local` permanece como referência/fallback de polling e SQLite.
