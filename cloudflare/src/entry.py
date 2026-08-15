@@ -7,6 +7,7 @@ import app
 import runtime_guard
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from natural_add_layer import handle_natural_add
+from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
 from routine_integration import install_routine_integration
 from scheduler_patch import install_scheduler_patches
@@ -16,6 +17,7 @@ install_performance_patches()
 install_scheduler_patches()
 install_routine_integration()
 install_conversation_layer()
+install_recurrence_patch()
 
 
 def _optional_env(env, name):
@@ -46,6 +48,8 @@ class Default(WorkerEntrypoint):
                     "contextual_conversation": True,
                     "inline_actions": True,
                     "smart_agenda": True,
+                    "flexible_routines": True,
+                    "simple_reminders": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -65,21 +69,21 @@ class Default(WorkerEntrypoint):
             token = self.env.TELEGRAM_BOT_TOKEN
             callback = update.get("callback_query")
             if callback:
-                handled = await handle_context_callback(self.env.DB, token, callback)
-                if not handled:
-                    # Callbacks desconhecidos não devem derrubar o webhook.
-                    return Response("ok")
+                await handle_context_callback(self.env.DB, token, callback)
                 return Response("ok")
 
             message = update.get("message") or update.get("edited_message")
             if message:
-                handled = await handle_context_message(self.env.DB, token, message)
+                handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_context_message(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_natural_add(self.env.DB, token, message)
                 if not handled:
                     handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
                 if not handled:
                     await app.handle_message(self.env.DB, token, message)
+                    await remember_after_message(self.env.DB, message)
             return Response("ok")
 
         return Response("Not found", status=404)
