@@ -79,12 +79,13 @@ class Default(WorkerEntrypoint):
                 handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_reference(self.env.DB, token, message)
+                # Estado ativo (rotina/tarefa em andamento) tem prioridade sobre inferência genérica.
+                if not handled:
+                    handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_context_message(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_natural_add(self.env.DB, token, message)
-                if not handled:
-                    handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
                 if not handled:
                     await app.handle_message(self.env.DB, token, message)
                     await remember_after_message(self.env.DB, message)
