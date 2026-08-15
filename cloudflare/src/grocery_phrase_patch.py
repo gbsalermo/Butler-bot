@@ -70,6 +70,12 @@ async def handle_message(db, token, message):
         if m:
             raw_items = m.group(1)
 
+    # Pedido direto de compra: "comprar milho de pipoca", "comprar café e açúcar".
+    if raw_items is None:
+        m = re.match(r"^(?:comprar|compra|compre)\s+(?:o|a|os|as\s+)?(.+)$", n)
+        if m:
+            raw_items = m.group(1)
+
     if raw_items is None:
         return False
 
@@ -88,7 +94,7 @@ async def handle_message(db, token, message):
         ).bind(uid, item).run()
 
     if len(items) == 1:
-        msg = f"🛒 Anotado: {items[0]}. Acabou, entrou na lista. Uma tragédia doméstica a menos para depender da memória. 😌"
+        msg = f"🛒 Anotado: {items[0]}. Entrou na lista. Porque aparentemente até a pipoca agora precisa de gestão de estoque. 😌"
     else:
         msg = "🛒 Anotado: " + ", ".join(items) + ". A despensa abriu chamado e eu registrei. 😏"
 
