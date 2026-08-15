@@ -1,0 +1,141 @@
+import re
+import unicodedata
+
+import runtime_guard
+import conversation_layer
+from telegram_api import send_message
+
+TASK_KB = [["✅ Concluir tarefa", "⏰ Adiar tarefa"],["📌 Manter pendente", "🚫 Cancelar tarefa"],["⬅️ Voltar ao cotidiano"]]
+CANCEL_KB = [["❌ Cancelar ação"]]
+
+
+def _norm(text):
+    value = unicodedata.normalize("NFKD", (text or "").lower())
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _row(row, key, default=None):
+    if row is None:
+        return default
+    try:
+        return getattr(row, key)
+    except Exception:
+        try:
+            return row[key]
+        except Exception:
+            return default
+
+
+async def _rows(stmt):
+    result = await stmt.all()
+    data = getattr(result, "results", None)
+    if data is None:
+        return []
+    try:
+        return list(data)
+    except Exception:
+        return data.to_py() if hasattr(data, "to_py") else []
+
+
+def _kb(rows):
+    return {"keyboard": rows, "resize_keyboard": True}
+
+
+async def _uid(db, chat_id):
+    row = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(chat_id).first()
+    return int(_row(row, "id")) if row else None
+
+
+async def _visible_tasks(db, uid):
+    return await _rows(db.prepare("""
+        SELECT id,title,due_date,due_time,status,postpone_count,completed_at,cancelled_at
+        FROM daily_items
+        WHERE user_id=? AND kind='tarefa' AND (
+            status='pendente'
+            OR (status='concluido' AND completed_at IS NOT NULL AND datetime(completed_at) >= datetime('now','-24 hours'))
+            OR (status='cancelado' AND cancelled_at IS NOT NULL AND datetime(cancelled_at) >= datetime('now','-24 hours'))
+        )
+        ORDER BY CASE status WHEN 'pendente' THEN 0 WHEN 'concluido' THEN 1 ELSE 2 END,
+                 COALESCE(due_date,'9999-12-31'), COALESCE(due_time,'99:99'), id
+        LIMIT 40
+    """).bind(uid))
+
+
+async def _task_list(db, uid):
+    rs = await _visible_tasks(db, uid)
+    if not rs:
+        return "✅ Nenhuma tarefa ativa. As antigas continuam no histórico; eu só parei de transformar essa tela num museu. 😌"
+    out = ["✅ Tarefas"]
+    for pos, r in enumerate(rs, 1):
+        icon = {"pendente":"⏳", "concluido":"✅", "cancelado":"🚫"}.get(_row(r,"status"), "•")
+        when = ""
+        if _row(r,"due_date"):
+            when = f" — {_row(r,'due_date')[8:10]}/{_row(r,'due_date')[5:7]}" + (f" {_row(r,'due_time')}" if _row(r,"due_time") else "")
+        out.append(f"{icon} {pos}. {_row(r,'title')}{when}")
+    out.append("\nA numeração vale só para esta lista. Concluídas/canceladas saem daqui após 24h, mas continuam no Histórico de tarefas.")
+    return "\n".join(out)
+
+
+async def _find_task(db, uid, text):
+    raw = (text or "").strip()
+    # Na tela de tarefas, números são posições temporárias, não IDs eternos do banco.
+    m = re.search(r"#?(\d+)\b", raw)
+    if m:
+        pos = int(m.group(1))
+        rs = await _visible_tasks(db, uid)
+        if 1 <= pos <= len(rs):
+            return rs[pos-1]
+
+    target = re.sub(r"^(?:certo|ok|feito|concluir|conclui|finalizar|finaliza|cancelar|cancela|adiar|adia|manter|pendente)\s+", "", raw, flags=re.I).strip()
+    if not target:
+        return None
+    rs = await _rows(db.prepare("SELECT * FROM daily_items WHERE user_id=? AND kind='tarefa' AND status='pendente'").bind(uid))
+    nt = _norm(target)
+    matches = [r for r in rs if nt in _norm(_row(r,"title")) or _norm(_row(r,"title")) in nt]
+    return matches[0] if len(matches) == 1 else None
+
+
+async def handle_message(db, token, message):
+    chat_id = (message.get("chat") or {}).get("id")
+    if chat_id is None:
+        return False
+    uid = await _uid(db, int(chat_id))
+    if not uid:
+        return False
+
+    text = (message.get("text") or "").strip()
+    n = _norm(text)
+
+    # Quando um lembrete acabou de apontar uma tarefa, "adiar" não deve perguntar qual tarefa.
+    postpone_only = n in (
+        "adiar", "adia", "depois", "mais tarde", "agora nao", "agora não",
+        "deixa pra depois", "deixa para depois", "nao agora", "não agora", "daqui a pouco"
+    )
+    if not postpone_only:
+        return False
+
+    ctx = await conversation_layer._context(db, uid)
+    if not ctx or ctx.get("kind") != "tarefa" or not ctx.get("id"):
+        return False
+
+    task = await db.prepare("SELECT id,title,status FROM daily_items WHERE id=? AND user_id=? AND kind='tarefa'").bind(int(ctx["id"]), uid).first()
+    if not task or _row(task,"status") != "pendente":
+        return False
+
+    await runtime_guard._set_state(db, uid, "guard_task_postpone_when", {
+        "id": int(_row(task,"id")),
+        "title": _row(task,"title")
+    })
+    await send_message(
+        token,
+        int(chat_id),
+        f"⏰ Beleza, {_row(task,'title')} fica para depois. Pra quando?\nEx.: `daqui a 30 minutos`, `hoje às 14h`, `amanhã às 10h` ou `segunda`.",
+        reply_markup=_kb(CANCEL_KB),
+    )
+    return True
+
+
+def install():
+    runtime_guard._task_list = _task_list
+    runtime_guard._find_task = _find_task
