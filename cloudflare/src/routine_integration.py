@@ -133,9 +133,20 @@ async def _agenda_routines(db, uid, target):
 
 
 async def _routine_reminders(db, token):
+    """Dispara checkpoints de rotina com recuperação de minuto perdido.
+
+    O cron da Cloudflare é best-effort. A implementação antiga exigia igualdade
+    exata HH:MM; se 10:00 não executasse, 10:01 nunca mais lembrava. Agora cada
+    rotina procura checkpoints vencidos ainda não notificados e envia o mais
+    recente. Checkpoints anteriores vencidos são marcados apenas como aviso
+    perdido (não como concluídos), evitando rajada de notificações atrasadas.
+    """
     now = datetime.now(timezone.utc).astimezone(LOCAL_TZ)
     today = now.date()
-    users = await _rows(db.prepare("SELECT u.id,u.telegram_chat_id,a.day_off FROM users u JOIN assistant_state a ON a.user_id=u.id"))
+    users = await _rows(db.prepare(
+        "SELECT u.id,u.telegram_chat_id,COALESCE(a.day_off,0) day_off FROM users u "
+        "LEFT JOIN assistant_state a ON a.user_id=u.id"
+    ))
     for user in users:
         if int(_row(user, "day_off", 0)):
             continue
@@ -145,19 +156,51 @@ async def _routine_reminders(db, token):
         for routine in routines:
             if not _applies(_row(routine, "weekdays"), today):
                 continue
+            rid = int(_row(routine, "id"))
             scheduled = _times(_row(routine, "time_hhmm"))
-            done = await _status(db, int(_row(routine, "id")), today, scheduled)
+            done = await _status(db, rid, today, scheduled)
+
+            due_unnotified = []
             for target_time in scheduled:
-                if target_time in done or target_time != now.strftime("%H:%M"):
+                if target_time in done:
                     continue
-                key = f"routine:{_row(routine,'id')}:{today.isoformat()}:{target_time}"
+                try:
+                    h, m = map(int, target_time.split(":"))
+                except Exception:
+                    continue
+                desired = datetime.combine(today, datetime.min.time()).replace(hour=h, minute=m, tzinfo=LOCAL_TZ)
+                if now < desired:
+                    continue
+                key = f"routine:{rid}:{today.isoformat()}:{target_time}"
                 existing = await db.prepare("SELECT id FROM notification_log WHERE user_id=? AND notification_key=?").bind(uid, key).first()
-                if existing:
-                    continue
-                payload = {"routine_id": int(_row(routine, "id")), "time": target_time, "name": _row(routine, "name")}
-                await runtime_guard._set_state(db, uid, "guard_routine_checkpoint", payload)
-                await send_message(token, chat, f"🧘 Rotina — {_row(routine,'name')}\n⏰ Checkpoint {target_time}.\n\nQuando cumprir, pode responder só `certo`, `feito` ou usar o botão.", reply_markup=_kb([[f"✅ Feito — #{_row(routine,'id')} {target_time}"], ["🏠 Menu principal"]]))
-                await db.prepare("INSERT INTO notification_log(user_id,notification_key) VALUES(?,?)").bind(uid, key).run()
+                if not existing:
+                    due_unnotified.append((desired, target_time, key))
+
+            if not due_unnotified:
+                continue
+
+            due_unnotified.sort(key=lambda x: x[0])
+            latest_desired, latest_time, latest_key = due_unnotified[-1]
+
+            # Evita uma enxurrada após indisponibilidade longa: avisos antigos são
+            # registrados como perdidos, mas o progresso da rotina segue pendente.
+            for _, _, stale_key in due_unnotified[:-1]:
+                await db.prepare("INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)").bind(uid, stale_key).run()
+
+            late_minutes = max(0, int((now - latest_desired).total_seconds() // 60))
+            payload = {"routine_id": rid, "time": latest_time, "name": _row(routine, "name")}
+            await runtime_guard._set_state(db, uid, "guard_routine_checkpoint", payload)
+            if late_minutes > 2:
+                timing = f"⏰ Checkpoint {latest_time} — aviso atrasou {late_minutes} min."
+            else:
+                timing = f"⏰ Checkpoint {latest_time}."
+            await send_message(
+                token,
+                chat,
+                f"🧘 Rotina — {_row(routine,'name')}\n{timing}\n\nQuando cumprir, pode responder só `certo`, `feito` ou usar o botão.",
+                reply_markup=_kb([[f"✅ Feito — #{rid} {latest_time}"], ["🏠 Menu principal"]]),
+            )
+            await db.prepare("INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)").bind(uid, latest_key).run()
 
 
 def install_routine_integration():
@@ -218,7 +261,6 @@ def install_routine_integration():
                         return True
 
                 if state == "guard_routine_done":
-                    # Para rotinas com múltiplos horários, 'marcar feita' confirma apenas o próximo checkpoint pendente.
                     candidate = None
                     m = re.search(r"#?(\d+)", text)
                     if m:
