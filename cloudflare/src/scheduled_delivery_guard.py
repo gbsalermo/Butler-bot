@@ -1,7 +1,9 @@
 """Protege alertas agendados contra falso positivo de entrega no Telegram."""
 
+import academic_intelligence
 import attendance_production_fix
 import quality_patch
+import reliable_exam_reminders
 import reliable_reminders
 import routine_integration
 from telegram_api import delivery_error, delivery_ok, send_message as telegram_send_message
@@ -43,3 +45,6 @@ def install():
 
     # Tarefas/compromissos/lembretes: proxy local, sem alterar quality_patch global.
     reliable_reminders.quality_patch = _QualityProxy()
+
+    # Provas: substitui o dispatcher exato por uma versão com tolerância e entrega confirmada.
+    academic_intelligence.exam_reminders = reliable_exam_reminders.exam_reminders
