@@ -18,6 +18,7 @@ from companion_nlu_v2 import handle_message as handle_companion_nlu_v2
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery_phrase
+from hybrid_llm import handle_message as handle_hybrid_llm
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
 from personality_variants import install as install_personality_variants
@@ -73,6 +74,11 @@ class Default(WorkerEntrypoint):
                     "owner_chat_id_configured": OWNER_CHAT_ID is not None,
                     "dispatcher": "functional-v1",
                     "webhook_secret_configured": bool(_optional_env(self.env, "TELEGRAM_WEBHOOK_SECRET")),
+                    "workers_ai_binding": _optional_env(self.env, "AI") is not None,
+                    "hybrid_llm_lab": True,
+                    "hybrid_llm_owner_only": True,
+                    "hybrid_llm_core_controls_writes": True,
+                    "hybrid_llm_memory": True,
                     "fast_path": True,
                     "routine_agenda": True,
                     "natural_add_intents": True,
@@ -173,6 +179,12 @@ class Default(WorkerEntrypoint):
                     handled = await handle_grocery_phrase(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_quality_message(self.env.DB, token, message)
+
+                # Laboratório híbrido: somente OWNER_CHAT_ID. O Core determinístico acima
+                # continua sendo o fast path; se a IA falhar, as NLUs abaixo seguem como fallback.
+                if not handled:
+                    handled = await handle_hybrid_llm(self.env.DB, token, message, self.env)
+
                 if not handled:
                     handled = await handle_companion_language_patch(self.env.DB, token, message)
                 if not handled:
