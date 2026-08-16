@@ -17,6 +17,7 @@ from companion_language_patch import handle_message as handle_companion_language
 from companion_life_context import handle_message as handle_companion_life_context
 from companion_nlu_v2 import handle_message as handle_companion_nlu_v2
 from deterministic_memory import handle_message as handle_deterministic_memory
+from general_memory import handle_message as handle_general_memory
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery_phrase
@@ -82,6 +83,7 @@ class Default(WorkerEntrypoint):
                     "companion_chat_v1": True,
                     "companion_nlu_v2": True,
                     "deterministic_personal_memory": True,
+                    "generic_personal_entities": True,
                     "conversational_background": True,
                     "companion_action_suggestions": True,
                     "companion_social_mode": True,
@@ -177,6 +179,8 @@ class Default(WorkerEntrypoint):
                     handled = await handle_grocery_phrase(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_quality_message(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_general_memory(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_deterministic_memory(self.env.DB, token, message)
                 if not handled:
