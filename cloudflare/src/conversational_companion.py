@@ -128,45 +128,75 @@ async def _recent_context(db, uid):
 
 
 def _is_greeting(n):
-    if len(n) > 40:
+    if len(n) > 80:
         return False
     stripped = re.sub(r"\bbutler\b", "", n).strip(" ,.!?")
     return any(stripped == _norm(x) or stripped.startswith(_norm(x) + " ") for x in GREETING_MARKERS)
+
+
+def _explicit_greeting(n):
+    if re.search(r"\bbom dia\b", n):
+        return "morning"
+    if re.search(r"\bboa tarde\b", n):
+        return "afternoon"
+    if re.search(r"\bboa noite\b", n):
+        return "night"
+    return None
+
+
+def _is_farewell(n):
+    return any(x in n for x in (
+        "ate amanha", "até amanhã", "boa noite vou dormir", "boa noite to indo dormir",
+        "boa noite tô indo dormir", "vou dormir", "indo dormir", "to indo dormir",
+        "tô indo dormir", "fui dormir", "vou capotar", "to capotando", "tô capotando",
+        "falou ate amanha", "falou até amanhã",
+    ))
 
 
 def _contains_any(n, markers):
     return any(_norm(x) in n for x in markers)
 
 
-async def _reply_greeting(token, chat_id):
-    period = _period_phrase(_now())
-    if period == "madrugada":
-        text = "Fala daí, chefe. Aconteceu alguma coisa ou a madrugada só resolveu render conversa?"
-    elif period == "noite":
-        text = "Fala daí, chefe. Tudo certo por aí ou apareceu alguma coisa?"
-    elif period == "manhã":
+async def _reply_greeting(token, chat_id, n):
+    explicit = _explicit_greeting(n)
+    farewell = _is_farewell(n)
+
+    # O que o usuário disse tem prioridade sobre o relógio. Se alguém deseja boa
+    # noite às 02h, responder "bom dia" é linguisticamente errado mesmo sendo manhã.
+    if explicit == "night":
+        if farewell:
+            text = "Boa noite, chefe. Vai descansar. Até amanhã."
+        else:
+            text = "Boa noite, chefe. Tudo certo por aí?"
+    elif explicit == "afternoon":
+        text = "Boa tarde, chefe. Tudo certo por aí?"
+    elif explicit == "morning":
         text = "Bom dia, chefe. Tudo certo por aí?"
     else:
-        text = "Opa, chefe. Tudo certo por aí?"
+        period = _period_phrase(_now())
+        if period == "madrugada":
+            text = "Fala daí, chefe. Aconteceu alguma coisa ou a madrugada só resolveu render conversa?"
+        elif period == "noite":
+            text = "Fala daí, chefe. Tudo certo por aí ou apareceu alguma coisa?"
+        elif period == "manhã":
+            text = "Bom dia, chefe. Tudo certo por aí?"
+        else:
+            text = "Opa, chefe. Tudo certo por aí?"
     await send_message(token, chat_id, text)
+
+
+async def _reply_farewell(token, chat_id):
+    await send_message(token, chat_id, "Boa noite, chefe. Descansa aí. Até amanhã.")
 
 
 async def _reply_negative(db, token, chat_id, uid):
     await _remember_state(db, uid, "down")
-    await send_message(
-        token,
-        chat_id,
-        "Ih. Quer falar do que pegou ou é daqueles dias em que tudo só ficou meio sem graça?",
-    )
+    await send_message(token, chat_id, "Ih. Quer falar do que pegou ou é daqueles dias em que tudo só ficou meio sem graça?")
 
 
 async def _reply_positive(db, token, chat_id, uid):
     await _remember_state(db, uid, "up")
-    await send_message(
-        token,
-        chat_id,
-        "Aí sim. Aconteceu alguma coisa em particular ou hoje só resolveu colaborar mesmo?",
-    )
+    await send_message(token, chat_id, "Aí sim. Aconteceu alguma coisa em particular ou hoje só resolveu colaborar mesmo?")
 
 
 async def _reply_continuation(db, token, chat_id, uid, mood):
@@ -179,13 +209,11 @@ async def _reply_continuation(db, token, chat_id, uid, mood):
             facts.append(f"treinou {ctx['workouts']} vez(es) nesta última semana")
         if ctx["goal_hits"]:
             facts.append(f"registrou {ctx['goal_hits']} avanço(s) nas suas metas")
-
         if facts:
             base = "; ".join(facts[:2])
             text = f"Então eu vou te lembrar de uma coisa concreta: {base}. Tá tudo redondo? Não. Mas parado você definitivamente não tá."
         else:
             text = "Então não precisa forçar uma explicação bonita agora. Dia ruim existe. O importante é não transformar uma noite torta em sentença sobre a semana inteira."
-
         if ctx["next"]:
             title = _row(ctx["next"], "title")
             due_date = _row(ctx["next"], "due_date")
@@ -217,8 +245,13 @@ async def handle_message(db, token, message):
         return False
     n = _norm(text)
 
+    # Despedida é conversa, não início de fluxo de data/tarefa.
+    if _is_farewell(n) and not _explicit_greeting(n):
+        await _reply_farewell(token, int(chat_id))
+        return True
+
     if _is_greeting(n):
-        await _reply_greeting(token, int(chat_id))
+        await _reply_greeting(token, int(chat_id), n)
         return True
 
     if _contains_any(n, NEGATIVE_MARKERS):
