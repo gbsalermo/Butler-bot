@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import conversation_layer
 import quality_patch
+from maintenance import run_maintenance
 from settings import UTC_OFFSET_HOURS
 
 LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
@@ -40,12 +41,7 @@ def _inline(rows):
 
 
 async def _suppress_legacy_item_scheduler(db, uid, iid, today, due, kind):
-    """Marca a chave usada pelo scheduler antigo de app.py.
-
-    O dispatcher oficial de daily_items é este módulo. Enquanto o scheduler legado
-    ainda existir em app.py para resumos/aulas, gravamos sua chave de item para ele
-    não emitir uma segunda mensagem no mesmo ciclo.
-    """
+    """Marca a chave usada pelo scheduler antigo de app.py."""
     legacy_advance = 10 if kind == "compromisso" else 0
     legacy_target = due - timedelta(minutes=legacy_advance)
     legacy_key = f"item:{iid}:{today}:{legacy_target.strftime('%H:%M')}"
@@ -57,15 +53,14 @@ async def _suppress_legacy_item_scheduler(db, uid, iid, today, due, kind):
 async def dispatch_due_reminders(db, token):
     """Dispara notificações pendentes de forma idempotente e resiliente.
 
-    Política:
-    - lembrete simples explícito: avisa no horário e faz catch-up no mesmo dia;
-    - tarefa com horário: avisa no horário e também faz catch-up no mesmo dia se o
-      cron/deploy perder a janela original; continua pendente até conclusão/cancelamento;
-    - compromisso: 5 minutos antes, com tolerância curta para não avisar evento velho;
-    - Day-off silencia tarefa/compromisso, mas não lembrete simples explícito;
-    - notification_log impede duplicidade;
-    - o scheduler legado de app.py é silenciado para daily_items, evitando aviso duplo.
+    A manutenção leve roda antes deste dispatcher nos horários programados. Ela é
+    isolada: qualquer erro na faxina é registrado e não bloqueia alertas.
     """
+    try:
+        await run_maintenance(db, token)
+    except Exception as exc:
+        print(f"[maintenance] error type={type(exc).__name__} message={str(exc)[:240]}")
+
     now = _now()
     today = now.date()
 
@@ -103,8 +98,6 @@ async def dispatch_due_reminders(db, token):
                 hour=h, minute=m, tzinfo=LOCAL_TZ
             )
 
-            # Sempre neutraliza o caminho legado antes que app.scheduled_tick rode.
-            # Isso vale inclusive antes do horário oficial do aviso.
             await _suppress_legacy_item_scheduler(db, uid, iid, today, due, kind)
 
             if day_off and not simple:
