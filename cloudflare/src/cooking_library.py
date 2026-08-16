@@ -3,12 +3,13 @@ import unicodedata
 
 import companion_nlu_v2 as v2
 import butler_library as library
+from language_context import detect_core_domain
 from knowledge.cooking_books import COOKING_BOOKS
 from knowledge.meat_cuts import MEAT_CUTS, MEAT_RECIPES
+from knowledge.brazilian_traditional_foods import TRADITIONAL_RECIPES
 from telegram_api import send_message
 
 STOP={"o","a","os","as","um","uma","uns","umas","de","da","do","das","dos","com","pra","para","por","que","eu","me","meu","minha","queria","quero","fazer","faco","faço","algo","alguma","coisa","receita","receitas","ideia","ideias","butler","pode","posso","resto","sobra"}
-ACADEMIC_WORDS={"aula","aulas","materia","materias","disciplina","disciplinas","prova","provas","faculdade","universidade","semestre","professor","professora","faltar","faltei","presenca","presenças","presenca","falta","faltas","sistemas digitais","fisica","laboratorio"}
 
 def _norm(text):
     value=unicodedata.normalize("NFKD",(text or "").lower()); value="".join(ch for ch in value if not unicodedata.combining(ch)); value=re.sub(r"[^a-z0-9 ]+"," ",value); return re.sub(r"\s+"," ",value).strip()
@@ -17,6 +18,7 @@ def _all_recipes():
     for book,meta in COOKING_BOOKS.items():
         for title,data in meta.get("recipes",{}).items(): yield book,title,data
     for title,data in MEAT_RECIPES.items(): yield "carnes",title,data
+    for title,data in TRADITIONAL_RECIPES.items(): yield "cozinha brasileira",title,data
 def _find_exact(n):
     best=None
     for book,title,data in _all_recipes():
@@ -41,6 +43,8 @@ def _book_for_query(n):
         for alias in [book]+meta.get("aliases",[]):
             a=_norm(alias)
             if a and a in n and (best is None or len(a)>best[0]):best=(len(a),book,meta)
+    if any(x in n for x in ("comida brasileira","cozinha brasileira","comida tradicional","prato brasileiro","pratos brasileiros","baiana","nordestina","mineira")):
+        return "cozinha brasileira",{"recipes":TRADITIONAL_RECIPES}
     if any(_norm(a) in n for d in MEAT_CUTS.values() for a in d.get("aliases",[])):return "carnes",COOKING_BOOKS.get("carnes",{})
     return best[1:] if best else (None,None)
 def _rank(n,book_filter=None):
@@ -66,16 +70,13 @@ def _is_cooking_request(n):
     direct=("como fazer","como faz","como preparo","como preparar","receita de","receita do","receita da","receitas de","receitas com")
     informal=("queria fazer","quero fazer","oq posso fazer","o que posso fazer","o que da pra fazer","alguma ideia","me da uma ideia","tenho ","sobrou ","sobra de ","resto de ","da pra fazer com","o que faco com","oq faco com")
     return any(x in n for x in direct+informal)
-def _is_other_domain(n):
-    # Contexto de receita nunca pode sequestrar uma frase que explicitamente mudou de domínio.
-    return any(_norm(word) in n for word in ACADEMIC_WORDS)
+def _is_other_domain(text):
+    return detect_core_domain(text) is not None
 async def _save_recipe_context(db,uid,book,title,data): await library._save_event(db,uid,"library_context",{"domain":"recipe","book":book,"title":title,"pantry_keys":data.get("ingredients",[])[:20]})
 async def _followup_missing(db,token,chat_id,uid,text,n):
-    if _is_other_domain(n):return False
+    if _is_other_domain(text):return False
     ctx=await library._last_event(db,uid,"library_context",4)
     if not ctx or ctx[1].get("domain")!="recipe":return False
-    # "falta" isolado é ambíguo demais (falta à aula, falta em compromisso etc.).
-    # Follow-up culinário exige construção inequívoca de ingrediente ausente.
     markers=("nao tenho","to sem","estou sem","acabou o ","acabou a ","acabou meu ","acabou minha ","falta ingrediente","faltando ingrediente")
     if not any(x in n for x in markers):return False
     m=re.search(r"(?:nao tenho|não tenho|to sem|tô sem|estou sem|acabou(?: o| a| meu| minha)?|falta ingrediente|faltando ingrediente)\s+(?:o|a|os|as)?\s*(.+)$",text,flags=re.I)
@@ -92,8 +93,10 @@ async def handle_message(db,token,message):
     if not uid:return False
     n=_norm(text)
     if await _followup_missing(db,token,int(chat_id),uid,text,n):return True
+    # Acervo culinário é opcional. Se a frase aponta para um domínio do Core, não disputa a mensagem.
+    if _is_other_domain(text):return False
     book,title,data=_find_exact(n); explicit_recipe=any(x in n for x in ("como fazer","como faz","como preparo","como preparar","receita","me ensina")); recent=await library._last_event(db,uid,"cooking_search",2)
-    if data and (explicit_recipe or n in {_norm(title)}|{_norm(x) for x in data.get("aliases",[])} or (recent and not _is_other_domain(n))):
+    if data and (explicit_recipe or n in {_norm(title)}|{_norm(x) for x in data.get("aliases",[])} or recent):
         await _save_recipe_context(db,uid,book,title,data); await send_message(token,int(chat_id),_format(title,data)); return True
     cut_name,cut=_find_cut(n)
     if cut and (n in {_norm(cut_name)}|{_norm(x) for x in cut.get("aliases",[])} or any(x in n for x in ("o que e","oq e","como fazer","como preparo","o que faco","oq faco","receita","ideia","serve pra","bom pra"))):
