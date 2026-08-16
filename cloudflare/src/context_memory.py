@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timezone
 
 MAX_TOPICS=3
+_SCHEMA_READY=False
 
 def _row(row,key,default=None):
     if row is None:return default
@@ -16,11 +17,15 @@ def _row(row,key,default=None):
         except Exception:return default
 
 async def ensure_schema(db):
+    global _SCHEMA_READY
+    if _SCHEMA_READY:return
     await db.prepare("""CREATE TABLE IF NOT EXISTS conversation_context (
       user_id INTEGER PRIMARY KEY,
       topics_json TEXT NOT NULL DEFAULT '[]',
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     )""").run()
+    _SCHEMA_READY=True
 
 async def get_topics(db,user_id):
     await ensure_schema(db)
