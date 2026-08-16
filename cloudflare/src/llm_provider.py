@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from js import Object
@@ -5,6 +6,7 @@ from pyodide.ffi import to_js
 
 PRIMARY_MODEL = "@cf/zai-org/glm-4.7-flash"
 FALLBACK_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+MODEL_TIMEOUT_SECONDS = 8
 
 
 def _to_js(value):
@@ -82,7 +84,10 @@ class CloudflareWorkersAIProvider(LLMProvider):
             "temperature": temperature,
             "stream": False,
         }
-        raw = await self.ai.run(model, _to_js(payload))
+        raw = await asyncio.wait_for(
+            self.ai.run(model, _to_js(payload)),
+            timeout=MODEL_TIMEOUT_SECONDS,
+        )
         data = _to_py(raw)
         text = _extract_text(data)
         if text:
