@@ -31,8 +31,15 @@ async def ensure_runtime_schema(db):
             UNIQUE(user_id, workout_date, exercise_name, set_number),
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )""",
+        """CREATE TABLE IF NOT EXISTS conversation_context (
+            user_id INTEGER PRIMARY KEY,
+            topics_json TEXT NOT NULL DEFAULT '[]',
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )""",
         "CREATE INDEX IF NOT EXISTS idx_workout_logs_user_date ON workout_logs(user_id, workout_date)",
         "CREATE INDEX IF NOT EXISTS idx_workout_sets_user_exercise ON workout_set_logs(user_id, exercise_name, workout_date)",
+        "CREATE INDEX IF NOT EXISTS idx_conversation_context_updated_at ON conversation_context(updated_at)",
     ]
     for sql in statements:
         await db.prepare(sql).run()
