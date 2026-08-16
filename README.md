@@ -4,658 +4,138 @@
 
 # Butler Bot
 
-**Butler** é um assistente pessoal via Telegram para organização diária. Ele reúne agenda acadêmica, tarefas, compromissos, lembretes, casa, musculação, metas, autocuidado e finanças simples, com uma personalidade provocativa baseada no comportamento realmente registrado.
+**Butler** é um assistente pessoal via Telegram voltado a organização cotidiana, memória contextual e companhia funcional. Ele combina tarefas, compromissos, estudos, casa, musculação, metas e finanças com uma camada conversacional determinística, personalidade contextual e uma biblioteca de conhecimento própria.
 
-A proposta não é ser apenas um menu de CRUD. O Butler deve estar presente: lembrar compromissos, mostrar o que vem pela frente, perceber adiamentos e faltas, acompanhar sequências, provocar quando existe histórico para isso e reduzir ao mínimo o esforço necessário para registrar algo.
-
-O bot pode ser usado por **botões** ou por **texto natural**. A camada de linguagem natural atual é determinística e não depende de LLM/API externa.
-
----
-
-## Estado atual
-
-O rolling local está funcional e concentra as funcionalidades planejadas antes da primeira hospedagem.
-
-- Python + `python-telegram-bot[job-queue]`;
-- SQLite no ambiente local;
-- polling no desenvolvimento;
-- persistência de dados;
-- scheduler para lembretes e resumos;
-- Butler pessoal e versão genérica multiusuário;
-- isolamento da versão genérica por `chat_id`;
-- linguagem natural v1;
-- personalidade contextual baseada em dados reais;
-- próxima grande etapa: **Cloudflare + webhook Telegram + D1**.
+A proposta não é ser apenas um menu de CRUD nem tentar imitar uma IA geral. O Butler deve parecer familiar: lembrar pessoas, animais e coisas mencionadas pelo usuário, conversar de forma natural, usar humor com contexto e transformar conversas em ações úteis quando fizer sentido — sempre mantendo o Core determinístico como autoridade.
 
 Bot pessoal: **Butler** — `@ButlerSal_BOT`.
 
----
+## Princípios
 
-# Capacidades atuais
+- texto natural e botões convivem;
+- dados e operações continuam determinísticos;
+- nenhuma sugestão conversacional altera dados sem confirmação quando houver ambiguidade ou ação derivada;
+- personalidade usa contexto e histórico real, não fatos inventados;
+- memória pessoal é isolada por `user_id`/`chat_id`;
+- conhecimento cultural é global e compartilhado;
+- Day-off reduz cobranças;
+- NLU determinística continua sendo a base oficial; o laboratório de LLM foi arquivado para possível retomada futura.
 
-## ⚡ Menu principal
+## Capacidades principais
 
-O menu foi desenhado para deixar as ações mais frequentes a poucos cliques:
+O Butler atualmente cobre tarefas, compromissos, agenda, pendências, matérias/grade, importação de grade textual, lembretes, lista persistente de itens faltando, metas/streaks, rotinas, finanças simples, musculação genérica e um protocolo pessoal de treino de 12 semanas com acompanhamento por exercício/série, carga, repetições e substitutos.
 
-- 🌙 **Day-off**
-- ➕ **Adicionar**
-- 🗓️ **Hoje**
-- 🛒 **Item faltando**
-- 📚 **Matérias**
-- 🏠 **Cotidiano**
-- 🏋️ **Musculação**
+A linguagem natural entende construções comuns como `amanhã tenho dentista às 15h`, `preciso comprar café`, `o que tenho sexta?`, `já fiz o relatório`, `gastei 35 com lanche` e `hoje não consigo treinar`. Quando falta informação, pergunta apenas o necessário; quando há mais de um alvo plausível, confirma antes de alterar registros.
 
-`➕ Adicionar` permite criar tarefa ou compromisso.
+## 🧠 Memória pessoal determinística
 
-`🛒 Item faltando` abre diretamente:
+O Butler mantém memória estruturada de entidades pessoais por usuário. A memória é isolada: fatos de um `user_id` nunca devem ser usados para outro.
 
-- ➕ adicionar item;
-- 📋 listar itens faltando.
-
-Tarefas, compromissos, mercado, metas, rotinas, finanças e configurações também ficam disponíveis em **Cotidiano**.
-
----
-
-## 🗣️ Linguagem natural
-
-O Butler já consegue interpretar diversas frases comuns sem exigir navegação pelos botões.
-
-### Compromissos
+Domínios atuais incluem pets, familiares, amigos/colegas, relacionamentos, veículos e objetos pessoais. Isso permite conversas como:
 
 ```text
-Butler, amanhã tenho dentista às 15h
-amanhã tenho dentista 15h
-tenho dentista amanhã às 15:30
-sexta tenho reunião 10h
-dentista amanhã 15h
-tenho prova segunda às 8h
+tenho um gato chamado Jake
+Jake tá sem ração
+qual o nome do meu gato?
+minha mãe se chama Ana
+meu carro é um Corsa 2008
 ```
 
-Ele extrai título, data e horário e grava usando as mesmas regras do fluxo tradicional.
+A memória pessoal tem prioridade apenas quando a pergunta realmente aponta para uma entidade do usuário. Nomes culturais compostos conhecidos não devem ser sequestrados por coincidência de primeiro nome: `quem é Jake?` pode ser pessoal; `quem é Jake Peralta?` é cultura pop.
 
-Se faltar informação, pergunta apenas o necessário. Exemplo:
+## 📚 Butler Library
+
+A **Butler Library** é a biblioteca global de conhecimento do assistente. Conhecimento não deve crescer como centenas de `if`s no dispatcher; novos domínios são alimentados como catálogos/documentos pesquisáveis.
+
+Arquitetura atual:
 
 ```text
-tenho dentista amanhã
+cloudflare/src/
+├── butler_library.py
+└── knowledge/
+    ├── cooking.py
+    ├── games.py
+    ├── pop_culture.py
+    ├── philosophy.py
+    └── books.py
 ```
 
-→ pergunta somente o horário.
+A busca usa normalização, aliases, termos, tags e metadados do domínio. O contexto recente é salvo por usuário para permitir continuidade da conversa.
 
-### Tarefas e lembretes
+### 🍳 Culinária
+
+Receitas possuem ingredientes, preparo, porções, dicas, tags e ingredientes pesquisáveis. A biblioteca aceita tanto pedido direto quanto consulta por ingredientes, por exemplo `receita de strogonoff` ou `tenho carne moída e batata, o que dá pra fazer?`.
+
+Uma receita pode gerar uma **sugestão de ação**: se o usuário disser `não tenho leite`, o Butler pode oferecer colocar leite na lista de itens faltando. A escrita só ocorre após confirmação.
+
+### 🎮 Jogos
+
+O catálogo permite recomendação por plataforma, gênero, modo, peso aproximado e estilo. Exemplos: `me indica um jogo leve pra PC`, `quero um RPG`, `algum coop pra jogar com amigos`.
+
+Pokémon FireRed possui também dados/gerador próprio para montar times aleatórios a partir do catálogo disponível.
+
+### 🎬 Filmes, séries e cultura pop
+
+O acervo contém obras, personagens, gêneros, clima e metadados úteis para perguntas e recomendações. Exemplos: Walter White, Jake Peralta, Palpatine, Breaking Bad, Supernatural, Brooklyn Nine-Nine, Star Wars e outras entradas.
+
+Séries podem produzir uma sugestão prática. Após conversar sobre uma série, `quero assistir ela toda` pode levar o Butler a oferecer uma rotina diária; o horário é solicitado e a rotina só é criada após confirmação.
+
+### 📖 Filosofia e livros
+
+O catálogo de livros é propositalmente abrangente, com peso especial em literatura brasileira, clássicos, filosofia, Geração Beat, contracultura e dirty realism.
+
+Inclui autores/obras de Machado de Assis, Graciliano Ramos, Clarice Lispector, Guimarães Rosa, Jorge Amado, Dostoiévski, Kafka, Camus, Orwell, Hesse, Platão, Spinoza, Nietzsche, Marco Aurélio, Kerouac, Bukowski e John Fante, entre outros.
+
+A recomendação cruza autor, país, tipo e tags. Exemplos: `me indica um livro brasileiro`, `quero algo curto e existencial`, `algo parecido com Bukowski`, `algo na vibe de On the Road`, `quero começar filosofia`.
+
+## 🔗 Biblioteca → Core
+
+A Library pode **sugerir** operações, mas não é autoridade sobre dados. Fluxo consolidado:
 
 ```text
-amanhã preciso entregar o relatório às 18h
-tenho que estudar física amanhã
-preciso comprar um adaptador
-anota uma tarefa: revisar álgebra
+conversa
+→ Butler Library / memória
+→ contexto e sugestão
+→ confirmação do usuário
+→ Core determinístico
+→ persistência
 ```
 
-Pedidos explícitos de lembrete não fingem possuir horário:
+Exemplos já previstos: ingrediente faltante → lista de mercado; série que o usuário quer acompanhar → rotina diária. Esse padrão deve ser reutilizado em futuras integrações.
 
-```text
-me lembra de entregar o relatório
-```
+## 🕴️ Personalidade e conversa
 
-→ o Butler pergunta quando deve lembrar.
+O Butler deve responder saudações, comentários cotidianos, agradecimentos, risadas e estados simples sem transformar toda conversa em produtividade. Humor, gírias e postura podem variar com contexto, horário e histórico, mas não devem soar como frases prontas repetidas.
 
-### Compras domésticas / mercado
-
-Compras domésticas simples são interpretadas como **itens faltando em casa**, e não como tarefas:
-
-```text
-preciso comprar café
-preciso comprar arroz e feijão
-falta sal, açúcar e café
-bota café na lista de mercado
-coloca detergente na lista de compras
-```
-
-Compras que claramente representam outra responsabilidade continuam como tarefa, por exemplo:
-
-```text
-preciso comprar um adaptador para o trabalho
-```
-
-Também entende:
-
-```text
-o que falta em casa?
-mostra a lista de mercado
-comprei o café
-```
-
-Ao informar que comprou algo, o item é marcado como comprado. Se houver mais de um alvo plausível, o Butler pede confirmação.
-
-### Consultar agenda
-
-```text
-o que tenho amanhã?
-o que tenho daqui a 3 dias?
-o que tenho sexta?
-como está minha agenda sexta?
-o que tenho na próxima semana?
-```
-
-### Pendências
-
-```text
-quais tarefas estão atrasadas?
-o que ficou pendente?
-o que está atrasado?
-```
-
-### Concluir tarefa
-
-```text
-já fiz o relatório
-terminei o trabalho
-concluí revisar física
-```
-
-O Butler procura a tarefa pendente correspondente. Se existirem tarefas parecidas, pergunta qual antes de alterar qualquer registro.
-
-### Avisar atraso
-
-```text
-vou me atrasar para o dentista
-vou chegar atrasado na reunião
-estou atrasado para a entrevista
-```
-
-O aviso **não altera automaticamente o horário do compromisso**. Ele é registrado como evento comportamental.
-
-A provocação depende do histórico: a primeira ocorrência é tratada como caso isolado; reincidências permitem respostas como “não chega a ser exatamente uma novidade 👀”.
-
-### Academia
-
-```text
-hoje não vou treinar porque estou cansado
-não consigo treinar hoje
-não vai dar pra treinar hoje
-não vou pra academia
-```
-
-No Butler pessoal, uma falta só é registrada se o protocolo já tiver sido iniciado por `🚀 Começar os trabalhos`.
-
-### Finanças
-
-```text
-gastei 35 com lanche
-paguei 20 de uber
-gastei 80 no mercado
-recebi 540 de bolsa
-entrou 200 de trabalho
-quanto gastei esse mês?
-quanto sobrou?
-como estão minhas finanças?
-```
-
-Categorias simples podem ser inferidas automaticamente; o que não for reconhecido vai para `Outros`.
-
-### Datas e horários entendidos
-
-Entre os formatos suportados estão:
-
-- hoje;
-- amanhã;
-- depois de amanhã;
-- sexta / próxima sexta;
-- `20/08`;
-- `20/08/2026`;
-- daqui a 3 dias;
-- `15h`;
-- `15h30`;
-- `15:30`;
-- às 15h;
-- por volta das 15h.
-
-Datas passadas e horários já vencidos no dia atual são bloqueados.
-
-### Princípio de segurança da linguagem natural
-
-O Butler segue quatro regras:
-
-1. agir diretamente quando intenção e alvo estão claros;
-2. pedir confirmação curta quando há mais de uma interpretação plausível;
-3. não inventar fatos que não foram registrados;
-4. não prometer lembrete sem possuir informação suficiente para executá-lo.
-
----
-
-## 🗓️ Hoje, agenda futura e histórico
-
-A visão **Hoje** reúne em um único lugar:
-
-- aulas do dia;
-- horário e local das aulas;
-- tarefas;
-- compromissos;
-- tarefas vencidas;
-- treino na academia quando aplicável;
-- quantidade de itens faltando em casa.
-
-Também permite consultar:
-
-- ⏭️ amanhã;
-- 📆 outra data;
-- 🗓️ próximos 7 dias;
-- 📚 histórico.
-
-Outra data aceita `DD/MM` ou `DD/MM/AAAA`.
-
-### Histórico diário
-
-Permite reconstruir o que está registrado para uma data, incluindo aulas previstas, tarefas, compromissos, rotinas e treino quando houver registro.
-
-Aulas aparecem como **previstas**, pois o Butler não presume presença sem confirmação.
-
-### Histórico de tarefas
-
-Tarefas são separadas em:
-
-- ⏳ pendentes;
-- ✅ concluídas;
-- 🚫 canceladas.
-
-Remover uma tarefa agora significa arquivá-la como cancelada; novos registros não são apagados fisicamente do histórico.
-
-### Pendência
-
-Pendência **não é um terceiro tipo de item**. É simplesmente uma tarefa cujo prazo venceu e que continua sem conclusão.
-
----
-
-## ✅ Tarefas e 📅 compromissos
-
-Além da linguagem natural, existe captura rápida por botão.
-
-Fluxo curto:
-
-1. informar título;
-2. escolher Hoje / Outro dia / Sem data;
-3. informar horário quando necessário;
-4. salvar.
-
-Não há uma sequência desnecessária de observações e configurações para ações simples.
-
-Lembretes podem ser concluídos ou adiados. O Butler registra quantas vezes uma tarefa foi adiada e usa esse dado na personalidade.
-
-Exemplos de comportamento contextual:
-
-> 👀 Segunda adiada. Estou começando a reconhecer um padrão, mas vou fingir que não.
-
-> 😏 Feito. Demorou mais do que deveria, mas chegamos lá. Não vou estragar o momento.
-
----
-
-## 📚 Acadêmico
-
-O Butler possui gerenciamento completo da grade:
-
-- listar matérias;
-- adicionar;
-- remover;
-- trancar;
-- editar;
-- persistir horários e locais;
-- lembrar aulas automaticamente;
-- mostrar aula, horário e sala nos resumos/agenda.
-
-### Importação de grade
-
-Em:
-
-`📚 Matérias → 📥 Importar grade por PDF/texto`
-
-aceita:
-
-- PDF com texto pesquisável/selecionável;
-- arquivo `.txt`.
-
-O Butler procura nomes, locais e códigos de horário do SIGAA e apresenta uma prévia antes de gravar.
-
-**Não existe OCR/Tesseract no projeto.** Imagens e PDFs escaneados devem ser convertidos previamente para PDF com texto pesquisável ou `.txt`, ou a grade pode ser cadastrada manualmente.
-
-### Tradução de horários SIGAA
-
-Os blocos são tratados como horas completas:
-
-- `M23` → `08:00–10:00`;
-- `M45` → `10:00–12:00`;
-- `T23` → `14:00–16:00`;
-- `T2345` → `14:00–18:00`;
-- `N12` → `18:00–20:00`.
-
-Correções manuais do usuário têm prioridade sobre o código original.
-
----
-
-## ☀️ Resumo automático da manhã
-
-Por padrão, às **07:30**, o Butler envia um resumo contendo o que for relevante naquele dia:
-
-- aulas;
-- horário e local;
-- tarefas;
-- compromissos;
-- treino na academia quando aplicável;
-- itens faltando em casa;
-- tarefas que ficaram pendentes do dia anterior.
-
-Exemplo de formato:
-
-```text
-☀️ Resumo da manhã
-
-🎓 10:00 — Física II (PAV III, Sala 07)
-📅 15:00 — Dentista
-✅ 18:00 — Terminar relatório
-🏋️ Treino na academia previsto hoje.
-
-🛒 Faltando em casa: café, açúcar
-
-Nada demais. Só a administração básica de uma pequena empresa chamada sua vida. 😌
-```
-
-Não existe fechamento automático noturno, pois o dia pode continuar até tarde.
-
----
-
-## 📊 Fechamento semanal
-
-Por padrão, domingo às **20:00**, o Butler apresenta um fechamento simples dos últimos dias, usando os registros disponíveis para mostrar o que foi cumprido, o que ficou aberto e sinais de evolução.
-
-Os horários dos resumos são configuráveis por `.env`.
-
----
-
-## 🕴️ Personalidade baseada em comportamento real
-
-O Butler não deve provocar apenas por sorteio. A personalidade contextual utiliza dados registrados, como:
-
-- número de adiamentos de uma tarefa;
-- conclusão no prazo ou em atraso;
-- tarefas pendentes;
-- sequência de metas/rotinas;
-- faltas na academia;
-- evolução de carga quando comparável;
-- avisos recorrentes de atraso.
-
-A primeira ocorrência não é tratada como padrão. O sarcasmo ganha contexto conforme o histórico cresce.
-
-Exemplos:
-
-> 🌱 Terceira vez. A tarefa claramente criou raízes. Eu volto de novo.
-
-> 🔥 10 dias seguidos. Isso já deixou de ser acidente estatístico. Continue.
-
-> 👀 Segunda falta no protocolo. Ainda administrável. Só não vamos transformar exceção em calendário.
-
-Em Day-off e contextos sensíveis, a cobrança é reduzida.
-
----
-
-## 🔥 Metas e sequências
-
-Em `🎯 Metas → 🔥 Sequências`, o Butler acompanha de forma leve, semelhante à ideia de streak de aplicativos como Duolingo:
-
-- 🇬🇧 Inglês;
-- 💻 Programação;
-- 💧 Água;
-- 🥗 Alimentação;
-- 🏋️ Musculação.
-
-Exibe:
-
-- sequência atual;
-- melhor sequência;
-- total de dias registrados;
-- visual dos últimos 7 dias.
-
-No Butler pessoal, musculação usa diretamente treinos realmente concluídos, evitando exigir registro duplicado.
-
----
-
-## 🏋️ Musculação
-
-### Butler pessoal
-
-Existe um protocolo interno de 12 semanas com:
-
-- `🚀 Começar os trabalhos` para iniciar oficialmente;
-- acompanhamento do dia e da semana;
-- exercícios previstos;
-- exercícios substitutos;
-- registro série por série;
-- carga e repetições realizadas;
-- histórico de evolução de carga;
-- faltas com motivo;
-- progresso semanal;
-- opção temporária de reiniciar durante testes.
-
-Para o usuário, a linguagem do Butler usa apenas **“treino na academia”**; o nome interno do protocolo não precisa aparecer nas mensagens comuns.
-
-Antes de `🚀 Começar os trabalhos`, o treino não aparece nos resumos e uma frase como “hoje não vou treinar” não gera falta no protocolo.
-
-### Butler genérico
-
-Não recebe a rotina pessoal. Musculação começa vazia e pode ser cadastrada pelo próprio usuário com dia, exercícios, carga, séries e repetições.
-
----
-
-## 🛒 Casa / itens faltando
-
-A lista de feira é persistente e pensada como uma memória da casa, não como uma lista descartável criada a cada ida ao mercado.
-
-É possível adicionar rapidamente:
-
-```text
-sal
-sal, açúcar, café
-falta sal, açúcar, café
-café | 2 pacotes
-```
-
-Quantidade é opcional.
-
-Depois basta perguntar:
-
-```text
-o que falta em casa?
-```
-
-ou usar o atalho do menu.
-
----
-
-## 💰 Finanças simples
-
-O módulo financeiro foi mantido propositalmente pequeno.
-
-### Funcionalidades
-
-- ➕ entrada;
-- ➖ saída/gasto;
-- categorias;
-- descrição opcional;
-- relatório mensal;
-- saldo baseado no que foi registrado;
-- comparação com mês anterior;
-- alertas simples de excesso.
-
-Categorias iniciais:
-
-- Alimentação;
-- Transporte;
-- Lazer;
-- Compras;
-- Renda;
-- Outros.
-
-Existem limites predefinidos simples para algumas categorias. Eles servem apenas como alerta inicial, não como sistema completo de orçamento.
-
-O Butler também deixa claro quando os dados são insuficientes. Ele não tenta produzir uma análise financeira confiável se o usuário não registrar entradas e saídas.
-
-Não fazem parte desta versão:
-
-- cartões;
-- parcelas;
-- investimentos;
-- múltiplas contas bancárias;
-- orçamento financeiro complexo.
-
----
+Sarcasmo comportamental só ganha força quando há evidência real: adiamentos recorrentes, atrasos repetidos, streaks, faltas de treino ou evolução registrada. A primeira ocorrência não vira hábito inventado.
 
 ## 🌙 Day-off
 
-Day-off representa um dia em que o usuário não quer cobranças ou não está disponível para a rotina normal.
+Day-off representa folga/indisponibilidade. Enquanto ativo, cobranças e lembretes compatíveis são reduzidos/silenciados. A reativação pode ocorrer chamando novamente o Butler. O estado é isolado por usuário.
 
-Enquanto ativo, o Butler silencia lembretes/cobranças previstos para esse contexto e reduz o sarcasmo.
+## 🏋️ Musculação
 
-A reativação pode ser feita chamando novamente o Butler.
+No Butler pessoal existe um protocolo de 12 semanas iniciado por `🚀 Começar os trabalhos`, com treino do dia/semana, exercícios, substitutos, registro série por série, carga, repetições, faltas e evolução. Antes da ativação, o protocolo não deve interferir nos resumos.
 
-Na versão multiusuário, Day-off é isolado por `chat_id`: um usuário não silencia o bot dos outros.
+Usuários genéricos começam sem o protocolo pessoal e podem cadastrar a própria rotina.
 
----
+## ☁️ Produção
 
-# Butler pessoal x Butler genérico
+A produção usa a arquitetura Cloudflare/Webhook/D1. O desenvolvimento histórico local utilizou Python, polling, SQLite e JobQueue; essas decisões locais não devem ser confundidas com a implementação de produção.
 
-## Butler pessoal
+O Core continua determinístico e multiusuário. A memória pessoal e os contextos da Library são sempre associados ao usuário correto.
 
-Executado por:
+## 🧪 LLM
 
-```bash
-python -m src.main
-```
+Foi testado um laboratório com Workers AI como camada de linguagem/persona/memória, mantendo o Core determinístico. A experiência apresentou problemas de integração e latência e foi removida da `main`.
 
-Mantém:
+- experimento preservado: `archive/llm-experiment`;
+- referência pré-LLM: `backup/nlu-only`;
+- direção oficial atual: NLU + memória + Butler Library determinísticas;
+- possibilidade futura: LLM local/privada em serviço/container, apenas como camada de linguagem/contexto, nunca como autoridade de escrita.
 
-- grade acadêmica inicial;
-- correções pessoais de horário;
-- protocolo de academia de 12 semanas;
-- histórico pessoal;
-- banco local `data/butler.db`.
+## Regra para expansão
 
-### Grade pessoal inicial
+Quando surgir um novo exemplo — receita, personagem, livro, jogo, filme — evitar criar uma feature específica para aquele exemplo. Primeiro perguntar se ele pertence a um **domínio de conhecimento reutilizável**. A expansão preferida é alimentar/importar dados para a Butler Library e melhorar os mecanismos de recuperação/generalização.
 
-| Matéria | Dia | Horário | Local |
-|---|---|---|---|
-| Álgebra Linear I | Terça e quinta | 10:00–12:00 | PAV III, Sala 10 |
-| Física II | Segunda e quarta | 10:00–12:00 | PAV III, Sala 07 |
-| Laboratório de Sistemas Digitais I | Segunda | 14:00–16:00 | PAV Eng., Sala D6 |
-| Princípios de Eletrônica Analógica | Terça e quinta | 08:00–10:00 | PAV I, Sala 104 |
-| Sistemas Digitais I | Segunda | 08:00–10:00 | PAV I, Sala 11 |
-| Sistemas Digitais I | Quarta | 08:00–10:00 | PAV I, Sala 114 |
-
-## Butler genérico / multiusuário
-
-Executado por:
-
-```bash
-python -m src.main_generic
-```
-
-A versão genérica:
-
-- nasce sem grade pessoal;
-- nasce sem o protocolo pessoal de musculação;
-- pergunta no `/start` como o usuário quer ser chamado;
-- aceita importação da própria grade;
-- permite cadastrar a própria musculação;
-- identifica cada conversa pelo `chat_id`;
-- mantém dados de usuários diferentes isolados.
-
-No rolling local, cada chat usa um SQLite próprio em `data/butler_generic_users/` e existe um pequeno registro central dos chats conhecidos.
-
-Essa implementação é adequada ao desenvolvimento e ao volume pequeno esperado. Na hospedagem, a regra de domínio permanece: **cada dado pertence ao usuário/chat correto**.
-
----
-
-# Arquitetura funcional
-
-Os principais módulos incluem:
-
-- `database.py` — grade/usuários;
-- `daily_store.py` — tarefas e compromissos;
-- `home_store.py` — casa, metas, rotinas e musculação genérica;
-- `protocol_mass_store.py` — protocolo pessoal de academia;
-- `finance_store.py` — finanças;
-- `assistant_state.py` — estado do assistente/Day-off;
-- `scheduler.py` — lembretes e resumos locais;
-- `summary_engine.py` — construção dos resumos;
-- `behavior_engine.py` — comportamento contextual;
-- `personality.py` — tom/persona;
-- `natural_language.py` — interpretação determinística de texto;
-- `natural_handlers.py` — execução das intenções naturais;
-- `natural_store.py` — eventos comportamentais auxiliares;
-- `user_scope.py` — isolamento multiusuário no rolling local.
-
-A linguagem natural **não cria uma segunda regra de negócio**: ela traduz a fala e chama os mesmos stores utilizados pelos botões.
-
----
-
-# Execução local
-
-## Butler pessoal
-
-```bash
-git pull origin main
-pip install -r requirements.txt
-python -m src.main
-```
-
-## Butler genérico
-
-Windows:
-
-```bash
-copy .env.generic.example .env.generic
-# configure TELEGRAM_BOT_TOKEN
-python -m src.main_generic
-```
-
-Linux/macOS:
-
-```bash
-cp .env.generic.example .env.generic
-# configure TELEGRAM_BOT_TOKEN
-python -m src.main_generic
-```
-
----
-
-# Smoke test da linguagem natural
-
-Existe um teste rápido para as intenções críticas:
-
-```bash
-python scripts/nlu_smoke.py
-```
-
-Resultado esperado:
-
-```text
-NLU smoke OK
-```
-
-Ele cobre exemplos de compromisso, tarefa, agenda, mercado, treino, atraso, finanças e bloqueio temporal.
-
----
-
-# Próxima etapa: produção no Cloudflare
-
-O rolling local usa recursos que não devem ser simplesmente copiados para produção. A próxima etapa técnica será adaptar a infraestrutura mantendo as regras já consolidadas.
-
-Plano:
-
-1. trocar polling do Telegram por webhook;
-2. migrar persistência SQLite para Cloudflare D1 ou camada persistente equivalente;
-3. preservar isolamento por `chat_id`;
-4. substituir/adaptar JobQueue para mecanismo de agendamento compatível com Cloudflare;
-5. migrar secrets/configurações de `.env` para o ambiente de produção;
-6. testar lembretes, resumo matinal e fechamento semanal;
-7. validar Butler pessoal;
-8. validar pelo menos dois `chat_id` distintos no modo genérico;
-9. só então considerar o rolling local encerrado.
-
-A prioridade da migração é **não alterar o comportamento funcional já validado**. Primeiro levamos o Butler atual para produção; novas funcionalidades ficam para depois do deploy estável.
+Materiais externos devem respeitar direitos autorais e licenças: preferir dados abertos, domínio público, documentos próprios e resumos/metadados produzidos para o projeto em vez de copiar obras protegidas integralmente.
