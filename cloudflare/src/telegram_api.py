@@ -16,6 +16,25 @@ async def _post_telegram(token: str, method: str, payload: dict) -> dict:
     return {"ok_http": bool(response.ok), "status": int(response.status), "telegram": data}
 
 
+def delivery_ok(result: dict | None) -> bool:
+    """Confirma que HTTP e Telegram aceitaram a operação.
+
+    Schedulers devem gravar notification_log somente quando isto retornar True.
+    """
+    if not isinstance(result, dict):
+        return False
+    telegram = result.get("telegram") or {}
+    return bool(result.get("ok_http")) and bool(telegram.get("ok"))
+
+
+def delivery_error(result: dict | None) -> str:
+    if not isinstance(result, dict):
+        return "resposta ausente/inválida"
+    telegram = result.get("telegram") or {}
+    description = telegram.get("description") or telegram.get("error_code") or telegram.get("raw")
+    return f"http={result.get('status')} telegram={description or 'ok=false'}"
+
+
 async def send_message(token: str, chat_id: int, text: str, reply_markup=None, parse_mode=None):
     payload = {"chat_id": chat_id, "text": text}
     if reply_markup is not None: payload["reply_markup"] = reply_markup
