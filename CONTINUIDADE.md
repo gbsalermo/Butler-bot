@@ -1,276 +1,161 @@
 # Continuidade do desenvolvimento — Butler
 
-> Documento consolidado em agosto/2026. Mantém as decisões históricas que continuam relevantes e registra a arquitetura atual de produção, memória e Butler Library.
+> Consolidado em agosto/2026. Este documento registra decisões arquiteturais que devem sobreviver às próximas expansões.
 
-## 1. Visão do produto
+## 1. Objetivo
 
-Butler é um assistente pessoal via Telegram. Não deve ser apenas CRUD/menu e também não tenta ser uma IA geral. O objetivo é unir organização cotidiana, memória contextual, conversa familiar e conhecimento útil, mantendo operações críticas determinísticas.
+Butler é um assistente pessoal via Telegram. Não deve ser apenas CRUD/menu nem tentar ser IA geral. O objetivo é unir organização cotidiana, memória contextual, conversa familiar e conhecimento útil, mantendo operações críticas determinísticas.
 
 Princípios permanentes:
 
-1. ações frequentes exigem poucos passos;
-2. botões continuam disponíveis, mas texto natural deve ser confortável;
-3. personalidade é sarcástica/provocativa de forma favorável ao usuário, sem humilhação;
-4. sarcasmo comportamental nasce de fatos registrados;
+1. Core funcional é autoridade;
+2. texto natural e botões convivem;
+3. comentário não precisa virar produtividade;
+4. problemas podem gerar sugestões, nunca escrita silenciosa;
 5. ambiguidade de escrita exige confirmação;
 6. não inventar presença, conclusão, treino, gasto, compromisso ou memória;
-7. não prometer lembrete sem informação suficiente;
-8. Day-off reduz cobranças;
-9. cada usuário possui dados e memória isolados;
-10. conhecimento global pertence à Butler Library, não à memória pessoal;
-11. exemplos novos devem alimentar domínios reutilizáveis, não virar `if`s específicos;
-12. **Library, cultura e backgrounds são extras opcionais: enriquecem a experiência, mas nunca têm prioridade sobre Core funcional.**
+7. cada usuário possui dados, memória e contexto isolados;
+8. conhecimento global pertence à Library, não à memória pessoal;
+9. Library/background são extras opcionais;
+10. exemplos novos alimentam domínios reutilizáveis, não `if`s individuais.
 
-## 2. Estado técnico atual
+## 2. Arquitetura oficial de linguagem
 
-A `main` usa produção Cloudflare com webhook Telegram e D1. A camada oficial de linguagem é determinística/contextual, sem LLM externa ativa.
+A `main` usa Cloudflare Worker + Telegram webhook + D1. Não há LLM externa ativa.
 
-Componentes recentes importantes em `cloudflare/src/`:
-
-- `butler_library.py` — roteamento/busca da biblioteca e ponte de sugestões para o Core;
-- `deterministic_memory.py` / memória pessoal — fatos estruturados por usuário;
-- `companion_safe_fallback.py` — conversa básica/fallback contextual sem o bug de continuadores por substring;
-- `language_context.py` — normalização informal e proteção de domínios do Core;
-- `knowledge/portuguese_conversation.py` — acervo linguístico auxiliar, não respondente;
-- `knowledge/cooking.py` / `knowledge/cooking_books.py`;
-- `knowledge/brazilian_traditional_foods.py`;
-- `knowledge/meat_cuts.py`;
-- `knowledge/games.py`;
-- `knowledge/pop_culture.py`;
-- `knowledge/philosophy.py`;
-- `knowledge/books.py`.
-
-## 3. Core determinístico
-
-O Core permanece autoridade sobre dados e operações. Linguagem, memória e biblioteca podem interpretar, contextualizar e **propor** ações, mas não devem criar uma segunda regra de negócio.
-
-Contrato:
+Fluxo conceitual oficial:
 
 ```text
 mensagem
-→ Core/fast paths funcionais
+→ Context Router
+→ Core funcional
 → memória pessoal
-→ proteção de domínio
-→ Library/backgrounds somente quando não houver intenção funcional protegida
-→ resposta ou sugestão
-→ confirmação quando houver escrita derivada/ambígua
-→ Core
-→ D1
+→ Library opcional
+→ NLU/conversa/fallback
 ```
 
-Domínios protegidos incluem, no mínimo: matérias/aulas/provas/faltas, tarefas, compromissos/agenda, mercado/lista, musculação, finanças, metas e rotinas. Se uma mensagem apontar claramente para um desses domínios, acervos de culinária/cultura/conversa não disputam a mensagem, mesmo que exista contexto recente de outra área.
+Hierarquia obrigatória: `Core > contexto explícito atual > memória > Library > conversa genérica`.
 
-Exemplos aprovados: receita + ingrediente ausente → sugerir item de mercado; série que o usuário quer acompanhar → sugerir rotina diária. A Library não grava essas ações diretamente.
+`context_router.py` centraliza classificação de domínio/tier/formato. Domínios protegidos incluem matérias/aulas/provas/faltas, tarefas, compromissos/agenda, mercado, musculação, finanças, metas e rotinas. Acervos não implementam autoridade concorrente.
 
-## 4. Multiusuário e memória pessoal
+Regressão proibida: após falar de receita, `queria faltar essa aula de Sistemas Digitais I` jamais pode ser tratado como ingrediente ausente.
 
-A memória determinística foi propagada para usuários genéricos. Todo dado pessoal deve ser resolvido pelo `chat_id → user_id` e filtrado por esse usuário.
+## 3. Contexto recente
 
-Domínios atuais: pets, familiares, amigos/colegas, relacionamentos, veículos e objetos pessoais. A memória deve crescer por entidades/relações claras, não tentar salvar qualquer frase aberta.
+`context_memory.py` fornece memória operacional curta, por usuário, limitada a poucos tópicos. É diferente da memória pessoal permanente.
 
-Exemplos:
+Serve para resolver follow-ups como `não tenho bacon` após carbonara e `quero assistir ela toda` após uma série, sem deixar assunto antigo perseguir o usuário. A mensagem atual sempre pode invalidar/despriorizar contexto anterior.
+
+## 4. Memória pessoal
+
+Memória determinística continua oficial e isolada por `user_id`. Entidades atuais: pets, familiares, amigos/colegas, relacionamentos, veículos e objetos.
+
+Direção: formar mapa pessoal estruturado e incremental, não armazenar conversa indiscriminadamente. Conflito pessoal × cultura: `Jake` pode ser pet conhecido; `Jake Peralta` deve permanecer cultura pop.
+
+## 5. Linguagem natural
+
+`knowledge/portuguese_conversation.py` é background linguístico não respondente. `language_context.py` normaliza fala informal. `context_router.py` usa essa normalização.
+
+A NLU deve evoluir por intenção + alvo + tempo, não por frases mágicas. Formulações semanticamente equivalentes devem convergir para o mesmo Core, por exemplo `segunda eu não vou pra Sistemas`, `segunda quero faltar SD1` e `acho que vou matar Sistemas segunda` → ausência acadêmica + matéria + data.
+
+## 6. Política de ação e sugestão
+
+`action_policy.py` formaliza:
 
 ```text
+comentário → conversa
+pedido explícito → ação pelo Core
+problema/necessidade → ajuda + possível sugestão
+ação implícita/derivada → confirmação antes de escrita
+```
+
+Sugestões são transversais: pet sem ração → mercado; ingrediente ausente → mercado; série longa → rotina; duas provas próximas → futuramente plano de estudo. Library nunca executa regra de negócio própria.
+
+## 7. Butler Library
+
+Library é conhecimento global compartilhado e opcional. `knowledge/library_manifest.py` documenta acervos e regra de expansão.
+
+Acervos atuais: culinária estruturada por áreas/livros (incluindo cozinha brasileira tradicional e cortes), jogos + Pokémon FireRed, filmes/séries/cultura pop, livros/filosofia e português informal como background não respondente.
+
+Culinária inclui massas, carnes, salgados, arroz/feijão, legumes, saladas, frango, doces, moquecas, vatapá, baião de dois, acarajé, bobó, tropeiro, galinhada, barreado, cuscuz, caruru, vaca atolada e conhecimento de cortes/preparações bovinas.
+
+Direção arquitetural: conteúdo deve migrar progressivamente para dados estruturados/documentos pesquisáveis, separado do mecanismo. O motor deve permanecer pequeno. Preferir domínio público, dados abertos/licenciados, documentos próprios e resumos/metadados; não armazenar indiscriminadamente obras comerciais completas.
+
+## 8. Core funcional preservado
+
+Continuam soberanos: tarefas, compromissos, agenda, pendências, matérias/grade, provas/faltas, lembretes, lista de itens faltando, metas/streaks, rotinas, finanças e musculação.
+
+Tarefa vencida não concluída = pendência. Agenda reutiliza fontes reais. Aulas são previstas, não presença presumida. Escritas ambíguas confirmam alvo. Mercado é lista persistente do que falta em casa; Library pode sugerir item, nunca gravar silenciosamente.
+
+Acadêmico mantém matérias, horários/locais, grade textual, faltas e provas. Sem OCR/Tesseract; correção manual tem prioridade.
+
+Musculação pessoal mantém protocolo de 12 semanas iniciado por `🚀 Começar os trabalhos`, com exercício, substitutos, série/carga/repetições/faltas/evolução. Usuário genérico cadastra treino próprio.
+
+Finanças permanecem simples: entradas, saídas, categorias, relatório mensal, saldo, comparação e alertas básicos.
+
+## 9. Personalidade e cotidiano
+
+Butler aceita saudação, agradecimento, risada, cansaço, fome, desânimo e comentários sem tentar transformar tudo em tarefa. Tom: familiaridade/parceria, humor e gíria quando cabem. Sarcasmo comportamental só usa histórico real; primeira ocorrência não vira hábito inventado. Day-off reduz cobranças e é isolado por usuário.
+
+## 10. Testes de conversa
+
+`cloudflare/tests/test_context_router.py` inicia testes automatizados de roteamento e política de ação. A suíte deve crescer para 50–100 cenários reais misturando domínios e sequências.
+
+Casos prioritários:
+
+```text
+qual minha aula segunda?
+quero faltar ela
+quantas faltas tenho?
+
+receita de carbonara
+não tenho bacon
+deixa
+segunda tenho prova?
+
 tenho um gato chamado Jake
 Jake tá sem ração
-qual o nome do meu gato?
-minha mãe se chama Ana
-meu carro é um Corsa 2008
+pode colocar
 ```
 
-Regra de conflito: memória pessoal não pode sequestrar entidade cultural composta. `quem é Jake?` pode consultar o contexto pessoal; `quem é Jake Peralta?` deve ir para cultura pop.
+Também testar dois `chat_id` para provar isolamento de memória/contexto.
 
-## 5. Butler Library
+## 11. Experimento LLM
 
-A Butler Library é conhecimento global compartilhado por todos os usuários. Ela substitui a estratégia de cadastrar cada exemplo no dispatcher.
+Workers AI foi testada como camada de linguagem/persona/memória/sugestão, mantendo Core determinístico, mas apresentou integração/fallback/latência inadequados. Foi removida da `main`.
 
-### 5.1 Culinária
+Preservação: `archive/llm-experiment` (laboratório) e `backup/nlu-only` (referência pré-LLM).
 
-Receitas são dados estruturados com aliases, ingredientes, porções, preparo, dicas, tags e chaves de despensa. Busca direta, busca por ingrediente, categoria, sobras e fala informal são suportadas.
+Possibilidade futura: LLM local/privada em serviço/container, somente para linguagem/contexto. Core valida ações; memória oficial pertence ao Butler; nenhuma escrita direta pelo modelo.
 
-A culinária está organizada em áreas/livros como massas, carnes/cortes, salgados, arroz/feijão, legumes, saladas, frango, doces e cozinha brasileira tradicional.
+## 12. Prioridade de desenvolvimento
 
-O acervo tradicional inclui, entre outros: moqueca baiana/capixaba, vatapá, baião de dois, acarajé, bobó de camarão, feijão tropeiro, galinhada, barreado, cuscuz nordestino, caruru e vaca atolada.
+Ordem oficial atual:
 
-O acervo de carnes diferencia corte de preparação/conservação e inclui filé mignon, contrafilé, alcatra, picanha, patinho, acém, músculo, costela, cupim, coxões, lagarto, fraldinha, maminha, peito, ossobuco, tutano, carne do sol e charque/carne-seca/jabá.
+1. estabilidade do Core;
+2. roteamento e contexto;
+3. memória pessoal;
+4. linguagem natural;
+5. sugestões inteligentes;
+6. Library;
+7. novas funcionalidades.
 
-Objetivo de generalização: `receita de carne moída`, `tenho carne moída e batata`, `queria fazer um macarrão`, `sobrou arroz de ontem`, `como faço strogonoff?` devem ser consultas do mesmo domínio, sem novas features individuais.
+Não adicionar grande módulo novo enquanto conflitos entre essas camadas ainda estiverem sendo encontrados.
 
-Follow-up: `não tenho X` após uma receita pode oferecer salvar X em itens faltando; escrita só após confirmação. `falta` isolado nunca é interpretado como ingrediente porque pode significar falta acadêmica/ausência.
+## 13. Estado desta consolidação
 
-### 5.2 Jogos
+Implementado na `main` nesta etapa:
 
-Catálogo com plataforma, gênero, modos, peso aproximado e tags. Permite recomendações como jogo de PC, leve, RPG, estratégia, coop/multiplayer etc.
+- roteador central determinístico (`context_router.py`);
+- contexto recente curto (`context_memory.py`);
+- política central de ação/sugestão (`action_policy.py`);
+- manifesto data-driven da Library (`knowledge/library_manifest.py`);
+- dispatcher reorganizado em tiers;
+- testes iniciais de roteamento entre domínios;
+- README e continuidade alinhados.
 
-Pokémon FireRed possui dados/gerador próprio para times aleatórios. Esse é um exemplo de conhecimento estruturado alimentando lógica determinística, não uma resposta fixa.
+Esta é a fundação das sete prioridades. Memória, NLU e testes devem continuar sendo ampliados incrementalmente sobre esses contratos, sem reescrever o Core inteiro de uma vez.
 
-### 5.3 Filmes, séries e cultura pop
+## 14. Regra de continuidade
 
-Catálogo de obras/personagens com aliases, gênero, clima, episódios/temporadas quando aplicável e resumos. Inclui referências como Walter White, Jake Peralta, Palpatine, Breaking Bad, Supernatural, Brooklyn Nine-Nine, Star Wars etc.
-
-Uma série pode manter contexto recente. `quero assistir ela toda` pode oferecer rotina diária, solicitar horário e confirmar antes de criar.
-
-### 5.4 Filosofia
-
-Acervo factual inicial para figuras e conceitos, incluindo Platão, Spinoza e outros. Variações como `quem foi`, `me explica`, `qual é a desse` e `era quem mesmo` devem convergir para intenção/alvo em vez de exigir frase exata.
-
-### 5.5 Livros
-
-Acervo amplo com prioridade em:
-
-- literatura brasileira e clássicos;
-- filosofia;
-- clássicos internacionais;
-- Geração Beat/contracultura;
-- dirty realism e linha próxima a Bukowski/John Fante;
-- obras na atmosfera de `On the Road`.
-
-O catálogo cruza título, autor, país, tipo e tags. Inclui Machado de Assis, Graciliano Ramos, Clarice Lispector, Guimarães Rosa, Jorge Amado, Carolina Maria de Jesus, Dostoiévski, Kafka, Camus, Orwell, Hesse, Platão, Spinoza, Nietzsche, Marco Aurélio, Kerouac, Bukowski e John Fante, entre outros.
-
-### 5.6 Prioridade dos acervos
-
-A Library é deliberadamente opcional. Regra prática:
-
-```text
-Core explícito > memória funcional > acervo opcional > conversa/fallback
-```
-
-Exemplo de regressão já observada e proibida: após falar de receita, `queria faltar essa aula de Sistemas Digitais I` não pode ser interpretado como ingrediente faltando. A mensagem atual define o domínio; contexto recente apenas ajuda quando a mensagem atual é ambígua dentro do mesmo domínio.
-
-## 6. Personalidade, português informal e conversa cotidiana
-
-O Butler deve aceitar conversa simples sem responder sempre com produtividade. Saudações, agradecimentos, risadas, fome, sono, desânimo e comentários cotidianos devem ter respostas naturais e variadas.
-
-Existe um acervo linguístico auxiliar de português informal com equivalências e marcadores como `oq`, `pq`, `vc`, `tbm`, `hj`, `dps`, `tô/to`, `blz`, `vlw`, `facul`, `trampo`, além de construções como `deu ruim`, `tá osso`, `queria`, `tava pensando`, `me lembra` etc.
-
-Esse acervo **não é uma enciclopédia para perguntas sobre gírias** e não deve responder por conta própria. Sua função é melhorar normalização, intenção, mudança de assunto e separação de domínios.
-
-Tom desejado: familiaridade e parceria, com humor/gírias quando cabem. Evitar frases feitas como transformar todo `oi` em `vamos resolver as coisas agora ou depois?`.
-
-O histórico pode dar contexto a encorajamento ou provocação, mas apenas com dados reais. Primeira ocorrência nunca deve virar `você sempre...`.
-
-## 7. Day-off
-
-Day-off significa folga/indisponibilidade. Deve reduzir/silenciar cobranças e respeitar agendamentos compatíveis. Reativação pode acontecer chamando novamente o Butler. Estado isolado por usuário.
-
-## 8. Tarefas, compromissos e agenda
-
-Decisões preservadas:
-
-- tarefa vencida e não concluída = pendência; pendência não é categoria cadastrável;
-- remoção arquiva/cancela quando o histórico precisa ser preservado;
-- bloquear data passada e horário passado no dia atual;
-- `me lembra de...` sem data/hora pergunta quando;
-- agenda reutiliza as mesmas fontes dos resumos;
-- aulas da grade são `previstas`, não presença presumida;
-- conclusão/atraso usa busca por alvo e confirma quando houver ambiguidade.
-
-## 9. Casa / mercado
-
-A lista é memória persistente do que falta em casa. Quantidade é opcional.
-
-`preciso comprar café` tende a mercado; `preciso comprar adaptador para o trabalho` pode ser tarefa; pedido explicitamente temporal vira tarefa/lembrete.
-
-A Butler Library pode sugerir itens de mercado a partir de contexto culinário, mas nunca deve gravar silenciosamente.
-
-## 10. Acadêmico
-
-Gerenciamento de matérias preserva listar/adicionar/remover/trancar/editar, horários/locais e importação de grade textual.
-
-Decisões históricas mantidas:
-
-- sem OCR/Tesseract;
-- PDF precisa ter texto pesquisável ou ser convertido para `.txt`;
-- SIGAA usa blocos de horas completas (`M23=08–10`, `M45=10–12`, `T23=14–16`, `T2345=14–18`, `N12=18–20`);
-- correção manual tem prioridade;
-- no perfil pessoal, Laboratório de Sistemas Digitais I permanece segunda 14:00–16:00.
-
-## 11. Musculação
-
-Butler pessoal possui protocolo interno de 12 semanas. `🚀 Começar os trabalhos` inicia oficialmente. Acompanhamento inclui dia/semana, exercício, substitutos, série por série, carga, repetições, faltas e evolução.
-
-Antes de iniciar, o protocolo não deve aparecer nos resumos nem registrar falta. Mensagens comuns usam `treino na academia`, não o nome interno do protocolo.
-
-Usuário genérico nasce sem esse protocolo e cadastra a própria musculação.
-
-## 12. Metas, streaks e finanças
-
-Streaks permanecem simples: Inglês, Programação, Água, Alimentação e Musculação. Evitar gamificação pesada sem necessidade.
-
-Finanças permanecem deliberadamente simples: entradas, saídas, categorias, relatório mensal, saldo, comparação básica e alertas. Não adicionar cartões, parcelas, investimentos, múltiplas contas ou orçamento sofisticado sem nova decisão explícita.
-
-## 13. Resumos
-
-Resumo matinal e fechamento semanal continuam como mecanismos principais. Não existe fechamento automático noturno: o dia real pode terminar tarde.
-
-## 14. Experimento LLM — decisão preservada
-
-Em agosto/2026 foi testada uma LLM apenas como camada de linguagem, personalidade, memória e sugestão, com Core determinístico. Workers AI apresentou falhas de integração/fallback e latência; até diagnóstico não atravessou o fluxo de forma confiável.
-
-Decisão: LLM removida da `main`. Preservação:
-
-- `archive/llm-experiment` — laboratório;
-- `backup/nlu-only` — referência pré-LLM.
-
-A ideia útil — memória persistente — foi mantida deterministicamente.
-
-Possibilidade futura: LLM local/privada em serviço/container (por exemplo runtime compatível com Ollama), somente para linguagem/contexto. Mesmo nesse cenário: memória pertence ao Butler, Core valida ações, nenhuma escrita direta pelo modelo e NLU determinística continua fast path/fallback.
-
-## 15. Direitos autorais e fontes da Library
-
-A Library pode futuramente importar documentos e bases, mas não deve armazenar indiscriminadamente livros/revistas comerciais completos. Preferir domínio público, dados abertos/licenciados, documentos próprios e resumos/metadados produzidos para o projeto.
-
-Conhecimento estruturado é preferível quando o domínio pede cálculo/filtro (Pokémon, jogos, receitas); texto documental é adequado para contexto cultural, filosofia e literatura.
-
-## 16. Testes prioritários após esta consolidação
-
-Pente-fino manual deve misturar domínios para testar generalização e conflitos:
-
-```text
-oi butler
-minha mãe se chama Ana
-qual o nome da minha mãe?
-tenho um gato chamado Jake
-quem é Jake?
-quem é Jake Peralta?
-quem é Palpatine?
-quem foi Spinoza?
-me passa uma receita de strogonoff
-não tenho creme de leite
-pode
-queria fazer um baião de dois
-me explica carne do sol
-me indica um jogo leve pra PC
-monta um time aleatório pra FireRed
-me fala de Supernatural
-quero assistir ela toda
-20h
-pode
-me indica um livro brasileiro
-quero algo parecido com Bukowski
-quero algo na vibe de On the Road
-```
-
-Teste obrigatório de troca de domínio:
-
-```text
-receita de carbonara
-queria faltar essa aula de Sistemas Digitais I
-```
-
-A segunda mensagem deve ir ao Core acadêmico e nunca à culinária.
-
-Também testar dois `chat_id` distintos para confirmar que memória, Day-off, contexto recente e ações nunca vazam entre usuários.
-
-## 17. Próximos passos
-
-1. ampliar conteúdo da Library por **fontes/domínios**, não exemplos individuais;
-2. melhorar recuperação semântica determinística por intenção + alvo + tags + aliases;
-3. adicionar testes automatizados da Library e conflitos memória pessoal × conhecimento global;
-4. revisar respostas para evitar repetição/frases prontas;
-5. manter documentação da Library em `docs/BUTLER_LIBRARY.md` sincronizada;
-6. só reconsiderar LLM quando houver infraestrutura confiável e ganho claro sobre a solução determinística.
-
-## 18. Regra de continuidade
-
-Ao concluir etapas futuras: atualizar este arquivo e o README quando a capacidade pública mudar; registrar decisões técnicas; não remover decisões históricas sem substituição explícita; e deixar o próximo passo claro.
+Ao concluir etapas futuras: atualizar este arquivo e README quando a capacidade pública mudar; registrar decisões técnicas; não apagar decisões históricas sem substituição explícita; e manter claro que Library/background enriquecem, enquanto Core governa.
