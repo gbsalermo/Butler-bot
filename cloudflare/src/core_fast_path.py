@@ -1,7 +1,7 @@
-"""Fast path para o papel base do Butler.
+"""Fast path conservador para ações operacionais do Butler.
 
-Mensagens claramente funcionais não precisam atravessar memória, Library e conversa.
-O fast path é conservador: mensagens compostas/ambíguas continuam no dispatcher completo.
+Somente ações claras do núcleo passam por aqui. Texto livre nunca é enviado ao
+interpretador amplo do app base; apenas botões exatos podem cair no app.
 """
 import re
 import unicodedata
@@ -14,8 +14,6 @@ from task_context_patch import handle_message as handle_task_context
 from ux_bugfixes import handle_global_navigation
 from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress
 
-# Musculação é parte do Core: instala referências/histórico/cardio uma vez no caminho
-# principal, antes de qualquer mensagem chegar ao app monolítico.
 install_workout_progress()
 
 CORE_BUTTONS = {
@@ -23,8 +21,8 @@ CORE_BUTTONS = {
     "outra data","proximos 7 dias","historico","item faltando","o que esta faltando",
     "adicionar item","ver itens faltando","cotidiano","musculacao","treino de hoje",
     "comecar os trabalhos","registrar serie","substituir exercicio","finalizar treino",
-    "nao consegui treinar hoje","progresso","historico de cargas","reiniciar treinos","menu principal",
-    "cancelar acao",
+    "nao consegui treinar hoje","progresso","historico de cargas","reiniciar treinos",
+    "menu principal","cancelar acao",
 }
 
 CORE_HINTS = (
@@ -49,34 +47,35 @@ def _norm(text):
 
 
 def _looks_compound(n):
-    # Mais de uma intenção forte na mesma frase deve ir ao Compound Router.
     groups=0
     checks=(
-        ("receita","filme","serie","livro","jogo"),
         ("tarefa","lembra","avisa","compromisso","agenda"),
         ("treino","musculacao","serie"),
         ("materia","aula","prova","faltar","faltas"),
         ("lista","item faltando","acabou","to sem"),
     )
     for terms in checks:
-        if any(t in n for t in terms): groups+=1
+        if any(t in n for t in terms):
+            groups+=1
     return groups>=2 and len(n)>70
 
 
 def is_core_candidate(text):
     n=_norm(text)
-    if not n or _looks_compound(n): return False
+    if not n or _looks_compound(n):
+        return False
     stripped=re.sub(r"^butler\s+","",n).strip()
-    if stripped in CORE_BUTTONS:return True
+    if stripped in CORE_BUTTONS:
+        return True
     return any(_norm(h) in n for h in CORE_HINTS)
 
 
 async def handle_message(db,token,message):
     text=(message.get("text") or "").strip()
-    if not is_core_candidate(text):return False
+    n=_norm(text)
+    if not is_core_candidate(text):
+        return False
 
-    # Patches funcionais específicos têm prioridade e podem responder sem passar
-    # pelo app monolítico.
     if await handle_global_navigation(db,token,message):return True
     if await handle_explicit_simple_reminder(db,token,message):return True
     if await handle_task_context(db,token,message):return True
@@ -84,6 +83,10 @@ async def handle_message(db,token,message):
     if await runtime_guard.handle_pre_dispatch(db,token,message):return True
     if await handle_grocery(db,token,message):return True
 
-    # Para botões/menu/agenda/musculação, o app é a autoridade original.
-    await app.handle_message(db,token,message)
-    return True
+    # App monolítico somente para botões exatos. Se uma frase natural chegou até
+    # aqui sem handler, devolvemos ao dispatcher operacional.
+    stripped=re.sub(r"^butler\s+","",n).strip()
+    if stripped in CORE_BUTTONS:
+        await app.handle_message(db,token,message)
+        return True
+    return False
