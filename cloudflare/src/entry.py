@@ -11,6 +11,7 @@ from attendance_patch import dispatch_class_attendance, handle_message as handle
 from attendance_enhancement import ensure_schema as ensure_attendance_schema, handle_callback as handle_attendance_callback, install as install_attendance_enhancement
 from attendance_management import handle_message as handle_attendance_management, install as install_attendance_management
 from butler_library import handle_message as handle_butler_library
+from cooking_library import handle_message as handle_cooking_library
 from library_recipe_queries import handle_message as handle_library_recipe_queries
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from conversational_background import handle_message as handle_conversational_background
@@ -91,6 +92,8 @@ class Default(WorkerEntrypoint):
                     "conversational_background": True,
                     "cultural_background": True,
                     "butler_library": True,
+                    "cooking_books": True,
+                    "informal_cooking_queries": True,
                     "library_context_actions": True,
                     "companion_action_suggestions": True,
                     "companion_social_mode": True,
@@ -190,6 +193,8 @@ class Default(WorkerEntrypoint):
                     handled = await handle_general_memory(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_deterministic_memory(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_cooking_library(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_library_recipe_queries(self.env.DB, token, message)
                 if not handled:
