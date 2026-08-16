@@ -35,13 +35,11 @@ from settings import OWNER_CHAT_ID
 from start_reset import handle_start_reset
 from task_context_patch import handle_message as handle_task_context, install as install_task_context
 from task_emoji_patch import install as install_task_emoji_patch
+from telegram_api import send_message
 from ux_bugfixes import handle_global_navigation, install as install_ux_bugfixes
 from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress
 
 
-# Butler de produção: foco operacional. Camadas culturais, bibliotecas genéricas,
-# companion-NLU amplo, memória aberta e sugestões cruzadas permanecem no repo,
-# mas não participam do dispatcher principal.
 install_performance_patches()
 install_scheduler_patches()
 install_routine_integration()
@@ -65,6 +63,22 @@ install_workout_progress()
 install_scheduled_delivery_guard()
 
 
+BASE_BUTTONS = {
+    "🏠 Menu principal", "🌙 Day-off", "Chamar, Butler!", "🏠 Cotidiano",
+    "➕ Adicionar", "✅ Tarefa", "📅 Compromisso", "🗓️ Hoje", "⏭️ Amanhã",
+    "📆 Outra data", "🗓️ Próximos 7 dias", "📚 Histórico", "📖 Histórico diário",
+    "🗂️ Histórico de tarefas", "🛒 Item faltando", "🛒 O que está faltando?",
+    "➕ Item faltando", "➕ Adicionar item", "📋 Ver itens faltando", "✅ Tarefas",
+    "📅 Compromissos", "📚 Matérias", "📚 Minhas matérias", "⚙️ Gerenciar matérias",
+    "➕ Adicionar matéria", "🗑️ Remover matéria", "🚫 Trancar matéria", "✏️ Editar matéria",
+    "📥 Importar grade por PDF/texto", "🧘 Rotinas", "🏋️ Musculação",
+    "🚀 Começar os trabalhos", "📅 Treino de hoje", "📝 Registrar série",
+    "😕 Não consegui treinar hoje", "✅ Finalizar treino", "📈 Progresso",
+    "🔄 Reiniciar treinos", "📥 Importar treino por PDF/texto", "🔁 Substituir exercício",
+    "❌ Cancelar ação", "/cancelar",
+}
+
+
 def _optional_env(env, name):
     try:
         return getattr(env, name)
@@ -75,6 +89,27 @@ def _optional_env(env, name):
 async def _attendance_tick(db, token):
     await ensure_attendance_schema(db)
     await dispatch_class_attendance_reliable(db, token)
+
+
+async def _use_base_only_when_needed(db, message):
+    text = (message.get("text") or "").strip()
+    if text.startswith("/start") or text in BASE_BUTTONS:
+        return True
+    chat_id = (message.get("chat") or {}).get("id")
+    if chat_id is None:
+        return False
+    try:
+        row = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(int(chat_id)).first()
+        if not row:
+            return True
+        try:
+            uid = int(getattr(row, "id"))
+        except Exception:
+            uid = int(row["id"])
+        state, _ = await app.get_state(db, uid)
+        return bool(state)
+    except Exception:
+        return False
 
 
 class Default(WorkerEntrypoint):
@@ -90,9 +125,10 @@ class Default(WorkerEntrypoint):
                     "runtime": "cloudflare-python-worker",
                     "d1": True,
                     "owner_chat_id_configured": OWNER_CHAT_ID is not None,
-                    "dispatcher": "butler-operational-core-v1",
+                    "dispatcher": "butler-operational-core-v2",
                     "operational_focus": True,
                     "broad_nlu_disabled": True,
+                    "legacy_nlu_fallback_blocked": True,
                     "cultural_background_disabled": True,
                     "generic_library_dispatch_disabled": True,
                     "cross_domain_suggestions_disabled": True,
@@ -177,18 +213,15 @@ class Default(WorkerEntrypoint):
                 if handled:
                     return Response("ok")
 
-                # Diagnóstico operacional fica antes de qualquer parser/fallback.
                 handled = await handle_alert_diagnostics(self.env.DB, token, message)
                 if handled:
                     return Response("ok")
 
-                # Mantém despedidas simples sem reativar companion/NLU amplo.
                 if is_priority_farewell(text):
                     handled = await handle_fallback_message(self.env.DB, token, message)
                     if handled:
                         return Response("ok")
 
-                # Núcleos com estado/menu próprios primeiro.
                 for handler in (
                     handle_routine_ui,
                     handle_routine_editing,
@@ -199,12 +232,10 @@ class Default(WorkerEntrypoint):
                     if handled:
                         return Response("ok")
 
-                # Fast path continua apenas para ações operacionais já implementadas.
                 handled = await handle_core_fast_path(self.env.DB, token, message)
                 if handled:
                     return Response("ok")
 
-                # Matérias/faltas/provas.
                 await ensure_attendance_schema(self.env.DB)
                 for handler in (
                     handle_attendance_management,
@@ -217,7 +248,6 @@ class Default(WorkerEntrypoint):
                     if handled:
                         return Response("ok")
 
-                # Tarefas/lembretes/contexto curto/rotinas/mercado.
                 for handler in (
                     handle_explicit_simple_reminder,
                     handle_reference,
@@ -232,9 +262,18 @@ class Default(WorkerEntrypoint):
                     if handled:
                         return Response("ok")
 
-                # Base antiga ainda cobre botões/fluxos determinísticos restantes.
-                await app.handle_message(self.env.DB, token, message)
-                await remember_after_message(self.env.DB, message)
+                # O app base só recebe botões/estados guiados. Texto livre não cai
+                # mais em handle_natural()/interpret() da NLU antiga.
+                if await _use_base_only_when_needed(self.env.DB, message):
+                    await app.handle_message(self.env.DB, token, message)
+                    await remember_after_message(self.env.DB, message)
+                else:
+                    await send_message(
+                        token,
+                        int((message.get("chat") or {}).get("id")),
+                        "🕴️ Não entendi o que você quer fazer. Tenta dizer de outro jeito ou usa os botões.",
+                        reply_markup={"keyboard": app.MAIN_KB, "resize_keyboard": True},
+                    )
 
             return Response("ok")
 
