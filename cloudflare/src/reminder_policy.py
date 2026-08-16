@@ -1,4 +1,6 @@
 import conversation_layer
+from attendance_manual import install as install_attendance_manual
+from exam_reminder_guard import install as install_exam_reminder_guard
 
 
 async def _noop_item_reminders(db, token):
@@ -9,3 +11,5 @@ async def _noop_item_reminders(db, token):
 
 def install():
     conversation_layer._pre_send_item_reminders = _noop_item_reminders
+    install_attendance_manual()
+    install_exam_reminder_guard()
