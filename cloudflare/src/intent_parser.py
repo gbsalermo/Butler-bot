@@ -19,6 +19,17 @@ class ParsedIntent:
 DAY_WORDS=("hoje","amanha","segunda","terca","quarta","quinta","sexta","sabado","domingo")
 
 PATTERNS=(
+    # Musculação vem antes de ausência acadêmica para "faltar ao treino".
+    ("workout_skip","workout",(
+        r"(?:nao consigo|nao vou conseguir|nao vou) treinar(?P<target>.*)",
+        r"vou faltar (?:o|ao) treino(?P<target>.*)",
+    ),94),
+    ("workout_query","workout",(
+        r"qual (?:e |é )?o? ?treino(?: de)? (?P<target>.+)",
+        r"treino de (?P<target>.+)",
+        r"o que treino (?P<target>.+)",
+    ),82),
+
     # Acadêmico
     ("academic_absence","academic",(
         r"(?:quero|queria|vou|pretendo|acho que vou) (?:faltar|matar)(?: a| na| em)? (?P<target>.+)",
@@ -26,7 +37,7 @@ PATTERNS=(
         r"(?:vou|quero) faltar (?P<target>.+)",
     ),92),
     ("academic_query","academic",(
-        r"(?:qual|quais|que) (?:aula|materia|disciplina)(?P<target>.*)",
+        r"(?:qual|quais|que) (?:minha|minhas)? ?(?:aula|aulas|materia|materias|disciplina|disciplinas)(?P<target>.*)",
         r"(?:o que|que) tenho.+(?:faculdade|aula|materia)(?P<target>.*)",
         r"(?:tenho|tem) prova(?: de)? (?P<target>.+)",
     ),82),
@@ -42,7 +53,7 @@ PATTERNS=(
         r"nao posso esquecer(?: de)? (?P<target>.+)",
     ),96),
     ("task_create","tasks",(
-        r"(?:tenho|preciso) (?:que|de) fazer (?P<target>.+)",
+        r"(?:tenho|preciso) (?:que|de)? ?fazer (?P<target>.+)",
         r"anota(?: pra mim| para mim)? (?P<target>.+)",
         r"cria(?: uma)? tarefa(?: pra| para)? (?P<target>.+)",
     ),84),
@@ -72,17 +83,6 @@ PATTERNS=(
         r"tenho (?:dentista|consulta|reuniao|reunião|compromisso) (?P<target>.+)",
     ),84),
 
-    # Musculação
-    ("workout_query","workout",(
-        r"qual (?:e |é )?o? ?treino(?: de)? (?P<target>.+)",
-        r"treino de (?P<target>.+)",
-        r"o que treino (?P<target>.+)",
-    ),82),
-    ("workout_skip","workout",(
-        r"(?:nao consigo|nao vou conseguir|nao vou) treinar(?P<target>.*)",
-        r"vou faltar (?:o|ao) treino(?P<target>.*)",
-    ),88),
-
     # Finanças
     ("finance_expense","finance",(
         r"gastei (?P<target>.+)",
@@ -101,6 +101,7 @@ PATTERNS=(
     ("routine_create","routine",(
         r"(?:cria|monta|quero) (?:uma )?rotina(?: de| para)? (?P<target>.+)",
         r"quero (?:fazer|ter) (?P<target>.+) todo dia",
+        r"quero (?P<target>.+) todo dia",
     ),82),
     ("routine_query","routine",(
         r"(?:qual|quais) (?:minha|minhas)? ?rotinas?(?P<target>.*)",
