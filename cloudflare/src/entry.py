@@ -13,6 +13,7 @@ from attendance_management import handle_message as handle_attendance_management
 from butler_library import handle_message as handle_butler_library
 from cooking_library import handle_message as handle_cooking_library
 from library_recipe_queries import handle_message as handle_library_recipe_queries
+from library_catalog_handler import handle_message as handle_library_catalog
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from conversational_background import handle_message as handle_conversational_background
 from cultural_background import handle_message as handle_cultural_background
@@ -53,7 +54,7 @@ class Default(WorkerEntrypoint):
     async def fetch(self,request):
         parsed=urlparse(request.url); path=parsed.path
         if request.method=="GET" and path=="/health":
-            return Response(json.dumps({"ok":True,"service":"butler-bot","runtime":"cloudflare-python-worker","d1":True,"owner_chat_id_configured":OWNER_CHAT_ID is not None,"dispatcher":"context-router-v3","fast_path":True,"routine_agenda":True,"natural_add_intents":True,"contextual_conversation":True,"companion_chat_v1":True,"companion_nlu_v2":True,"structured_intent_parser":True,"deterministic_personal_memory":True,"generic_personal_entities":True,"explicit_preference_memory":True,"per_user_memory":True,"short_context_memory":True,"context_switch_invalidation":True,"central_context_router":True,"action_policy":True,"core_action_gateway":True,"cross_domain_suggestions":True,"conversational_background":True,"informal_portuguese_background":True,"core_domain_protection":True,"cultural_background":True,"butler_library":True,"library_manifest":True,"cooking_books":True,"traditional_brazilian_cooking":True,"informal_cooking_queries":True,"library_context_actions":True,"companion_action_suggestions":True,"companion_social_mode":True,"companion_study_plan":True,"companion_everyday_context":True,"inline_actions":True,"smart_agenda":True,"flexible_routines":True,"simple_reminders":True,"natural_references":True,"task_reminder_minutes":0,"appointment_reminder_minutes":5,"informal_grocery":True,"informal_grocery_suffix":True,"late_routine_confirmation":True,"natural_agenda_queries":True,"academic_exams":True,"exam_reminders_days":[7,3,1,0],"exam_agenda_section":True,"full_routine_completion":True,"sarcasm_v3":True,"varied_reminder_personality":True,"natural_exam_phrases":True,"exam_cancel":True,"exam_wizard_cancel":True,"reliable_reminders":True,"reminder_grace_minutes":10,"single_reminder_policy":True,"global_back_navigation":True,"workout_exercise_progress":True,"workout_auto_refresh_on_completion":True,"contextual_task_postpone":True,"task_list_retention_hours":24,"task_list_ephemeral_numbering":True,"task_agenda_emoji":"📝","attendance_tracking":True,"attendance_class_prompt":True,"attendance_limit_per_subject":True,"attendance_duration_based":True,"attendance_schema_guard":True,"attendance_humor_thresholds":[30,50,75,100],"attendance_lost_when_over_limit":True,"attendance_edit_limit":True,"attendance_delete_absence":True,"attendance_delete_confirmation":True}),headers={"Content-Type":"application/json; charset=utf-8"})
+            return Response(json.dumps({"ok":True,"service":"butler-bot","runtime":"cloudflare-python-worker","d1":True,"owner_chat_id_configured":OWNER_CHAT_ID is not None,"dispatcher":"context-router-v4","fast_path":True,"structured_intent_parser":True,"central_context_router":True,"short_context_memory":True,"context_switch_invalidation":True,"deterministic_personal_memory":True,"generic_personal_entities":True,"explicit_preference_memory":True,"personal_memory_map":True,"per_user_memory":True,"action_policy":True,"core_action_gateway":True,"cross_domain_suggestions":True,"problem_vs_action_policy":True,"conversational_background":True,"informal_portuguese_background":True,"core_domain_protection":True,"butler_library":True,"library_manifest":True,"library_common_index":True,"library_catalog_fallback":True,"cooking_books":True,"traditional_brazilian_cooking":True,"informal_cooking_queries":True,"library_context_actions":True,"companion_action_suggestions":True,"companion_social_mode":True,"companion_study_plan":True,"companion_everyday_context":True,"routine_agenda":True,"natural_add_intents":True,"inline_actions":True,"smart_agenda":True,"flexible_routines":True,"simple_reminders":True,"natural_references":True,"task_reminder_minutes":0,"appointment_reminder_minutes":5,"informal_grocery":True,"informal_grocery_suffix":True,"late_routine_confirmation":True,"natural_agenda_queries":True,"academic_exams":True,"exam_reminders_days":[7,3,1,0],"exam_agenda_section":True,"full_routine_completion":True,"sarcasm_v3":True,"varied_reminder_personality":True,"natural_exam_phrases":True,"exam_cancel":True,"exam_wizard_cancel":True,"reliable_reminders":True,"reminder_grace_minutes":10,"single_reminder_policy":True,"global_back_navigation":True,"workout_exercise_progress":True,"workout_auto_refresh_on_completion":True,"contextual_task_postpone":True,"task_list_retention_hours":24,"task_list_ephemeral_numbering":True,"task_agenda_emoji":"📝","attendance_tracking":True,"attendance_class_prompt":True,"attendance_limit_per_subject":True,"attendance_duration_based":True,"attendance_schema_guard":True,"attendance_humor_thresholds":[30,50,75,100],"attendance_lost_when_over_limit":True,"attendance_edit_limit":True,"attendance_delete_absence":True,"attendance_delete_confirmation":True}),headers={"Content-Type":"application/json; charset=utf-8"})
         if request.method=="POST" and path=="/telegram/webhook":
             webhook_secret=_optional_env(self.env,"TELEGRAM_WEBHOOK_SECRET")
             if webhook_secret and request.headers.get("X-Telegram-Bot-Api-Secret-Token")!=webhook_secret:return Response("forbidden",status=403)
@@ -86,23 +87,24 @@ class Default(WorkerEntrypoint):
                 if not handled:handled=await handle_grocery_phrase(self.env.DB,token,message)
                 if not handled:handled=await handle_quality_message(self.env.DB,token,message)
 
-                # TIER 2 — MEMÓRIA: fatos pessoais explícitos, nunca substitui o Core.
+                # TIER 2 — MEMÓRIA / CONTEXTO PESSOAL.
                 if not handled:handled=await handle_general_memory(self.env.DB,token,message)
                 if not handled:handled=await handle_deterministic_memory(self.env.DB,token,message)
                 if not handled:handled=await handle_personal_profile(self.env.DB,token,message)
+                if not handled:handled=await handle_companion_life_context(self.env.DB,token,message)
 
-                # TIER 2.5 — SUGESTÕES: só propõem; confirmações passam pelo Core gateway.
+                # TIER 2.5 — SUGESTÕES GENÉRICAS: propõem; confirmação usa Core gateway.
                 if not handled:handled=await handle_suggestion_engine(self.env.DB,token,message)
 
                 # TIER 3 — LIBRARY: opcional e bloqueada quando o roteador detecta Core.
                 if not handled and allow_optional(route,"cooking"):handled=await handle_cooking_library(self.env.DB,token,message)
                 if not handled and allow_optional(route,"cooking"):handled=await handle_library_recipe_queries(self.env.DB,token,message)
                 if not handled and allow_optional(route):handled=await handle_butler_library(self.env.DB,token,message)
+                if not handled and allow_optional(route):handled=await handle_library_catalog(self.env.DB,token,message)
                 if not handled and allow_optional(route):handled=await handle_cultural_background(self.env.DB,token,message)
 
                 # TIER 4 — linguagem/conversa. NLU funcional vem antes do fallback social.
                 if not handled:handled=await handle_companion_language_patch(self.env.DB,token,message)
-                if not handled:handled=await handle_companion_life_context(self.env.DB,token,message)
                 if not handled:handled=await handle_companion_nlu_v2(self.env.DB,token,message)
                 if not handled and allow_optional(route):handled=await handle_conversational_background(self.env.DB,token,message)
                 if not handled:handled=await handle_companion_message(self.env.DB,token,message)
