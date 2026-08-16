@@ -1,0 +1,129 @@
+"""Edição de rotinas e checkpoints.
+
+Permite editar horários sem recriar a rotina. A rotina continua sendo a mesma
+entidade; somente time_hhmm é alterado. Logs históricos não são apagados.
+"""
+import re
+import unicodedata
+
+import runtime_guard
+from telegram_api import send_message
+
+ROUTINE_EDIT_KB=[["➕ Adicionar horário","➖ Remover horário"],["🕐 Alterar horário","✏️ Renomear rotina"],["⬅️ Voltar às rotinas"]]
+CANCEL_KB=[["❌ Cancelar ação"]]
+
+
+def _kb(rows):return {"keyboard":rows,"resize_keyboard":True}
+def _norm(text):
+    v=unicodedata.normalize("NFKD",(text or "").lower());v="".join(c for c in v if not unicodedata.combining(c));return re.sub(r"[^a-z0-9:# ]+"," ",v).strip()
+def _row(row,key,default=None):
+    try:return getattr(row,key)
+    except Exception:
+        try:return row[key]
+        except Exception:return default
+async def _rows(stmt):
+    r=await stmt.all();data=getattr(r,"results",None)
+    if data is None:return []
+    try:return list(data)
+    except Exception:return data.to_py() if hasattr(data,"to_py") else []
+def _times(value):return list(dict.fromkeys(re.findall(r"\b(?:[01]\d|2[0-3]):[0-5]\d\b",value or "")))
+def _parse_times(text):
+    out=[]
+    for h,m in re.findall(r"\b([01]?\d|2[0-3])(?::|h)([0-5]\d)?\b",_norm(text)):
+        out.append(f"{int(h):02d}:{int(m or 0):02d}")
+    return list(dict.fromkeys(out))
+def _format(r):
+    times=_times(_row(r,"time_hhmm"));when=" • ".join(times) if times else "sem horário"
+    return f"🧘 {_row(r,'name')}\nHorários: {when}\nDias: {_row(r,'weekdays') or 'todos os dias'}\nMeta: {_row(r,'category') or '—'}"
+
+async def _find(db,uid,text):
+    m=re.search(r"#?(\d+)",text or "")
+    if m:
+        r=await db.prepare("SELECT * FROM routines WHERE id=? AND user_id=? AND active=1").bind(int(m.group(1)),uid).first()
+        if r:return r
+    n=_norm(text);rs=await _rows(db.prepare("SELECT * FROM routines WHERE user_id=? AND active=1").bind(uid));matches=[]
+    for r in rs:
+        name=_norm(_row(r,"name") or "")
+        if name and (name in n or n in name):matches.append(r)
+    return matches[0] if len(matches)==1 else None
+
+async def _save_times(db,uid,rid,times):
+    value=",".join(sorted(set(times))) if times else None
+    await db.prepare("UPDATE routines SET time_hhmm=? WHERE id=? AND user_id=? AND active=1").bind(value,rid,uid).run()
+
+async def _show_list(db,token,chat,uid,prompt="Qual rotina quer editar?"):
+    rs=await _rows(db.prepare("SELECT id,name,time_hhmm,weekdays,category FROM routines WHERE user_id=? AND active=1 ORDER BY name").bind(uid))
+    if not rs:
+        await send_message(token,chat,"🧘 Você não tem rotinas ativas.");return
+    lines=["🧘 Rotinas"]
+    for r in rs:
+        ts=" • ".join(_times(_row(r,"time_hhmm"))) or "sem horário";lines.append(f"• #{_row(r,'id')} {_row(r,'name')} — {ts}")
+    lines.append("\n"+prompt);await send_message(token,chat,"\n".join(lines),reply_markup=_kb(CANCEL_KB))
+
+async def handle_message(db,token,message):
+    chat=(message.get("chat") or {}).get("id");text=(message.get("text") or "").strip()
+    if chat is None or not text:return False
+    chat=int(chat);uid=await runtime_guard._uid(db,chat)
+    if not uid:return False
+    state,payload=await runtime_guard._state(db,uid);n=_norm(text)
+
+    if text=="✏️ Editar rotina" or re.match(r"^(editar|edita)\s+(a\s+)?rotina\b",n):
+        routine=await _find(db,uid,re.sub(r"^(editar|edita)\s+(a\s+)?rotina\s*","",text,flags=re.I))
+        if routine:
+            await runtime_guard._set_state(db,uid,"guard_routine_edit_menu",{"id":int(_row(routine,"id"))});await send_message(token,chat,_format(routine)+"\n\nO que quer alterar?",reply_markup=_kb(ROUTINE_EDIT_KB));return True
+        await runtime_guard._set_state(db,uid,"guard_routine_edit_pick",{});await _show_list(db,token,chat,uid);return True
+
+    # Ações naturais diretas: adiciona/remove/troca horário na rotina X.
+    direct=re.match(r"^(?:adiciona|adicionar|coloca|bota)\s+(.+?)\s+(?:na|à|a)\s+rotina\s+(?:de\s+)?(.+)$",text,re.I)
+    if direct:
+        times=_parse_times(direct.group(1));routine=await _find(db,uid,direct.group(2))
+        if routine and times:
+            current=_times(_row(routine,"time_hhmm"));await _save_times(db,uid,int(_row(routine,"id")),current+times);fresh=await db.prepare("SELECT * FROM routines WHERE id=?").bind(int(_row(routine,"id"))).first();await send_message(token,chat,"✅ Horário adicionado.\n\n"+_format(fresh),reply_markup=_kb(ROUTINE_EDIT_KB));return True
+    direct=re.match(r"^(?:remove|remover|tira)\s+(.+?)\s+(?:da|de)\s+rotina\s+(?:de\s+)?(.+)$",text,re.I)
+    if direct:
+        times=_parse_times(direct.group(1));routine=await _find(db,uid,direct.group(2))
+        if routine and times:
+            current=[t for t in _times(_row(routine,"time_hhmm")) if t not in times];await _save_times(db,uid,int(_row(routine,"id")),current);fresh=await db.prepare("SELECT * FROM routines WHERE id=?").bind(int(_row(routine,"id"))).first();await send_message(token,chat,"➖ Horário removido.\n\n"+_format(fresh),reply_markup=_kb(ROUTINE_EDIT_KB));return True
+    direct=re.match(r"^(?:troca|trocar|muda|mudar)\s+(.+?)\s+(?:por|para)\s+(.+?)\s+(?:na|da|de)\s+rotina\s+(?:de\s+)?(.+)$",text,re.I)
+    if direct:
+        old=_parse_times(direct.group(1));new=_parse_times(direct.group(2));routine=await _find(db,uid,direct.group(3))
+        if routine and old and new:
+            current=[t for t in _times(_row(routine,"time_hhmm")) if t not in old]+new;await _save_times(db,uid,int(_row(routine,"id")),current);fresh=await db.prepare("SELECT * FROM routines WHERE id=?").bind(int(_row(routine,"id"))).first();await send_message(token,chat,"🕐 Horário alterado.\n\n"+_format(fresh),reply_markup=_kb(ROUTINE_EDIT_KB));return True
+
+    if state=="guard_routine_edit_pick":
+        routine=await _find(db,uid,text)
+        if not routine:
+            await _show_list(db,token,chat,uid,"Não identifiquei essa. Mande #ID ou o nome.");return True
+        await runtime_guard._set_state(db,uid,"guard_routine_edit_menu",{"id":int(_row(routine,"id"))});await send_message(token,chat,_format(routine)+"\n\nO que quer alterar?",reply_markup=_kb(ROUTINE_EDIT_KB));return True
+
+    if state=="guard_routine_edit_menu":
+        rid=payload.get("id");routine=await db.prepare("SELECT * FROM routines WHERE id=? AND user_id=? AND active=1").bind(rid,uid).first()
+        if not routine:
+            await runtime_guard._clear(db,uid);return False
+        if text=="➕ Adicionar horário":await runtime_guard._set_state(db,uid,"guard_routine_edit_add",{"id":rid});await send_message(token,chat,"Qual horário adicionar? Ex.: `17h` ou `17:30`.",reply_markup=_kb(CANCEL_KB));return True
+        if text=="➖ Remover horário":await runtime_guard._set_state(db,uid,"guard_routine_edit_remove",{"id":rid});await send_message(token,chat,_format(routine)+"\n\nQual horário remover?",reply_markup=_kb(CANCEL_KB));return True
+        if text=="🕐 Alterar horário":await runtime_guard._set_state(db,uid,"guard_routine_edit_replace",{"id":rid});await send_message(token,chat,_format(routine)+"\n\nMande `15h por 16h`.",reply_markup=_kb(CANCEL_KB));return True
+        if text=="✏️ Renomear rotina":await runtime_guard._set_state(db,uid,"guard_routine_edit_rename",{"id":rid});await send_message(token,chat,"Qual o novo nome?",reply_markup=_kb(CANCEL_KB));return True
+        if text=="⬅️ Voltar às rotinas":await runtime_guard._clear(db,uid);await _show_list(db,token,chat,uid,"Use `editar rotina #ID` quando quiser alterar uma.");return True
+        return False
+
+    if state in ("guard_routine_edit_add","guard_routine_edit_remove","guard_routine_edit_replace","guard_routine_edit_rename"):
+        rid=payload.get("id");routine=await db.prepare("SELECT * FROM routines WHERE id=? AND user_id=? AND active=1").bind(rid,uid).first()
+        if not routine:return False
+        current=_times(_row(routine,"time_hhmm"))
+        if state=="guard_routine_edit_rename":
+            if not text:return True
+            await db.prepare("UPDATE routines SET name=? WHERE id=? AND user_id=?").bind(text,rid,uid).run();msg="✏️ Rotina renomeada."
+        elif state=="guard_routine_edit_replace":
+            parts=re.split(r"\s+(?:por|para)\s+",text,maxsplit=1,flags=re.I)
+            if len(parts)!=2 or not _parse_times(parts[0]) or not _parse_times(parts[1]):
+                await send_message(token,chat,"Use algo como `15h por 16h`.",reply_markup=_kb(CANCEL_KB));return True
+            old=_parse_times(parts[0]);new=_parse_times(parts[1]);await _save_times(db,uid,rid,[t for t in current if t not in old]+new);msg="🕐 Horário alterado."
+        else:
+            chosen=_parse_times(text)
+            if not chosen:
+                await send_message(token,chat,"Não identifiquei horário. Ex.: `17h` ou `17:30`.",reply_markup=_kb(CANCEL_KB));return True
+            if state=="guard_routine_edit_add":await _save_times(db,uid,rid,current+chosen);msg="✅ Horário adicionado."
+            else:await _save_times(db,uid,rid,[t for t in current if t not in chosen]);msg="➖ Horário removido."
+        fresh=await db.prepare("SELECT * FROM routines WHERE id=? AND user_id=?").bind(rid,uid).first();await runtime_guard._set_state(db,uid,"guard_routine_edit_menu",{"id":rid});await send_message(token,chat,msg+"\n\n"+_format(fresh),reply_markup=_kb(ROUTINE_EDIT_KB));return True
+    return False
