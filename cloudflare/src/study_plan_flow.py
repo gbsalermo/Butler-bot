@@ -73,6 +73,18 @@ async def handle_message(db,token,message):
     if not state:return False
     kind=state.get("kind"); payload=state.get("payload") or {}; n=v2._norm(text)
 
+    # Estados de coleta nunca podem sequestrar comandos globais de saída.
+    # Day-off precisa ser tratado pelo dispatcher global; cancelamentos simples
+    # encerram este wizard imediatamente.
+    if kind in ("collect_exam_subjects","confirm_exam_plan"):
+        if n in ("day off","dayoff"):
+            await v2._save_state(db,uid,"idle",{})
+            return False
+        if v2._is_no(n) or n in ("cancelar","cancelar plano","sair","voltar"):
+            await v2._save_state(db,uid,"idle",{})
+            await send_message(token,int(chat_id),"Fechado. Cancelei esse plano e saí desse fluxo.")
+            return True
+
     if kind=="collect_exam_subjects":
         matches,subjects=await _subject_matches(db,uid,text)
         if len(matches)<2:
