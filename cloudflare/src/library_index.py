@@ -11,7 +11,7 @@ from knowledge.pop_culture import ENTRIES as POP_ENTRIES
 from knowledge.books import BOOKS
 from knowledge.philosophy import ENTRIES as PHILOSOPHY_ENTRIES
 
-STOP={"me","um","uma","de","do","da","para","pra","por","com","sem","que","quem","qual","quero","queria","indica","recomenda","sugere","fala","sobre","explica","livro","jogo","filme","serie"}
+STOP={"me","um","uma","de","do","da","para","pra","por","com","sem","que","quem","qual","quero","queria","indica","recomenda","sugere","fala","sobre","explica","livro","jogo","filme","serie","butler"}
 
 def _norm(text):
     v=unicodedata.normalize("NFKD",(text or "").lower()); v="".join(c for c in v if not unicodedata.combining(c)); v=re.sub(r"[^a-z0-9 ]+"," ",v); return re.sub(r"\s+"," ",v).strip()
@@ -31,7 +31,7 @@ def records():
     for name,data in BOOKS.items():
         out.append({"domain":"books","name":name,"aliases":[name,data.get("author","")],"summary":data.get("summary",""),"tags":data.get("tags",[])+[data.get("author",""),data.get("country",""),data.get("kind","")],"meta":data})
     for name,data in PHILOSOPHY_ENTRIES.items():
-        out.append({"domain":"culture","name":name,"aliases":data.get("aliases",[name]),"summary":data.get("summary",""),"tags":data.get("tags",[]),"meta":data})
+        out.append({"domain":"culture","name":name,"aliases":data.get("aliases",[name]),"summary":data.get("summary",""),"tags":data.get("topics",[])+data.get("tags",[]),"meta":data})
     return out
 
 _RECORDS=None
@@ -57,7 +57,10 @@ def search(text,domain=None,limit=5):
             elif re.search(r"\b"+re.escape(a)+r"\b",n):score+=12
         hay=" ".join([rec["name"],rec.get("summary","")]+[str(x) for x in rec.get("tags",[]) if x]); terms=_terms(hay)
         score+=len(wanted & terms)*2
+        # Filtrar por domínio não é evidência semântica. O bônus só desempata
+        # resultados que já casaram com alias, termo, tag, autor, gênero etc.
+        if score<=0:continue
         if domain and rec["domain"]==domain:score+=2
-        if score>0:ranked.append((score,exact,rec))
+        ranked.append((score,exact,rec))
     ranked.sort(key=lambda x:(x[0],x[1],x[2]["name"]),reverse=True)
     return [r for _,_,r in ranked[:limit]]
