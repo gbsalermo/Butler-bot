@@ -4,6 +4,7 @@ import re
 import unicodedata
 
 import companion_nlu_v2 as v2
+from core_actions import add_grocery_items, create_routine
 from nlu import parse_time
 from telegram_api import send_message
 from knowledge.cooking import RECIPES
@@ -52,18 +53,14 @@ async def _close_pending(db,event_id,data,status):
 async def _execute(db,uid,action):
     kind=action.get("type"); payload=action.get("payload") or {}
     if kind=="grocery_add":
-        items=[str(x).strip()[:80] for x in (payload.get("items") or []) if str(x).strip()][:10]
+        items=await add_grocery_items(db,uid,payload.get("items") or [])
         if not items:return False,"Não achei item válido pra salvar."
-        for item in items: await db.prepare("INSERT INTO grocery_items(user_id,name,missing) VALUES(?,?,1) ON CONFLICT(user_id,name) DO UPDATE SET missing=1,updated_at=CURRENT_TIMESTAMP").bind(uid,item).run()
         return True,"Coloquei na lista: "+", ".join(items)+"."
     if kind=="routine_create":
         name=str(payload.get("name") or "").strip()[:100]; tm=payload.get("time_hhmm")
-        weekdays=str(payload.get("weekdays") or "todos os dias")[:120]; category=str(payload.get("category") or "Lazer")[:60]
-        if not name:return False,"A rotina veio sem nome."
-        if tm and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d",str(tm)):return False,"Esse horário veio estranho."
-        exists=await db.prepare("SELECT id FROM routines WHERE user_id=? AND lower(name)=lower(?) AND active=1 LIMIT 1").bind(uid,name).first()
-        if exists:return True,f"A rotina `{name}` já existe; não dupliquei."
-        await db.prepare("INSERT INTO routines(user_id,name,category,time_hhmm,weekdays,active) VALUES(?,?,?,?,?,1)").bind(uid,name,category,tm,weekdays).run()
+        ok,status=await create_routine(db,uid,name,tm,payload.get("weekdays") or "todos os dias",payload.get("category") or "Lazer")
+        if not ok:return False,"Não consegui validar a rotina: "+status+"."
+        if status=="já existia":return True,f"A rotina `{name}` já existe; não dupliquei."
         return True,f"Rotina criada: {name}"+(f" às {tm}" if tm else "")+"."
     return False,"Essa ação não faz parte da biblioteca."
 
@@ -142,7 +139,6 @@ def _find_book(n):
 
 def _book_rank(n):
     wanted=_terms(n); ranked=[]
-    # Autores funcionam como filtros fortes: "algo do Bukowski", "livro do Machado".
     author_titles=set()
     for alias,titles in AUTHOR_ALIASES.items():
         if _norm(alias) in n:author_titles.update(titles)
@@ -215,7 +211,6 @@ async def handle_message(db,token,message):
     if any(x in n for x in ("me indica um jogo","me indica jogo","recomenda um jogo","recomenda jogo","jogo pra pc","jogo para pc","quero um jogo","algum jogo")):
         ranked=_game_rank(n) or [(1,k,v) for k,v in random.sample(list(GAMES.items()),min(5,len(GAMES)))]; await send_message(token,int(chat_id),"🎮 Eu iria por aqui:\n\n"+"\n".join(f"• {title.title()} — {data['summary']}" for _,title,data in ranked[:5])); return True
 
-    # Livros: consulta direta e recomendação contextual.
     book_title,book=_find_book(n)
     if book and (_is_info_question(n) or any(x in n for x in ("livro","vale a pena","sobre o que","do que fala"))):
         await _save_event(db,uid,"library_context",{"domain":"book","title":book_title.title(),"author":book.get("author")}); await send_message(token,int(chat_id),_format_book(book_title,book)); return True
