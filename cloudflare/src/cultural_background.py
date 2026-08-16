@@ -11,7 +11,6 @@ def _norm(text):
     value=re.sub(r"[^a-z0-9 ]+"," ",value)
     return re.sub(r"\s+"," ",value).strip()
 
-
 KNOWLEDGE = {
     "jake peralta": "Jake Peralta é o detetive protagonista de Brooklyn Nine-Nine: talentoso, infantil, competitivo e completamente incapaz de resistir a uma piada no meio do expediente. Em resumo, um ótimo policial com energia de aluno que descobriu que a sala tem projetor.",
     "palpatine": "Palpatine, também conhecido como Darth Sidious, é o grande manipulador político de Star Wars. Ele ascende dentro da República, transforma crise em poder e está no centro da queda de Anakin e da criação do Império. Um belo estudo de caso de por que ninguém devia dar poder emergencial sem data pra acabar.",
@@ -44,16 +43,15 @@ CULTURE_GUIDES = {
     "series": "Pra séries: IMDb, JustWatch para descobrir onde algo está disponível e comunidades específicas da obra costumam ser mais úteis que ranking solto.",
     "livros": "Pra livros: Goodreads e Skoob são bons pontos de partida para catálogo e comunidade. Para literatura clássica, Domínio Público e Project Gutenberg podem ser úteis quando a obra está em domínio público.",
     "arte": "Pra arte: Google Arts & Culture, sites de museus como Louvre, MoMA e The Met e canais de história da arte no YouTube são um bom começo.",
-    "filosofia": "Pra filosofia, Stanford Encyclopedia of Philosophy e Internet Encyclopedia of Philosophy são referências fortes para consulta. No YouTube, procure aulas universitárias ou canais que indiquem fontes em vez de resumo de 40 segundos com música épica.",
-    "culinaria": "Pra culinária, prefiro fonte que mostre medida, técnica e resultado. TudoGostoso é útil para receita popular brasileira; Panelinha é boa referência prática. No YouTube, procure receitas em que a pessoa explica ponto, temperatura e substituições, não só montagem acelerada com música.",
-    "programacao": "Pra programação, documentação oficial primeiro. MDN para web, documentação da linguagem/framework e depois Stack Overflow ou vídeos para complementar. Tutorial sem documentação vira religião rápido.",
-    "youtube": "No YouTube eu usaria a busca como ferramenta: nome do assunto + 'aula', 'documentário', 'video essay', 'receita passo a passo' ou 'review'. Canal bom depende do tema; fonte e profundidade importam mais que número de inscritos.",
+    "filosofia": "Pra filosofia, Stanford Encyclopedia of Philosophy e Internet Encyclopedia of Philosophy são referências fortes para consulta. No YouTube, procure aulas universitárias ou canais que indiquem fontes.",
+    "culinaria": "Pra culinária, prefiro fonte que mostre medida, técnica e resultado. TudoGostoso é útil para receita popular brasileira; Panelinha é boa referência prática. No YouTube, procure receitas que expliquem ponto, temperatura e substituições.",
+    "programacao": "Pra programação, documentação oficial primeiro. MDN para web, documentação da linguagem/framework e depois Stack Overflow ou vídeos para complementar.",
+    "youtube": "No YouTube eu usaria a busca como ferramenta: nome do assunto + 'aula', 'documentário', 'video essay', 'receita passo a passo' ou 'review'. Fonte e profundidade importam mais que número de inscritos.",
 }
 
 
 def _question_target(n):
-    if not any(x in n for x in ("quem e ","quem é ","o que e ","o que é ","voce conhece ","você conhece ","fala sobre ","me explica ","me fale sobre ")):
-        return None
+    if not any(x in n for x in ("quem e ","o que e ","voce conhece ","fala sobre ","me explica ","me fale sobre ")): return None
     for key in sorted(KNOWLEDGE.keys(),key=len,reverse=True):
         if key in n:return key
     return None
@@ -67,20 +65,11 @@ async def handle_message(db,token,message):
     uid=await v2._uid(db,int(chat_id))
     if not uid:return False
     n=_norm(text)
-
     target=_question_target(n)
     if target:
         await send_message(token,int(chat_id),KNOWLEDGE[target]); return True
-
-    if any(x in n for x in ("onde vejo","onde encontro","site pra","site para","onde pesquisar","onde pesquiso","me indica site","me indica um site","canal no youtube","youtube sobre")):
+    if any(x in n for x in ("onde vejo","onde encontro","site pra","site para","onde pesquisar","onde pesquiso","me indica site","canal no youtube","youtube sobre")):
         for topic,answer in CULTURE_GUIDES.items():
             if topic in n or (topic=="filmes" and "filme" in n) or (topic=="series" and "serie" in n) or (topic=="culinaria" and any(x in n for x in ("cozinha","receita","culinaria"))):
                 await send_message(token,int(chat_id),answer); return True
-
-    if any(x in n for x in ("quem e","quem é","o que e","o que é","voce conhece","você conhece")) and len(n)<100:
-        # Há uma pergunta cultural, mas o alvo não existe no acervo. Não inventa.
-        obvious_personal=any(x in n for x in ("meu ","minha ","amigo","mae","mãe","pai","gato","cachorro"))
-        if not obvious_personal:
-            await send_message(token,int(chat_id),"Esse eu não tenho no meu acervo base ainda. Prefiro admitir isso do que inventar uma biografia e depois ser demitido por desinformação."); return True
-
     return False
