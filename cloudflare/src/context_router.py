@@ -28,12 +28,18 @@ class Route:
     time_hint: str | None = None
 
 
+def _contains_hint(n,words,hint):
+    h=normalize_informal(hint)
+    if not h:return False
+    if " " in h:return h in n
+    return h in words
+
+
 def classify(text):
     n=normalize_informal(text)
     shape=conversation_shape(text)
     parsed=parse_intent(text)
 
-    # Intenção estrutural forte ganha da contagem de palavras.
     if parsed.domain != "conversation" and parsed.confidence >= 75:
         tier="core" if parsed.domain in {"academic","tasks","appointments","grocery","workout","finance","routine"} else "library"
         return Route(parsed.domain,tier,shape,parsed.confidence,n,parsed.intent,parsed.target,parsed.time_hint)
@@ -42,13 +48,11 @@ def classify(text):
     if core:
         return Route(core,"core",shape,100,n,parsed.intent,parsed.target,parsed.time_hint)
 
-    scores={}
-    words=set(n.split())
+    scores={}; words=set(n.split())
     for domain,hints in OPTIONAL_HINTS.items():
         for hint in hints:
-            h=normalize_informal(hint)
-            if h and (h in n or (" " not in h and h in words)):
-                scores[domain]=scores.get(domain,0)+(3 if " " in h else 2)
+            if _contains_hint(n,words,hint):
+                scores[domain]=scores.get(domain,0)+(3 if " " in normalize_informal(hint) else 2)
     if scores:
         domain,score=max(scores.items(),key=lambda x:x[1])
         return Route(domain,"library",shape,min(90,40+score*5),n,parsed.intent,parsed.target,parsed.time_hint)
