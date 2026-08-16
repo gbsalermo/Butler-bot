@@ -9,9 +9,10 @@ Usar LLM somente como camada de linguagem, personalidade, memória e sugestão d
 ```text
 mensagem
   -> fast path determinístico
+  -> Memory Store recupera apenas fatos relevantes já persistidos
   -> LLM (somente OWNER_CHAT_ID nesta fase)
-  -> resposta estruturada
-  -> Core valida
+  -> resposta estruturada + novos candidatos de memória
+  -> Core valida/deduplica memória
   -> se houver escrita, cria proposta pendente
   -> usuário confirma
   -> Core executa
@@ -20,109 +21,83 @@ mensagem
 
 ## Fast path
 
-Continuam determinísticos e com prioridade:
+Continuam determinísticos e com prioridade: navegação, tarefas/compromissos claros, provas/matérias, presença, referências naturais, runtime state, mercado explícito, datas/horários e demais regras funcionais.
 
-- navegação;
-- tarefas/compromissos claros;
-- provas e matérias;
-- presença;
-- referências naturais já reconhecidas;
-- runtime state;
-- mercado explícito;
-- validações de datas/horários;
-- demais regras funcionais do bot.
-
-A LLM recebe apenas mensagens que não foram resolvidas por essas camadas.
+A LLM recebe apenas mensagens não resolvidas por essas camadas.
 
 ## Provider
 
-Primeiro provider: Cloudflare Workers AI por binding `AI`.
+Primeiro provider: Cloudflare Workers AI por binding `AI`, atrás de `LLMProvider` para permitir troca futura. Modelo inicial: `@cf/google/gemma-4-26b-a4b-it`.
 
-A integração fica atrás de `LLMProvider`, permitindo troca futura sem alterar o restante do Butler.
-
-Modelo inicial do laboratório:
-
-`@cf/google/gemma-4-26b-a4b-it`
-
-Se o binding estiver ausente, o provider falhar ou a resposta vier inválida, o handler retorna `False` e a NLU atual assume.
+Se binding/provider/resposta falhar, o handler retorna `False` e a NLU atual assume.
 
 ## Contrato da LLM
 
-A LLM deve devolver JSON com:
-
-- `reply`: resposta natural;
-- `topic`: tema;
-- `tone`: tom;
-- `action`: ação sugerida ou `null`;
-- `memory_candidates`: fatos que podem ser úteis depois.
-
-A LLM nunca recebe função que escreve diretamente no D1.
+JSON com `reply`, `topic`, `tone`, `action` e `memory_candidates`. A LLM nunca recebe função que escreve diretamente no D1.
 
 ## Ações inicialmente permitidas
 
-Somente propostas:
+Somente propostas: `grocery_add`, `task_create`, `routine_create`. O Core valida, persiste proposta pendente e exige confirmação textual antes de executar.
 
-- `grocery_add`;
-- `task_create`;
-- `routine_create`.
+## Butler Memory Store
 
-O Core valida payload, armazena uma proposta pendente e exige confirmação textual (`pode`) antes de executar.
-
-Ações desconhecidas ou payload inválido são rejeitados.
-
-## Memória
-
-Nesta primeira fase, a memória usa a tabela existente `natural_events`.
+A memória persistente funciona como um cache semântico de contexto: fatos já compreendidos não precisam ser redescobertos a cada conversa.
 
 Tipos:
 
 - `stable`: fatos duradouros explicitamente informados;
 - `episodic`: acontecimentos relevantes;
-- `behavioral`: preferências ou padrões úteis.
+- `behavioral`: preferências/padrões úteis.
 
-A LLM apenas sugere candidatos. O Core aplica limites de tamanho, tipo e confiança antes de persistir.
+Cada memória pode guardar `subject`, `tags`, `importance` e `confidence`. O Core impõe limiares de confiança, tamanho e tipo. Fatos normalizados iguais são deduplicados; quando reaparecem, podem reforçar/atualizar a memória em vez de criar cópia.
 
-Os últimos turnos LLM também são registrados para continuidade curta da conversa.
+### Recuperação
+
+O `butler_memory.py` pesquisa uma janela maior de memórias persistidas, ranqueia por termos da mensagem, tags, tipo e importância e envia à LLM somente um pequeno conjunto relevante.
+
+Exemplo: uma mensagem sobre `Tobias` deve recuperar `Tobias é o gato do usuário`, sem carregar episódios de Física, treino ou finanças.
+
+Nesta fase a recuperação é lexical e determinística, sem vector database e sem nova chamada de LLM para pesquisar memória.
+
+### Conversa recente
+
+Somente até 4 turnos LLM são enviados para continuidade imediata (pronomes, brincadeiras e mudança de assunto). Conversas antigas devem sobreviver através de memórias resumidas, não pelo reenvio indefinido do chat completo.
+
+### O que não vira memória estável
+
+Dados vivos não são cacheados como verdade permanente: agenda atual, saldo/gastos atuais, tarefas pendentes, progresso de treino e outros estados mutáveis continuam vindo do Core.
 
 ## ContextBuilder
 
-A LLM não recebe o banco inteiro. O snapshot inicial inclui somente sinais resumidos:
+O payload enviado à LLM é compacto:
 
+- mensagem atual;
 - horário local;
-- tarefas concluídas nos últimos 7 dias;
-- pendências;
-- próximo item;
-- quantidade de itens faltando;
-- resumo financeiro de 30 dias;
-- treinos concluídos nos últimos 7 dias;
-- memórias relevantes recentes;
-- últimos turnos conversacionais da LLM.
+- sinais resumidos de tarefas/agenda/finanças/treino;
+- até 6 memórias relevantes;
+- até 4 turnos recentes.
 
-Essa camada deve ficar mais seletiva no futuro, recuperando contexto por tema.
+O objetivo é reduzir tokens, evitar repetição e manter a identidade/história independente do modelo usado.
 
 ## Segurança e autoridade
-
-Regras obrigatórias:
 
 1. LLM nunca escreve diretamente no banco;
 2. LLM nunca apaga dados;
 3. Core valida toda ação;
-4. escrita requer confirmação do usuário;
+4. escrita requer confirmação;
 5. falha da LLM não derruba o bot;
-6. dados numéricos/factuais devem vir do Core, não ser inventados;
+6. fatos numéricos vêm do Core;
 7. laboratório restrito ao `OWNER_CHAT_ID`;
-8. outros usuários continuam no comportamento determinístico atual.
+8. outros usuários continuam determinísticos;
+9. memória sugerida pela LLM só é persistida após validação do Core.
 
 ## Evolução futura
 
-Possíveis próximas fases:
+- ferramentas de leitura em duas etapas;
+- provider chain/fallback externo;
+- mais ações propostas com validadores;
+- métricas de consumo;
+- `/debug_llm`/contexto;
+- eventual recuperação vetorial somente se a base de memória crescer a ponto de justificar.
 
-- recuperação de memória por relevância semântica;
-- ferramentas de leitura em duas etapas (agenda/finanças/provas -> LLM apresenta o resultado);
-- mais ações propostas com validadores específicos;
-- provider alternativo (OpenRouter, Gemini, Ollama etc.);
-- controle de custo/tokens por conversa;
-- comando de debug de contexto;
-- avaliação de respostas e feedback de personalidade.
-
-Fine-tuning não é prioridade. A evolução deve vir primeiro de memória externa, contexto e regras de personalidade.
+Fine-tuning não é prioridade. A identidade e história pertencem ao Butler Memory Store, não aos pesos do modelo.
