@@ -42,10 +42,18 @@ async def _remember(db,uid,kind,iid):
 async def handle_explicit_simple_reminder(db,token,message):
     chat=(message.get("chat") or {}).get("id");text=(message.get("text") or "").strip();n=_norm(text)
     if not chat:return False
-    # Casos declaradamente informativos: "me avisa..." / "só me lembra..." / "me lembra ... de que ...".
-    prefix=bool(re.match(r"^(?:butler[, ]+)?(?:so\s+)?(?:me\s+)?(?:avisa|avise|lembra|lembre)",n))
-    simple=prefix and ("me avisa" in n or "me avise" in n or "so me lembra" in n or " de que " in f" {n} " or " lembra que " in f" {n} ")
+
+    # Pedido explícito de ação vence o assunto da frase. Assim, termos como
+    # "jogos", "filmes" ou "receita" dentro da descrição nunca desviam um
+    # "cria um lembrete..." para a biblioteca temática.
+    direct=bool(re.match(
+        r"^(?:butler[, ]+)?(?:por favor\s+)?(?:cria|crie|criar|adiciona|adicione|adicionar|faz|faca|fazer|coloca|coloque|anota|anote)\s+(?:(?:um|uma)\s+)?(?:lembrete|tarefa)\b",
+        n,
+    ))
+    conversational=bool(re.match(r"^(?:butler[, ]+)?(?:so\s+)?(?:me\s+)?(?:avisa|avise|lembra|lembre)",n))
+    simple=direct or (conversational and ("me avisa" in n or "me avise" in n or "so me lembra" in n or " de que " in f" {n} " or " lembra que " in f" {n} "))
     if not simple:return False
+
     d=parse_date(text,_now().date());tm=parse_time(text)
     if not d or not tm:return False
     ok,msg=validate_future(d,tm,_now().replace(tzinfo=None))
@@ -54,11 +62,10 @@ async def handle_explicit_simple_reminder(db,token,message):
     uid=await _uid(db,int(chat))
     if not uid:return False
     title=text
-    # O trecho após "de que" é a descrição preferida.
     m=re.search(r"\bde\s+que\s+(.+)$",text,re.I)
     if m:title=m.group(1).strip()
     else:
-        title=re.sub(r"^(?:Butler[,!:\-]?\s*)?(?:só\s+)?(?:me\s+)?(?:avisa|avise|lembra|lembre)(?:-me)?\s*","",title,flags=re.I)
+        title=re.sub(r"^(?:Butler[,!:\-]?\s*)?(?:por\s+favor\s+)?(?:(?:só\s+)?(?:me\s+)?(?:avisa|avise|lembra|lembre)(?:-me)?|(?:cria|crie|criar|adiciona|adicione|adicionar|faz|faça|fazer|coloca|coloque|anota|anote)\s+(?:(?:um|uma)\s+)?(?:lembrete|tarefa)(?:\s+(?:para|pra))?)\s*","",title,flags=re.I)
         title=re.sub(r"\b(?:hoje|amanhã|amanha)\b","",title,flags=re.I)
         title=re.sub(r"(?:às|as)\s*\d{1,2}(?::\d{2}|h\d{0,2})?","",title,flags=re.I).strip(" ,.-")
     r=await db.prepare("INSERT INTO daily_items(user_id,kind,title,details,due_date,due_time,status) VALUES(?,'tarefa',?,'simple_reminder',?,?,'pendente') RETURNING id").bind(uid,title or "lembrete",d.isoformat(),tm).first()
@@ -68,8 +75,7 @@ async def handle_explicit_simple_reminder(db,token,message):
 async def remember_after_message(db,message):
     chat=(message.get("chat") or {}).get("id");text=(message.get("text") or "").strip();n=_norm(text)
     if not chat:return
-    # Só consulta quando a frase provavelmente acabou de criar tarefa/compromisso.
-    creation=any(x in n for x in ("me lembra","tenho dentista","tenho consulta","tenho reuniao","tenho prova","adiciona uma tarefa","cria uma tarefa","marca compromisso","anota compromisso"))
+    creation=any(x in n for x in ("me lembra","cria um lembrete","crie um lembrete","adiciona um lembrete","adicione um lembrete","cria uma tarefa","crie uma tarefa","adiciona uma tarefa","adicione uma tarefa","tenho dentista","tenho consulta","tenho reuniao","tenho prova","marca compromisso","anota compromisso"))
     if not creation:return
     uid=await _uid(db,int(chat))
     if not uid:return
