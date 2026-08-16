@@ -1,7 +1,7 @@
 """Edição de rotinas e checkpoints.
 
 Permite editar horários sem recriar a rotina. A rotina continua sendo a mesma
-entidade; somente time_hhmm é alterado. Logs históricos não são apagados.
+entidade; somente os campos escolhidos são alterados. Logs históricos não são apagados.
 """
 import re
 import unicodedata
@@ -9,7 +9,11 @@ import unicodedata
 import runtime_guard
 from telegram_api import send_message
 
-ROUTINE_EDIT_KB=[["➕ Adicionar horário","➖ Remover horário"],["🕐 Alterar horário","✏️ Renomear rotina"],["⬅️ Voltar às rotinas"]]
+ROUTINE_EDIT_KB=[
+    ["➕ Adicionar horário","➖ Remover horário"],
+    ["🕐 Alterar horário","✏️ Renomear rotina"],
+    ["⬅️ Voltar às rotinas"],
+]
 CANCEL_KB=[["❌ Cancelar ação"]]
 
 
@@ -36,6 +40,16 @@ def _format(r):
     times=_times(_row(r,"time_hhmm"));when=" • ".join(times) if times else "sem horário"
     return f"🧘 {_row(r,'name')}\nHorários: {when}\nDias: {_row(r,'weekdays') or 'todos os dias'}\nMeta: {_row(r,'category') or '—'}"
 
+def _edit_help():
+    return (
+        "O que quer alterar?\n\n"
+        "➕ Adicionar horário — ex.: `adicionar horário`\n"
+        "➖ Remover horário — ex.: `remover horário`\n"
+        "🕐 Alterar horário — ex.: `mudar horário`\n"
+        "✏️ Renomear rotina — ex.: `renomear rotina`\n\n"
+        "Pode usar os botões ou escrever do seu jeito."
+    )
+
 async def _find(db,uid,text):
     m=re.search(r"#?(\d+)",text or "")
     if m:
@@ -51,7 +65,7 @@ async def _save_times(db,uid,rid,times):
     value=",".join(sorted(set(times))) if times else None
     await db.prepare("UPDATE routines SET time_hhmm=? WHERE id=? AND user_id=? AND active=1").bind(value,rid,uid).run()
 
-async def _show_list(db,token,chat,uid,prompt="Qual rotina quer editar?"):
+async def _show_list(db,token,chat,uid,prompt="Qual rotina quer editar?\nMande o número, #ID ou o nome da rotina."):
     rs=await _rows(db.prepare("SELECT id,name,time_hhmm,weekdays,category FROM routines WHERE user_id=? AND active=1 ORDER BY name").bind(uid))
     if not rs:
         await send_message(token,chat,"🧘 Você não tem rotinas ativas.");return
@@ -59,6 +73,11 @@ async def _show_list(db,token,chat,uid,prompt="Qual rotina quer editar?"):
     for r in rs:
         ts=" • ".join(_times(_row(r,"time_hhmm"))) or "sem horário";lines.append(f"• #{_row(r,'id')} {_row(r,'name')} — {ts}")
     lines.append("\n"+prompt);await send_message(token,chat,"\n".join(lines),reply_markup=_kb(CANCEL_KB))
+
+async def _open_edit_menu(db,token,chat,uid,routine):
+    rid=int(_row(routine,"id"))
+    await runtime_guard._set_state(db,uid,"guard_routine_edit_menu",{"id":rid})
+    await send_message(token,chat,_format(routine)+"\n\n"+_edit_help(),reply_markup=_kb(ROUTINE_EDIT_KB))
 
 async def handle_message(db,token,message):
     chat=(message.get("chat") or {}).get("id");text=(message.get("text") or "").strip()
@@ -70,7 +89,7 @@ async def handle_message(db,token,message):
     if text=="✏️ Editar rotina" or re.match(r"^(editar|edita)\s+(a\s+)?rotina\b",n):
         routine=await _find(db,uid,re.sub(r"^(editar|edita)\s+(a\s+)?rotina\s*","",text,flags=re.I))
         if routine:
-            await runtime_guard._set_state(db,uid,"guard_routine_edit_menu",{"id":int(_row(routine,"id"))});await send_message(token,chat,_format(routine)+"\n\nO que quer alterar?",reply_markup=_kb(ROUTINE_EDIT_KB));return True
+            await _open_edit_menu(db,token,chat,uid,routine);return True
         await runtime_guard._set_state(db,uid,"guard_routine_edit_pick",{});await _show_list(db,token,chat,uid);return True
 
     # Ações naturais diretas: adiciona/remove/troca horário na rotina X.
@@ -93,23 +112,38 @@ async def handle_message(db,token,message):
     if state=="guard_routine_edit_pick":
         routine=await _find(db,uid,text)
         if not routine:
-            await _show_list(db,token,chat,uid,"Não identifiquei essa. Mande #ID ou o nome.");return True
-        await runtime_guard._set_state(db,uid,"guard_routine_edit_menu",{"id":int(_row(routine,"id"))});await send_message(token,chat,_format(routine)+"\n\nO que quer alterar?",reply_markup=_kb(ROUTINE_EDIT_KB));return True
+            await _show_list(db,token,chat,uid,"Não identifiquei essa. Mande o número, #ID ou o nome.");return True
+        await _open_edit_menu(db,token,chat,uid,routine);return True
 
     if state=="guard_routine_edit_menu":
         rid=payload.get("id");routine=await db.prepare("SELECT * FROM routines WHERE id=? AND user_id=? AND active=1").bind(rid,uid).first()
         if not routine:
             await runtime_guard._clear(db,uid);return False
-        if text=="➕ Adicionar horário":await runtime_guard._set_state(db,uid,"guard_routine_edit_add",{"id":rid});await send_message(token,chat,"Qual horário adicionar? Ex.: `17h` ou `17:30`.",reply_markup=_kb(CANCEL_KB));return True
-        if text=="➖ Remover horário":await runtime_guard._set_state(db,uid,"guard_routine_edit_remove",{"id":rid});await send_message(token,chat,_format(routine)+"\n\nQual horário remover?",reply_markup=_kb(CANCEL_KB));return True
-        if text=="🕐 Alterar horário":await runtime_guard._set_state(db,uid,"guard_routine_edit_replace",{"id":rid});await send_message(token,chat,_format(routine)+"\n\nMande `15h por 16h`.",reply_markup=_kb(CANCEL_KB));return True
-        if text=="✏️ Renomear rotina":await runtime_guard._set_state(db,uid,"guard_routine_edit_rename",{"id":rid});await send_message(token,chat,"Qual o novo nome?",reply_markup=_kb(CANCEL_KB));return True
-        if text=="⬅️ Voltar às rotinas":await runtime_guard._clear(db,uid);await _show_list(db,token,chat,uid,"Use `editar rotina #ID` quando quiser alterar uma.");return True
-        return False
+
+        add_cmd = text=="➕ Adicionar horário" or n in {"adicionar horario","adiciona horario","add horario","novo horario","colocar horario","bota horario"}
+        remove_cmd = text=="➖ Remover horário" or n in {"remover horario","remove horario","tirar horario","tira horario","excluir horario","apagar horario"}
+        replace_cmd = text=="🕐 Alterar horário" or n in {"alterar horario","mudar horario","muda horario","trocar horario","troca horario","editar horario"}
+        rename_cmd = text=="✏️ Renomear rotina" or n in {"renomear rotina","renomeia rotina","mudar nome","muda nome","alterar nome","editar nome"}
+        back_cmd = text=="⬅️ Voltar às rotinas" or n in {"voltar as rotinas","voltar rotinas","voltar"}
+
+        if add_cmd:
+            await runtime_guard._set_state(db,uid,"guard_routine_edit_add",{"id":rid});await send_message(token,chat,"Qual horário quer adicionar? Ex.: `17h`, `17:30` ou até `17h e 19h`.",reply_markup=_kb(CANCEL_KB));return True
+        if remove_cmd:
+            await runtime_guard._set_state(db,uid,"guard_routine_edit_remove",{"id":rid});await send_message(token,chat,_format(routine)+"\n\nQual horário quer remover? Ex.: `17h`.",reply_markup=_kb(CANCEL_KB));return True
+        if replace_cmd:
+            await runtime_guard._set_state(db,uid,"guard_routine_edit_replace",{"id":rid});await send_message(token,chat,_format(routine)+"\n\nQual troca quer fazer? Ex.: `15h por 16h`.",reply_markup=_kb(CANCEL_KB));return True
+        if rename_cmd:
+            await runtime_guard._set_state(db,uid,"guard_routine_edit_rename",{"id":rid});await send_message(token,chat,"Qual o novo nome da rotina?",reply_markup=_kb(CANCEL_KB));return True
+        if back_cmd:
+            await runtime_guard._clear(db,uid);await _show_list(db,token,chat,uid,"Use `editar rotina #ID` quando quiser alterar uma.");return True
+
+        await send_message(token,chat,"Não entendi qual edição você quer.\n\n"+_edit_help(),reply_markup=_kb(ROUTINE_EDIT_KB));return True
 
     if state in ("guard_routine_edit_add","guard_routine_edit_remove","guard_routine_edit_replace","guard_routine_edit_rename"):
         rid=payload.get("id");routine=await db.prepare("SELECT * FROM routines WHERE id=? AND user_id=? AND active=1").bind(rid,uid).first()
         if not routine:return False
+        if n in {"cancelar","cancelar acao"} or text=="❌ Cancelar ação":
+            await _open_edit_menu(db,token,chat,uid,routine);return True
         current=_times(_row(routine,"time_hhmm"))
         if state=="guard_routine_edit_rename":
             if not text:return True
@@ -125,5 +159,5 @@ async def handle_message(db,token,message):
                 await send_message(token,chat,"Não identifiquei horário. Ex.: `17h` ou `17:30`.",reply_markup=_kb(CANCEL_KB));return True
             if state=="guard_routine_edit_add":await _save_times(db,uid,rid,current+chosen);msg="✅ Horário adicionado."
             else:await _save_times(db,uid,rid,[t for t in current if t not in chosen]);msg="➖ Horário removido."
-        fresh=await db.prepare("SELECT * FROM routines WHERE id=? AND user_id=?").bind(rid,uid).first();await runtime_guard._set_state(db,uid,"guard_routine_edit_menu",{"id":rid});await send_message(token,chat,msg+"\n\n"+_format(fresh),reply_markup=_kb(ROUTINE_EDIT_KB));return True
+        fresh=await db.prepare("SELECT * FROM routines WHERE id=? AND user_id=?").bind(rid,uid).first();await runtime_guard._set_state(db,uid,"guard_routine_edit_menu",{"id":rid});await send_message(token,chat,msg+"\n\n"+_format(fresh)+"\n\n"+_edit_help(),reply_markup=_kb(ROUTINE_EDIT_KB));return True
     return False
