@@ -19,6 +19,7 @@ from exam_cancel_patch import handle_message as handle_exam_cancel, install as i
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery_phrase
 from hybrid_llm import handle_message as handle_hybrid_llm
+from llm_debug import handle_message as handle_llm_debug
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
 from personality_variants import install as install_personality_variants
@@ -155,7 +156,9 @@ class Default(WorkerEntrypoint):
 
             message = update.get("message") or update.get("edited_message")
             if message:
-                handled = await handle_global_navigation(self.env.DB, token, message)
+                handled = await handle_llm_debug(self.env.DB, token, message, self.env)
+                if not handled:
+                    handled = await handle_global_navigation(self.env.DB, token, message)
                 if not handled:
                     await ensure_attendance_schema(self.env.DB)
                     handled = await handle_attendance_management(self.env.DB, token, message)
@@ -180,8 +183,6 @@ class Default(WorkerEntrypoint):
                 if not handled:
                     handled = await handle_quality_message(self.env.DB, token, message)
 
-                # Laboratório híbrido: somente OWNER_CHAT_ID. O Core determinístico acima
-                # continua sendo o fast path; se a IA falhar, as NLUs abaixo seguem como fallback.
                 if not handled:
                     handled = await handle_hybrid_llm(self.env.DB, token, message, self.env)
 
