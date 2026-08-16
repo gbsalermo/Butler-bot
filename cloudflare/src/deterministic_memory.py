@@ -2,6 +2,7 @@ import json
 import re
 import unicodedata
 
+import academic_intelligence as ai
 import companion_nlu_v2 as v2
 from nlu import parse_date, parse_time
 from settings import OWNER_CHAT_ID
@@ -144,7 +145,6 @@ async def handle_message(db, token, message):
 
     n=_norm(text); entities=await _entities(db,uid); pets=_pets(entities)
 
-    # Perguntas diretas à memória persistente.
     if ("qual" in n or "como" in n or "lembra" in n) and "nome" in n and any(x in n for x in ("meu gato","minha gata","meu cachorro","meu pet")):
         if not pets:
             await send_message(token,int(chat_id),"Ainda não tenho nenhum pet seu registrado. Se você já me contou antes, foi antes dessa memória entrar em serviço — a burocracia chegou tarde."); return True
@@ -156,16 +156,14 @@ async def handle_message(db, token, message):
         if target and target.get("color"):
             await send_message(token,int(chat_id),f"{target.get('name')} é {target.get('color')}. Essa parte eu guardei — ficha cadastral do cidadão está em dia."); return True
 
-    # Pedido de lembrete tem prioridade sobre interpretar 'meu gato X' como declaração.
     item=_supply(text)
     reminder=any(x in n for x in ("me lembra","me lembre","pode me lembrar","lembra eu","tenho que lembrar","nao posso esquecer"))
     if item and reminder:
         referenced=_find_referenced(pets,text)
         if not referenced and any(x in n for x in ("meu gato","minha gata","meu cachorro","meu pet")) and len(pets)==1: referenced=pets[0]
         pet_name=(referenced or {}).get("name") or "meu pet"
-        due=parse_date(text,v2._now().date())
-        if not due:
-            return False
+        due=parse_date(text,ai._now().date())
+        if not due:return False
         tm=parse_time(text)
         if tm:
             await _create_pet_reminder(db,uid,pet_name,item,due,tm)
