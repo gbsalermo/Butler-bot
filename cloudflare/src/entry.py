@@ -25,7 +25,7 @@ from general_memory import handle_message as handle_general_memory
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery_phrase
-from language_context import is_protected_core_message
+from context_router import classify, allow_optional
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
 from personality_variants import install as install_personality_variants
@@ -40,204 +40,68 @@ from task_context_patch import handle_message as handle_task_context, install as
 from task_emoji_patch import install as install_task_emoji_patch
 from ux_bugfixes import handle_global_navigation, install as install_ux_bugfixes
 
-install_performance_patches()
-install_scheduler_patches()
-install_routine_integration()
-install_conversation_layer()
-install_quality_patch()
-install_recurrence_patch()
-install_academic_intelligence()
-install_academic_polish()
-install_exam_cancel()
-install_personality_variants()
-install_reminder_policy()
-install_ux_bugfixes()
-install_task_context()
-install_attendance()
-install_attendance_enhancement()
-install_attendance_management()
-install_task_emoji_patch()
+install_performance_patches(); install_scheduler_patches(); install_routine_integration(); install_conversation_layer(); install_quality_patch(); install_recurrence_patch(); install_academic_intelligence(); install_academic_polish(); install_exam_cancel(); install_personality_variants(); install_reminder_policy(); install_ux_bugfixes(); install_task_context(); install_attendance(); install_attendance_enhancement(); install_attendance_management(); install_task_emoji_patch()
 
-
-def _optional_env(env, name):
-    try:
-        return getattr(env, name)
-    except Exception:
-        return None
-
+def _optional_env(env,name):
+    try:return getattr(env,name)
+    except Exception:return None
 
 class Default(WorkerEntrypoint):
-    async def fetch(self, request):
-        parsed = urlparse(request.url)
-        path = parsed.path
-
-        if request.method == "GET" and path == "/health":
-            return Response(
-                json.dumps({
-                    "ok": True,
-                    "service": "butler-bot",
-                    "runtime": "cloudflare-python-worker",
-                    "d1": True,
-                    "owner_chat_id_configured": OWNER_CHAT_ID is not None,
-                    "dispatcher": "functional-v1",
-                    "webhook_secret_configured": bool(_optional_env(self.env, "TELEGRAM_WEBHOOK_SECRET")),
-                    "fast_path": True,
-                    "routine_agenda": True,
-                    "natural_add_intents": True,
-                    "contextual_conversation": True,
-                    "companion_chat_v1": True,
-                    "companion_nlu_v2": True,
-                    "deterministic_personal_memory": True,
-                    "generic_personal_entities": True,
-                    "per_user_memory": True,
-                    "conversational_background": True,
-                    "informal_portuguese_background": True,
-                    "core_domain_protection": True,
-                    "cultural_background": True,
-                    "butler_library": True,
-                    "cooking_books": True,
-                    "traditional_brazilian_cooking": True,
-                    "informal_cooking_queries": True,
-                    "library_context_actions": True,
-                    "companion_action_suggestions": True,
-                    "companion_social_mode": True,
-                    "companion_study_plan": True,
-                    "companion_everyday_context": True,
-                    "inline_actions": True,
-                    "smart_agenda": True,
-                    "flexible_routines": True,
-                    "simple_reminders": True,
-                    "natural_references": True,
-                    "task_reminder_minutes": 0,
-                    "appointment_reminder_minutes": 5,
-                    "informal_grocery": True,
-                    "informal_grocery_suffix": True,
-                    "late_routine_confirmation": True,
-                    "natural_agenda_queries": True,
-                    "academic_exams": True,
-                    "exam_reminders_days": [7, 3, 1, 0],
-                    "exam_agenda_section": True,
-                    "full_routine_completion": True,
-                    "sarcasm_v3": True,
-                    "varied_reminder_personality": True,
-                    "natural_exam_phrases": True,
-                    "exam_cancel": True,
-                    "exam_wizard_cancel": True,
-                    "reliable_reminders": True,
-                    "reminder_grace_minutes": 10,
-                    "single_reminder_policy": True,
-                    "global_back_navigation": True,
-                    "workout_exercise_progress": True,
-                    "workout_auto_refresh_on_completion": True,
-                    "contextual_task_postpone": True,
-                    "task_list_retention_hours": 24,
-                    "task_list_ephemeral_numbering": True,
-                    "task_agenda_emoji": "📝",
-                    "attendance_tracking": True,
-                    "attendance_class_prompt": True,
-                    "attendance_limit_per_subject": True,
-                    "attendance_duration_based": True,
-                    "attendance_schema_guard": True,
-                    "attendance_humor_thresholds": [30, 50, 75, 100],
-                    "attendance_lost_when_over_limit": True,
-                    "attendance_edit_limit": True,
-                    "attendance_delete_absence": True,
-                    "attendance_delete_confirmation": True,
-                }),
-                headers={"Content-Type": "application/json; charset=utf-8"},
-            )
-
-        if request.method == "POST" and path == "/telegram/webhook":
-            webhook_secret = _optional_env(self.env, "TELEGRAM_WEBHOOK_SECRET")
-            if webhook_secret:
-                supplied = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
-                if supplied != webhook_secret:
-                    return Response("forbidden", status=403)
-
-            try:
-                update = await request.json()
-            except Exception:
-                return Response("invalid json", status=400)
-
-            token = self.env.TELEGRAM_BOT_TOKEN
-            callback = update.get("callback_query")
+    async def fetch(self,request):
+        parsed=urlparse(request.url); path=parsed.path
+        if request.method=="GET" and path=="/health":
+            return Response(json.dumps({"ok":True,"service":"butler-bot","runtime":"cloudflare-python-worker","d1":True,"owner_chat_id_configured":OWNER_CHAT_ID is not None,"dispatcher":"context-router-v2","fast_path":True,"routine_agenda":True,"natural_add_intents":True,"contextual_conversation":True,"companion_chat_v1":True,"companion_nlu_v2":True,"deterministic_personal_memory":True,"generic_personal_entities":True,"per_user_memory":True,"short_context_memory":True,"central_context_router":True,"action_policy":True,"conversational_background":True,"informal_portuguese_background":True,"core_domain_protection":True,"cultural_background":True,"butler_library":True,"cooking_books":True,"traditional_brazilian_cooking":True,"informal_cooking_queries":True,"library_context_actions":True,"companion_action_suggestions":True,"companion_social_mode":True,"companion_study_plan":True,"companion_everyday_context":True,"inline_actions":True,"smart_agenda":True,"flexible_routines":True,"simple_reminders":True,"natural_references":True,"task_reminder_minutes":0,"appointment_reminder_minutes":5,"informal_grocery":True,"informal_grocery_suffix":True,"late_routine_confirmation":True,"natural_agenda_queries":True,"academic_exams":True,"exam_reminders_days":[7,3,1,0],"exam_agenda_section":True,"full_routine_completion":True,"sarcasm_v3":True,"varied_reminder_personality":True,"natural_exam_phrases":True,"exam_cancel":True,"exam_wizard_cancel":True,"reliable_reminders":True,"reminder_grace_minutes":10,"single_reminder_policy":True,"global_back_navigation":True,"workout_exercise_progress":True,"workout_auto_refresh_on_completion":True,"contextual_task_postpone":True,"task_list_retention_hours":24,"task_list_ephemeral_numbering":True,"task_agenda_emoji":"📝","attendance_tracking":True,"attendance_class_prompt":True,"attendance_limit_per_subject":True,"attendance_duration_based":True,"attendance_schema_guard":True,"attendance_humor_thresholds":[30,50,75,100],"attendance_lost_when_over_limit":True,"attendance_edit_limit":True,"attendance_delete_absence":True,"attendance_delete_confirmation":True}),headers={"Content-Type":"application/json; charset=utf-8"})
+        if request.method=="POST" and path=="/telegram/webhook":
+            webhook_secret=_optional_env(self.env,"TELEGRAM_WEBHOOK_SECRET")
+            if webhook_secret and request.headers.get("X-Telegram-Bot-Api-Secret-Token")!=webhook_secret:return Response("forbidden",status=403)
+            try:update=await request.json()
+            except Exception:return Response("invalid json",status=400)
+            token=self.env.TELEGRAM_BOT_TOKEN; callback=update.get("callback_query")
             if callback:
-                handled = await handle_attendance_callback(self.env.DB, token, callback)
-                if not handled:
-                    await handle_context_callback(self.env.DB, token, callback)
+                handled=await handle_attendance_callback(self.env.DB,token,callback)
+                if not handled:await handle_context_callback(self.env.DB,token,callback)
                 return Response("ok")
-
-            message = update.get("message") or update.get("edited_message")
+            message=update.get("message") or update.get("edited_message")
             if message:
-                handled = await handle_global_navigation(self.env.DB, token, message)
+                text=(message.get("text") or ""); route=classify(text)
+                # TIER 1 — CORE: autoridade funcional e regras de negócio.
+                handled=await handle_global_navigation(self.env.DB,token,message)
                 if not handled:
-                    await ensure_attendance_schema(self.env.DB)
-                    handled = await handle_attendance_management(self.env.DB, token, message)
+                    await ensure_attendance_schema(self.env.DB); handled=await handle_attendance_management(self.env.DB,token,message)
+                if not handled:handled=await handle_attendance_message(self.env.DB,token,message)
+                if not handled:handled=await handle_explicit_simple_reminder(self.env.DB,token,message)
+                if not handled:handled=await handle_reference(self.env.DB,token,message)
+                if not handled:handled=await handle_exam_cancel(self.env.DB,token,message)
+                if not handled:handled=await handle_exam_phrase(self.env.DB,token,message)
+                if not handled:handled=await handle_academic_message(self.env.DB,token,message)
+                if not handled:handled=await handle_task_context(self.env.DB,token,message)
+                if not handled:handled=await runtime_guard.handle_pre_dispatch(self.env.DB,token,message)
+                if not handled:handled=await handle_grocery_phrase(self.env.DB,token,message)
+                if not handled:handled=await handle_quality_message(self.env.DB,token,message)
+                # TIER 2 — MEMÓRIA: fatos pessoais, sem substituir Core.
+                if not handled:handled=await handle_general_memory(self.env.DB,token,message)
+                if not handled:handled=await handle_deterministic_memory(self.env.DB,token,message)
+                # TIER 3 — LIBRARY: opcional. O roteador impede competição com Core.
+                if not handled and allow_optional(route,"cooking"):handled=await handle_cooking_library(self.env.DB,token,message)
+                if not handled and allow_optional(route,"cooking"):handled=await handle_library_recipe_queries(self.env.DB,token,message)
+                if not handled and allow_optional(route):handled=await handle_butler_library(self.env.DB,token,message)
+                if not handled and allow_optional(route):handled=await handle_cultural_background(self.env.DB,token,message)
+                # TIER 4 — LINGUAGEM / CONVERSA. NLU funcional ainda tem precedência sobre fallback.
+                if not handled:handled=await handle_companion_language_patch(self.env.DB,token,message)
+                if not handled:handled=await handle_companion_life_context(self.env.DB,token,message)
+                if not handled:handled=await handle_companion_nlu_v2(self.env.DB,token,message)
+                if not handled and allow_optional(route):handled=await handle_conversational_background(self.env.DB,token,message)
+                if not handled:handled=await handle_companion_message(self.env.DB,token,message)
+                if not handled:handled=await handle_context_message(self.env.DB,token,message)
                 if not handled:
-                    handled = await handle_attendance_message(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_explicit_simple_reminder(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_reference(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_exam_cancel(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_exam_phrase(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_academic_message(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_task_context(self.env.DB, token, message)
-                if not handled:
-                    handled = await runtime_guard.handle_pre_dispatch(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_grocery_phrase(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_quality_message(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_general_memory(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_deterministic_memory(self.env.DB, token, message)
-
-                # Os acervos ampliam conversa e possibilidades, mas nunca competem com o Core.
-                # Se a mensagem ainda não foi resolvida e contém intenção clara de domínio funcional,
-                # pula culinária/cultura/Library e deixa as NLUs funcionais/fallback do Core resolverem.
-                protected_core = is_protected_core_message((message.get("text") or ""))
-                if not handled and not protected_core:
-                    handled = await handle_cooking_library(self.env.DB, token, message)
-                if not handled and not protected_core:
-                    handled = await handle_library_recipe_queries(self.env.DB, token, message)
-                if not handled and not protected_core:
-                    handled = await handle_butler_library(self.env.DB, token, message)
-                if not handled and not protected_core:
-                    handled = await handle_cultural_background(self.env.DB, token, message)
-
-                if not handled:
-                    handled = await handle_companion_language_patch(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_companion_life_context(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_companion_nlu_v2(self.env.DB, token, message)
-                if not handled and not protected_core:
-                    handled = await handle_conversational_background(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_companion_message(self.env.DB, token, message)
-                if not handled:
-                    handled = await handle_context_message(self.env.DB, token, message)
-                if not handled:
-                    await app.handle_message(self.env.DB, token, message)
-                    await remember_after_message(self.env.DB, message)
+                    await app.handle_message(self.env.DB,token,message); await remember_after_message(self.env.DB,message)
             return Response("ok")
+        return Response("Not found",status=404)
 
-        return Response("Not found", status=404)
-
-    async def scheduled(self, controller, env, ctx):
-        await dispatch_due_reminders(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
+    async def scheduled(self,controller,env,ctx):
+        await dispatch_due_reminders(self.env.DB,self.env.TELEGRAM_BOT_TOKEN)
         try:
-            await ensure_attendance_schema(self.env.DB)
-            await dispatch_class_attendance(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
-        except Exception:
-            pass
-        try:
-            await app.scheduled_tick(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
-        except Exception:
-            return
+            await ensure_attendance_schema(self.env.DB); await dispatch_class_attendance(self.env.DB,self.env.TELEGRAM_BOT_TOKEN)
+        except Exception:pass
+        try:await app.scheduled_tick(self.env.DB,self.env.TELEGRAM_BOT_TOKEN)
+        except Exception:return
