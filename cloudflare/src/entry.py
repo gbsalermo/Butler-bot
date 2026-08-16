@@ -19,6 +19,7 @@ from exam_cancel_patch import handle_message as handle_exam_cancel, install as i
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery_phrase
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
+from operational_menu import handle_message as handle_operational_menu, install as install_operational_menu
 from performance_patch import install_performance_patches
 from personality_variants import install as install_personality_variants
 from quality_patch import handle_message as handle_quality_message, install as install_quality_patch
@@ -61,6 +62,7 @@ install_attendance_production_fix()
 install_task_emoji_patch()
 install_workout_progress()
 install_scheduled_delivery_guard()
+install_operational_menu()
 
 
 BASE_BUTTONS = {
@@ -125,8 +127,11 @@ class Default(WorkerEntrypoint):
                     "runtime": "cloudflare-python-worker",
                     "d1": True,
                     "owner_chat_id_configured": OWNER_CHAT_ID is not None,
-                    "dispatcher": "butler-operational-core-v2",
+                    "dispatcher": "butler-operational-core-v3",
                     "operational_focus": True,
+                    "operational_menu": True,
+                    "finance_hidden_from_primary_menu": True,
+                    "goals_hidden_from_primary_menu": True,
                     "broad_nlu_disabled": True,
                     "legacy_nlu_fallback_blocked": True,
                     "cultural_background_disabled": True,
@@ -223,6 +228,7 @@ class Default(WorkerEntrypoint):
                         return Response("ok")
 
                 for handler in (
+                    handle_operational_menu,
                     handle_routine_ui,
                     handle_routine_editing,
                     handle_attendance_production_ui,
@@ -262,8 +268,6 @@ class Default(WorkerEntrypoint):
                     if handled:
                         return Response("ok")
 
-                # O app base só recebe botões/estados guiados. Texto livre não cai
-                # mais em handle_natural()/interpret() da NLU antiga.
                 if await _use_base_only_when_needed(self.env.DB, message):
                     await app.handle_message(self.env.DB, token, message)
                     await remember_after_message(self.env.DB, message)
