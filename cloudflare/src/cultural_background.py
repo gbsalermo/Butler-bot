@@ -2,6 +2,7 @@ import re
 import unicodedata
 
 import companion_nlu_v2 as v2
+import deterministic_memory as dm
 from telegram_api import send_message
 
 
@@ -55,6 +56,19 @@ def _question_target(n):
     for key in sorted(KNOWLEDGE.keys(),key=len,reverse=True):
         if key in n:return key
     return None
+
+
+# Evita que uma memória pessoal de primeiro nome (ex.: Jake, o gato) capture
+# uma entidade cultural composta conhecida (ex.: Jake Peralta).
+_original_find = dm._find_referenced
+
+def _cultural_safe_find(entities,text):
+    n=_norm(text)
+    if any(key in n for key in KNOWLEDGE):
+        return None
+    return _original_find(entities,text)
+
+dm._find_referenced = _cultural_safe_find
 
 
 async def handle_message(db,token,message):
