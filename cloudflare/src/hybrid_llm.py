@@ -2,6 +2,7 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 
+from butler_memory import relevant_memories, recent_turns, save_candidates
 from llm_provider import build_provider
 from settings import OWNER_CHAT_ID, UTC_OFFSET_HOURS
 from telegram_api import send_message
@@ -32,11 +33,14 @@ Você NÃO executa ações. Pode sugerir somente:
 Se não estiver claro, use action=null. O Core pedirá confirmação antes de qualquer escrita.
 
 MEMÓRIA
-Pode sugerir memory_candidates apenas para fatos realmente úteis no futuro.
-- stable: fato duradouro explicitamente dito pelo usuário (ex.: possui um gato chamado Tobias).
-- episodic: acontecimento relevante (ex.: duas provas no mesmo dia).
-- behavioral: preferência/padrão útil e não sensível (ex.: prefere humor seco).
+O campo relevant_memories contém fatos já persistidos pelo Butler. Trate-os como memória: não peça para o usuário explicar de novo algo que já esteja ali e não os reapresente sem necessidade.
+Sugira memory_candidates apenas para NOVOS fatos realmente úteis no futuro.
+- stable: fato duradouro explicitamente dito pelo usuário.
+- episodic: acontecimento relevante com valor futuro.
+- behavioral: preferência/padrão útil e não sensível.
+Cada candidato pode incluir subject, tags e importance (0..1) para facilitar recuperação futura.
 Não transforme hipótese em fato. Para stable use confidence >= 0.92 somente quando explícito.
+Dados mutáveis como agenda, gastos e tarefas vêm de context e nunca devem virar verdade permanente.
 
 SAÍDA
 Responda SOMENTE JSON válido, sem markdown e sem texto fora do JSON:
@@ -45,7 +49,7 @@ Responda SOMENTE JSON válido, sem markdown e sem texto fora do JSON:
   "topic": "tema curto ou casual",
   "tone": "casual|playful|supportive|serious|celebratory",
   "action": null ou {"type":"...","payload":{}},
-  "memory_candidates": [{"type":"stable|episodic|behavioral","fact":"...","confidence":0.0}]
+  "memory_candidates": [{"type":"stable|episodic|behavioral","subject":null,"fact":"...","tags":[],"importance":0.0,"confidence":0.0}]
 }
 """
 
@@ -64,17 +68,6 @@ def _row(row, key, default=None):
             return row[key]
         except Exception:
             return default
-
-
-async def _rows(stmt):
-    result = await stmt.all()
-    data = getattr(result, "results", None)
-    if data is None:
-        return []
-    try:
-        return list(data)
-    except Exception:
-        return data.to_py() if hasattr(data, "to_py") else []
 
 
 def _now():
@@ -105,56 +98,9 @@ async def _context_snapshot(db, uid):
     }
 
 
-async def _recent_memories(db, uid):
-    rs = await _rows(db.prepare("SELECT detail,created_at FROM natural_events WHERE user_id=? AND event_type='llm_memory' ORDER BY id DESC LIMIT 12").bind(uid))
-    out=[]
-    for r in rs:
-        try:
-            data=json.loads(_row(r,"detail") or "{}")
-        except Exception:
-            continue
-        fact=(data.get("fact") or "").strip()
-        if fact:
-            out.append({"type":data.get("type"),"fact":fact,"confidence":data.get("confidence"),"created_at":_row(r,"created_at")})
-    return out[:8]
-
-
-async def _recent_turns(db, uid):
-    rs = await _rows(db.prepare("SELECT detail FROM natural_events WHERE user_id=? AND event_type='llm_turn' ORDER BY id DESC LIMIT 8").bind(uid))
-    turns=[]
-    for r in reversed(rs):
-        try:
-            data=json.loads(_row(r,"detail") or "{}")
-        except Exception:
-            continue
-        if data.get("user") and data.get("assistant"):
-            turns.append({"user":data["user"][:500],"assistant":data["assistant"][:700]})
-    return turns
-
-
 async def _remember_turn(db, uid, user_text, reply, topic):
     detail=json.dumps({"user":user_text[:800],"assistant":reply[:1000],"topic":topic},ensure_ascii=False)
     await db.prepare("INSERT INTO natural_events(user_id,event_type,detail) VALUES(?,'llm_turn',?)").bind(uid,detail).run()
-
-
-async def _save_memory_candidates(db, uid, candidates):
-    if not isinstance(candidates,list):
-        return
-    for candidate in candidates[:3]:
-        if not isinstance(candidate,dict):
-            continue
-        kind=candidate.get("type")
-        fact=str(candidate.get("fact") or "").strip()
-        try: confidence=float(candidate.get("confidence",0))
-        except Exception: confidence=0
-        threshold=0.92 if kind=="stable" else 0.86
-        if kind not in ("stable","episodic","behavioral") or confidence<threshold or len(fact)<8 or len(fact)>280:
-            continue
-        duplicate=await db.prepare("SELECT id FROM natural_events WHERE user_id=? AND event_type='llm_memory' AND detail LIKE ? LIMIT 1").bind(uid,f"%{fact[:120]}%").first()
-        if duplicate:
-            continue
-        detail=json.dumps({"type":kind,"fact":fact,"confidence":round(confidence,3)},ensure_ascii=False)
-        await db.prepare("INSERT INTO natural_events(user_id,event_type,detail) VALUES(?,'llm_memory',?)").bind(uid,detail).run()
 
 
 async def _pending_action(db, uid):
@@ -252,12 +198,18 @@ async def handle_message(db, token, message, env):
     provider=build_provider(env)
     if not provider.available():return False
     snapshot=await _context_snapshot(db,uid)
-    memories=await _recent_memories(db,uid)
-    turns=await _recent_turns(db,uid)
-    user_payload={"current_message":text,"context":snapshot,"relevant_memories":memories,"recent_conversation":turns}
+    memories=await relevant_memories(db,uid,text,limit=6)
+    turns=await recent_turns(db,uid,limit=4)
+    user_payload={
+        "current_message":text,
+        "context":snapshot,
+        "relevant_memories":memories,
+        "recent_conversation":turns,
+        "context_policy":"Use memória persistida para fatos já conhecidos. Não peça novamente o que já estiver em relevant_memories. recent_conversation existe apenas para continuidade imediata."
+    }
     messages=[{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":json.dumps(user_payload,ensure_ascii=False)}]
     try:
-        raw=await provider.generate(messages,max_tokens=550,temperature=0.55)
+        raw=await provider.generate(messages,max_tokens=500,temperature=0.55)
         data=_extract_json(raw)
     except Exception:
         return False
@@ -268,7 +220,7 @@ async def handle_message(db, token, message, env):
     if isinstance(action,dict) and action.get("type") in ALLOWED_ACTIONS:
         await _set_pending(db,uid,action)
         reply += "\n\nSe quiser que eu realmente aplique isso, confirma com `pode`. Se não, manda `deixa`."
-    await _save_memory_candidates(db,uid,data.get("memory_candidates"))
+    await save_candidates(db,uid,data.get("memory_candidates"))
     await _remember_turn(db,uid,text,reply,data.get("topic") or "casual")
     await send_message(token,int(chat_id),reply)
     return True
