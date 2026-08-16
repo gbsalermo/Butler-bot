@@ -8,6 +8,7 @@ from knowledge.meat_cuts import MEAT_CUTS, MEAT_RECIPES
 from telegram_api import send_message
 
 STOP={"o","a","os","as","um","uma","uns","umas","de","da","do","das","dos","com","pra","para","por","que","eu","me","meu","minha","queria","quero","fazer","faco","faço","algo","alguma","coisa","receita","receitas","ideia","ideias","butler","pode","posso","resto","sobra"}
+ACADEMIC_WORDS={"aula","aulas","materia","materias","disciplina","disciplinas","prova","provas","faculdade","universidade","semestre","professor","professora","faltar","faltei","presenca","presenças","presenca","falta","faltas","sistemas digitais","fisica","laboratorio"}
 
 def _norm(text):
     value=unicodedata.normalize("NFKD",(text or "").lower()); value="".join(ch for ch in value if not unicodedata.combining(ch)); value=re.sub(r"[^a-z0-9 ]+"," ",value); return re.sub(r"\s+"," ",value).strip()
@@ -40,11 +41,10 @@ def _book_for_query(n):
         for alias in [book]+meta.get("aliases",[]):
             a=_norm(alias)
             if a and a in n and (best is None or len(a)>best[0]):best=(len(a),book,meta)
-    if any(_norm(a) in n for d in MEAT_CUTS.values() for a in d.get("aliases",[])): return "carnes",COOKING_BOOKS.get("carnes",{})
+    if any(_norm(a) in n for d in MEAT_CUTS.values() for a in d.get("aliases",[])):return "carnes",COOKING_BOOKS.get("carnes",{})
     return best[1:] if best else (None,None)
 def _rank(n,book_filter=None):
-    wanted=_terms(n); ranked=[]; leftovers=any(x in n for x in ("resto","sobra","sobrou","de ontem","ontem")); quick=any(x in n for x in ("rapido","facil","simples")); light=any(x in n for x in ("leve","saudavel"))
-    cut_name,cut=_find_cut(n); preferred=set(cut.get("best_for",[])) if cut else set()
+    wanted=_terms(n); ranked=[]; leftovers=any(x in n for x in ("resto","sobra","sobrou","de ontem","ontem")); quick=any(x in n for x in ("rapido","facil","simples")); light=any(x in n for x in ("leve","saudavel")); cut_name,cut=_find_cut(n); preferred=set(cut.get("best_for",[])) if cut else set()
     for book,title,data in _all_recipes():
         if book_filter and book!=book_filter:continue
         hay=" ".join([book,title]+data.get("aliases",[])+data.get("tags",[])+data.get("ingredients",[])); score=len(wanted&_terms(hay))*2; nhay=_norm(hay)
@@ -66,12 +66,19 @@ def _is_cooking_request(n):
     direct=("como fazer","como faz","como preparo","como preparar","receita de","receita do","receita da","receitas de","receitas com")
     informal=("queria fazer","quero fazer","oq posso fazer","o que posso fazer","o que da pra fazer","alguma ideia","me da uma ideia","tenho ","sobrou ","sobra de ","resto de ","da pra fazer com","o que faco com","oq faco com")
     return any(x in n for x in direct+informal)
+def _is_other_domain(n):
+    # Contexto de receita nunca pode sequestrar uma frase que explicitamente mudou de domínio.
+    return any(_norm(word) in n for word in ACADEMIC_WORDS)
 async def _save_recipe_context(db,uid,book,title,data): await library._save_event(db,uid,"library_context",{"domain":"recipe","book":book,"title":title,"pantry_keys":data.get("ingredients",[])[:20]})
 async def _followup_missing(db,token,chat_id,uid,text,n):
+    if _is_other_domain(n):return False
     ctx=await library._last_event(db,uid,"library_context",4)
     if not ctx or ctx[1].get("domain")!="recipe":return False
-    if not any(x in n for x in ("nao tenho","to sem","estou sem","falta","acabou")):return False
-    m=re.search(r"(?:nao tenho|não tenho|to sem|tô sem|estou sem|falta|acabou)\s+(?:o|a|os|as)?\s*(.+)$",text,flags=re.I)
+    # "falta" isolado é ambíguo demais (falta à aula, falta em compromisso etc.).
+    # Follow-up culinário exige construção inequívoca de ingrediente ausente.
+    markers=("nao tenho","to sem","estou sem","acabou o ","acabou a ","acabou meu ","acabou minha ","falta ingrediente","faltando ingrediente")
+    if not any(x in n for x in markers):return False
+    m=re.search(r"(?:nao tenho|não tenho|to sem|tô sem|estou sem|acabou(?: o| a| meu| minha)?|falta ingrediente|faltando ingrediente)\s+(?:o|a|os|as)?\s*(.+)$",text,flags=re.I)
     if not m:return False
     missing=m.group(1).strip(" .,!?")[:80]
     if not missing:return False
@@ -86,10 +93,9 @@ async def handle_message(db,token,message):
     n=_norm(text)
     if await _followup_missing(db,token,int(chat_id),uid,text,n):return True
     book,title,data=_find_exact(n); explicit_recipe=any(x in n for x in ("como fazer","como faz","como preparo","como preparar","receita","me ensina")); recent=await library._last_event(db,uid,"cooking_search",2)
-    if data and (explicit_recipe or n in {_norm(title)}|{_norm(x) for x in data.get("aliases",[])} or recent):
+    if data and (explicit_recipe or n in {_norm(title)}|{_norm(x) for x in data.get("aliases",[])} or (recent and not _is_other_domain(n))):
         await _save_recipe_context(db,uid,book,title,data); await send_message(token,int(chat_id),_format(title,data)); return True
     cut_name,cut=_find_cut(n)
-    # Um corte/preparação sozinho é conhecimento válido: "filé mignon", "músculo", "carne do sol".
     if cut and (n in {_norm(cut_name)}|{_norm(x) for x in cut.get("aliases",[])} or any(x in n for x in ("o que e","oq e","como fazer","como preparo","o que faco","oq faco","receita","ideia","serve pra","bom pra"))):
         if any(x in n for x in ("como fazer","como preparo","o que faco","oq faco","receita","ideia","serve pra","bom pra")):
             ranked=_rank(n,"carnes")
