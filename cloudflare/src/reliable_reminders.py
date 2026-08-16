@@ -43,22 +43,21 @@ async def dispatch_due_reminders(db, token):
     """Dispara notificações pendentes de forma idempotente e resiliente.
 
     Política:
-    - lembrete simples explícito: deve chegar mesmo em Day-off e, se o cron atrasar,
-      faz catch-up durante o mesmo dia em vez de desaparecer;
-    - tarefa: horário exato com tolerância curta;
-    - compromisso: 5 minutos antes com tolerância curta;
+    - lembrete simples explícito: avisa no horário e faz catch-up no mesmo dia;
+    - tarefa com horário: avisa no horário e também faz catch-up no mesmo dia se o
+      cron/deploy perder a janela original; continua pendente até conclusão/cancelamento;
+    - compromisso: 5 minutos antes, com tolerância curta para não avisar evento velho;
+    - Day-off silencia tarefa/compromisso, mas não lembrete simples explícito;
     - notification_log impede duplicidade.
-
-    Um lembrete explícito é mais próximo de um alarme pedido pelo usuário do que de
-    uma cobrança do Butler. Por isso Day-off silencia cobranças, mas não o aviso que
-    o próprio usuário pediu para determinado horário.
     """
     now = _now()
     today = now.date()
 
+    # LEFT JOIN evita excluir do scheduler um usuário que, por qualquer falha de
+    # inicialização/migração, ainda não possua assistant_state.
     users = await _rows(db.prepare(
-        "SELECT u.id,u.telegram_chat_id,a.day_off FROM users u "
-        "JOIN assistant_state a ON a.user_id=u.id"
+        "SELECT u.id,u.telegram_chat_id,COALESCE(a.day_off,0) day_off FROM users u "
+        "LEFT JOIN assistant_state a ON a.user_id=u.id"
     ))
 
     for user in users:
@@ -82,8 +81,8 @@ async def dispatch_due_reminders(db, token):
 
             simple = details == "simple_reminder"
 
-            # Day-off bloqueia cobranças operacionais, mas não um lembrete pontual
-            # explicitamente pedido pelo usuário.
+            # Day-off silencia cobranças operacionais. Um lembrete explícito é
+            # tratado como alarme pedido pelo usuário e continua tocando.
             if day_off and not simple:
                 continue
 
@@ -102,10 +101,12 @@ async def dispatch_due_reminders(db, token):
             if late.total_seconds() < 0:
                 continue
 
-            # Para lembrete explícito não existe janela fatal de 10 minutos: se não
-            # foi enviado, faz catch-up no mesmo dia. Tarefa/compromisso mantêm a
-            # tolerância curta para não gerar cobranças antigas horas depois.
-            if not simple and late > timedelta(minutes=GRACE_MINUTES):
+            # Tarefas e lembretes explícitos não podem sumir por uma falha curta
+            # de cron/deploy: se ainda estão pendentes e nunca foram notificados,
+            # recuperamos o aviso durante o mesmo dia. Compromissos antigos não
+            # recebem catch-up para evitar alertar um evento que já passou.
+            is_task = kind == "tarefa"
+            if not simple and not is_task and late > timedelta(minutes=GRACE_MINUTES):
                 continue
 
             key = f"item:new:{iid}:{today}:{desired.strftime('%H:%M')}"
@@ -125,12 +126,22 @@ async def dispatch_due_reminders(db, token):
                     )
                 else:
                     text = f"🔔 {_row(item,'title')} — {_row(item,'due_time')}. Só um aviso."
-            elif kind == "tarefa":
+            elif is_task:
                 markup = _inline([
                     [("✅ Feito", f"item:done:{iid}"), ("⏰ +30 min", f"item:snooze:{iid}:30")],
                     [("🚫 Cancelar", f"item:cancel:{iid}")],
                 ])
-                text = f"✅ {_row(item,'title')} — {_row(item,'due_time')}. Chegou a hora. Agora a tarefa saiu oficialmente da categoria 'problema do eu do futuro'. 😏"
+                if late > timedelta(minutes=2):
+                    minutes = max(1, int(late.total_seconds() // 60))
+                    text = (
+                        f"✅ {_row(item,'title')} — era para {_row(item,'due_time')}. "
+                        f"O aviso atrasou {minutes} min, mas a tarefa continua pendente até você concluir ou cancelar."
+                    )
+                else:
+                    text = (
+                        f"✅ {_row(item,'title')} — {_row(item,'due_time')}. Chegou a hora. "
+                        "Agora a tarefa saiu oficialmente da categoria 'problema do eu do futuro'. 😏"
+                    )
             else:
                 markup = _inline([
                     [("👌 Ciente", f"item:done:{iid}"), ("⏰ +30 min", f"item:snooze:{iid}:30")]
@@ -143,6 +154,8 @@ async def dispatch_due_reminders(db, token):
                 "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
             ).bind(uid, key).run()
 
+            # Lembrete simples encerra depois do aviso. Tarefa comum permanece
+            # pendente, inclusive quando o aviso foi recuperado com atraso.
             if simple:
                 await db.prepare(
                     "UPDATE daily_items SET status='concluido',completed_at=CURRENT_TIMESTAMP WHERE id=?"
