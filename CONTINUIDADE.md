@@ -616,3 +616,67 @@ Ao concluir qualquer etapa futura:
 3. registrar incompatibilidades encontradas na migração;
 4. não apagar decisões históricas relevantes sem substituí-las explicitamente;
 5. deixar sempre indicado o próximo passo técnico.
+
+## 24. Experimento com LLM e retorno à NLU determinística — agosto/2026
+
+Foi realizado um laboratório para usar LLM somente como camada de linguagem, personalidade, memória e sugestão de ações, mantendo o Core determinístico como autoridade sobre banco, regras e operações.
+
+### Arquitetura testada
+
+A proposta era:
+
+- fast path determinístico primeiro;
+- Cloudflare Workers AI somente para mensagens conversacionais não resolvidas;
+- memória persistente no D1;
+- LLM retornando resposta estruturada e propostas de ação;
+- nenhuma escrita direta pela LLM;
+- confirmação do usuário antes de qualquer alteração;
+- NLU atual como fallback.
+
+Foram testados binding `AI`, modelos do Workers AI, provider abstrato, parser de respostas, memória semântica e comando de diagnóstico.
+
+### Resultado do laboratório
+
+No ambiente de produção do Butler, a integração não se mostrou confiável nesta etapa. Mensagens conversacionais continuaram caindo no fallback determinístico e houve aumento de latência antes da resposta. Até o comando de diagnóstico da LLM não conseguiu atravessar corretamente o fluxo do bot.
+
+Decisão: **retirar a LLM da `main` e voltar para NLU determinística/contextual como base oficial**. O experimento foi preservado na branch `archive/llm-experiment`. A versão pré-LLM permanece em `backup/nlu-only`.
+
+### Direção atual: memória determinística
+
+A ideia útil do experimento — memória persistente — permanece, mas sem modelo externo.
+
+Novo módulo: `cloudflare/src/deterministic_memory.py`.
+
+Objetivo inicial:
+
+- reconhecer fatos explícitos sobre entidades pessoais;
+- persistir relações no D1 usando `natural_events`;
+- reutilizar essas relações em mensagens futuras;
+- evitar pedir ao usuário para repetir contexto já informado.
+
+Primeiro caso implementado: pets.
+
+Exemplo esperado:
+
+1. `tenho um gato chamado Jake e ele é laranja` → grava `Jake = gato`, com atributo `laranja` quando identificado;
+2. mais tarde `Jake tá sem ração` → recupera Jake como gato, entende o contexto e propõe adicionar ração à lista;
+3. a inclusão na lista continua exigindo confirmação (`pode`/`sim`), reaproveitando o fluxo existente de mercado/pet.
+
+A memória deve crescer por domínios claros e estruturados (pets, pessoas recorrentes, preferências e relações úteis), não como tentativa de interpretar qualquer frase aberta.
+
+### Correção contextual associada
+
+O fallback emocional antigo tinha uma falha: o marcador curto `é` era normalizado para `e` e testado por substring, fazendo mensagens sem relação com o estado anterior serem tratadas como continuação emocional. Isso provocava respostas repetidas, como reciclar o contexto de tarefas concluídas ao dizer `ele tá lendo aqui`.
+
+A `main` agora usa `companion_safe_fallback.py`: saudações e estados explícitos continuam funcionando, mas continuadores curtos como `é`, `sei lá` e `isso` só são aceitos quando correspondem à mensagem inteira.
+
+### Possibilidade futura de LLM
+
+LLM não está descartada definitivamente. Uma futura tentativa deve evitar depender da integração direta que falhou neste laboratório. Alternativas a avaliar quando houver infraestrutura própria:
+
+- LLM local/privada executada junto ao servidor;
+- serviço separado em container (ex.: Ollama ou runtime compatível) e acessado pelo Butler por uma interface interna;
+- provider externo somente se tiver contrato/API estável e latência aceitável;
+- manter sempre o Core determinístico como autoridade e a NLU/memória como fallback.
+
+Se a abordagem local/containerizada for retomada, reutilizar os princípios do laboratório: LLM apenas para linguagem/contexto, memória externa pertencente ao Butler, ações validadas pelo Core e nenhuma escrita direta pelo modelo.
