@@ -12,6 +12,9 @@ from attendance_enhancement import ensure_schema as ensure_attendance_schema, ha
 from attendance_management import handle_message as handle_attendance_management, install as install_attendance_management
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from conversational_companion import handle_message as handle_companion_message
+from companion_language_patch import handle_message as handle_companion_language_patch
+from companion_life_context import handle_message as handle_companion_life_context
+from companion_nlu_v2 import handle_message as handle_companion_nlu_v2
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery_phrase
@@ -75,6 +78,11 @@ class Default(WorkerEntrypoint):
                     "natural_add_intents": True,
                     "contextual_conversation": True,
                     "companion_chat_v1": True,
+                    "companion_nlu_v2": True,
+                    "companion_action_suggestions": True,
+                    "companion_social_mode": True,
+                    "companion_study_plan": True,
+                    "companion_everyday_context": True,
                     "inline_actions": True,
                     "smart_agenda": True,
                     "flexible_routines": True,
@@ -165,6 +173,12 @@ class Default(WorkerEntrypoint):
                     handled = await handle_grocery_phrase(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_quality_message(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_companion_language_patch(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_companion_life_context(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_companion_nlu_v2(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_companion_message(self.env.DB, token, message)
                 if not handled:
