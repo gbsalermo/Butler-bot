@@ -1,7 +1,7 @@
 """Ajustes de UX do menu de Rotinas.
 
-Mantém edição acessível por botão e garante que voltar da edição não deixe o
-usuário preso no teclado de cancelamento.
+Mantém edição acessível por botão e garante que todos os módulos que exibem o
+menu de rotinas usem exatamente o mesmo teclado.
 """
 import routine_integration
 import runtime_guard
@@ -10,7 +10,7 @@ from telegram_api import send_message
 ROUTINE_KB=[
     ["➕ Adicionar rotina","✏️ Editar rotina"],
     ["📋 Minhas rotinas","✅ Marcar rotina feita"],
-    ["🗑️ Remover rotina"],
+    ["🏁 Encerrar rotina hoje","🗑️ Remover rotina"],
     ["⬅️ Voltar ao cotidiano"],
 ]
 
@@ -19,9 +19,20 @@ def _kb(rows):return {"keyboard":rows,"resize_keyboard":True}
 
 
 def install():
-    # Os dois módulos usam o próprio símbolo ROUTINE_KB; unifica a interface.
+    # Unifica todos os pontos conhecidos que exibem o menu de Rotinas.
     runtime_guard.ROUTINE_KB=ROUTINE_KB
     routine_integration.ROUTINE_KB=ROUTINE_KB
+    try:
+        import academic_intelligence
+        academic_intelligence.ROUTINE_KB=ROUTINE_KB
+    except Exception:
+        pass
+    try:
+        import app
+        if hasattr(app,"ROUTINE_KB"):
+            app.ROUTINE_KB=ROUTINE_KB
+    except Exception:
+        pass
 
 
 async def handle_message(db,token,message):
