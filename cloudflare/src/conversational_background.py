@@ -1,9 +1,13 @@
 import re
 import unicodedata
+from datetime import datetime, timedelta, timezone
 
 import companion_nlu_v2 as v2
 from deterministic_memory import _entities, _find_referenced
+from settings import UTC_OFFSET_HOURS
 from telegram_api import send_message
+
+LOCAL_TZ=timezone(timedelta(hours=UTC_OFFSET_HOURS))
 
 
 def _norm(text):
@@ -11,6 +15,30 @@ def _norm(text):
     value="".join(ch for ch in value if not unicodedata.combining(ch))
     value=re.sub(r"[^a-z0-9 ]+"," ",value)
     return re.sub(r"\s+"," ",value).strip()
+
+
+def _period():
+    hour=datetime.now(timezone.utc).astimezone(LOCAL_TZ).hour
+    if 5<=hour<12:return "manha"
+    if 12<=hour<18:return "tarde"
+    if 18<=hour<24:return "noite"
+    return "madrugada"
+
+
+def _greeting_reply(n):
+    # Se o usuário escolheu explicitamente o cumprimento, respeita-o. O relógio
+    # serve apenas para cumprimentos genéricos; nunca transforma boa noite em bom dia.
+    if "boa noite" in n:
+        if any(x in n for x in ("ate amanha","vou dormir","indo dormir","boa noite butler")):
+            return "Boa noite, chefe. Vai descansar. Até amanhã — eu seguro o expediente por aqui."
+        return "Boa noite, chefe. Tudo certo por aí?"
+    if "boa tarde" in n:return "Boa tarde, chefe. Tudo certo por aí?"
+    if "bom dia" in n:return "Bom dia, chefe. Tudo certo por aí?"
+    period=_period()
+    if period=="madrugada":return "Fala daí, chefe. Aconteceu alguma coisa ou a madrugada só resolveu render conversa?"
+    if period=="manha":return "Bom dia, chefe. Tudo certo por aí?"
+    if period=="tarde":return "Boa tarde, chefe. Tudo certo por aí?"
+    return "Boa noite, chefe. Tudo certo por aí ou apareceu alguma coisa?"
 
 
 async def handle_message(db,token,message):
@@ -22,8 +50,15 @@ async def handle_message(db,token,message):
     if not uid:return False
     n=_norm(text)
 
-    if n in ("oi","oi butler","ola","ola butler","e ai","e ai butler","fala butler","opa butler","salve butler"):
-        await send_message(token,int(chat_id),"Fala daí, chefe. Tudo certo por aí ou apareceu alguma coisa?"); return True
+    # Despedidas vêm antes de saudações: "boa noite ... até amanhã" é encerramento,
+    # não abertura de conversa.
+    if any(x in n for x in ("ate amanha","to indo dormir","estou indo dormir","vou dormir","indo dormir","hora de dormir")):
+        await send_message(token,int(chat_id),"Boa noite, chefe. Vai descansar. Até amanhã — eu seguro o expediente por aqui."); return True
+
+    greetings=("oi","oi butler","ola","ola butler","e ai","e ai butler","fala butler","opa butler","salve butler")
+    explicit=any(x in n for x in ("bom dia","boa tarde","boa noite"))
+    if n in greetings or (explicit and len(n)<=80):
+        await send_message(token,int(chat_id),_greeting_reply(n)); return True
     if n in ("obrigado","obrigada","valeu","vlw","brigado","brigada","tmj","tamo junto"):
         await send_message(token,int(chat_id),"Tamo junto, chefe. Meu salário continua inexistente, mas seguimos."); return True
     if n in ("kkkk","kkk","kkkkk","haha","hahaha","rs","rsrs") or (len(n)<30 and any(x in n for x in ("kkkk","hahaha"))):
