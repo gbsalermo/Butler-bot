@@ -3,7 +3,6 @@ import unicodedata
 
 import companion_nlu_v2 as v2
 from deterministic_memory import _entities, _find_referenced
-from settings import OWNER_CHAT_ID
 from telegram_api import send_message
 
 
@@ -16,7 +15,7 @@ def _norm(text):
 
 async def handle_message(db,token,message):
     chat_id=(message.get("chat") or {}).get("id")
-    if chat_id is None or OWNER_CHAT_ID is None or int(chat_id)!=int(OWNER_CHAT_ID): return False
+    if chat_id is None: return False
     text=(message.get("text") or "").strip()
     if not text or text.startswith("/"): return False
     uid=await v2._uid(db,int(chat_id))
@@ -40,19 +39,27 @@ async def handle_message(db,token,message):
 
     entities=await _entities(db,uid)
     referenced=_find_referenced(entities,text)
-    if referenced and any(x in n for x in ("quem e","quem é","o que e","o que é","voce lembra","você lembra","lembra quem")):
+    if referenced and any(x in n for x in ("quem e","quem é","o que e","o que é","voce lembra","você lembra","lembra quem","o que sabe sobre")):
         name=referenced.get("name")
-        if referenced.get("kind")=="pet":
+        kind=referenced.get("kind")
+        if kind=="pet":
             species=referenced.get("species") or "pet"; color=referenced.get("color")
             extra=f" e é {color}" if color else ""
             await send_message(token,int(chat_id),f"Lembro. {name} é seu {species}{extra}. Cadastro informal da firma segue funcionando."); return True
+        relation=referenced.get("relation")
+        model=referenced.get("model")
+        if kind=="person" and relation:
+            await send_message(token,int(chat_id),f"Lembro. {name} é {relation} seu/sua. Pelo menos essa parte da árvore social eu não perdi."); return True
+        if kind in ("vehicle","object"):
+            label=referenced.get("label") or ("veículo" if kind=="vehicle" else "objeto")
+            desc=model or name
+            await send_message(token,int(chat_id),f"Lembro. Seu {label} é {desc}."); return True
 
-    # Comentários cotidianos curtos: responde sem tentar transformar em ação.
     if len(n)<=90:
         if any(x in n for x in ("to com sono","tô com sono","morrendo de sono","sono demais")):
             await send_message(token,int(chat_id),"Aí já é o corpo protocolando pedido de encerramento do expediente. Se não tiver bomba pendente agora, eu respeitaria o sindicato."); return True
         if any(x in n for x in ("to com fome","tô com fome","morrendo de fome")):
-            await send_message(token,int(chat_id),"Isso aí costuma ter solução mais objetiva que a maioria dos seus problemas. Vai comer alguma coisa decente."); return True
+            await send_message(token,int(chat_id),"Isso aí costuma ter solução mais objetiva que a maioria dos problemas. Vai comer alguma coisa decente."); return True
         if any(x in n for x in ("que calor","ta calor","tá calor","calor demais")):
             await send_message(token,int(chat_id),"Clima colaborando pra transformar qualquer obrigação em atividade de alto risco. Água, chefe. Pelo menos essa eu posso defender sem reunião."); return True
         if any(x in n for x in ("que frio","ta frio","tá frio","frio demais")):
