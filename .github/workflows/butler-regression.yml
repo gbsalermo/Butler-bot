@@ -1,0 +1,33 @@
+name: Butler regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/src/**"
+      - "cloudflare/tests/**"
+      - "cloudflare/pyproject.toml"
+      - ".github/workflows/butler-regression.yml"
+  pull_request:
+    paths:
+      - "cloudflare/src/**"
+      - "cloudflare/tests/**"
+      - "cloudflare/pyproject.toml"
+
+jobs:
+  deterministic-regression:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test runner
+        run: python -m pip install --upgrade pip pytest
+      - name: Run deterministic regression suite
+        run: pytest -q
