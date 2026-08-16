@@ -9,6 +9,7 @@ ATTENDANCE_GRACE_MINUTES = 10
 ACADEMIC_KB_FULL = [
     ["📚 Minhas matérias", "⚙️ Gerenciar matérias"],
     ["📝 Adicionar prova", "📋 Provas"],
+    ["❌ Registrar falta", "✅ Registrar presença"],
     ["📊 Ver faltas", "⚙️ Limite de faltas"],
     ["✏️ Editar limite", "🗑️ Excluir falta"],
     ["📥 Importar grade por PDF/texto"],
@@ -43,7 +44,7 @@ async def handle_message(db, token, message):
     await send_message(
         token,
         int(chat_id),
-        "📚 Matérias. Provas, faltas e aquela delicada arte de aparecer na aula ficam por aqui.",
+        "📚 Matérias. Provas, presença, faltas e aquela delicada arte de aparecer na aula ficam por aqui.",
         reply_markup=_kb(ACADEMIC_KB_FULL),
     )
     return True
