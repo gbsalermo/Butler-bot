@@ -18,7 +18,8 @@ Princípios permanentes:
 8. Day-off reduz cobranças;
 9. cada usuário possui dados e memória isolados;
 10. conhecimento global pertence à Butler Library, não à memória pessoal;
-11. exemplos novos devem alimentar domínios reutilizáveis, não virar `if`s específicos.
+11. exemplos novos devem alimentar domínios reutilizáveis, não virar `if`s específicos;
+12. **Library, cultura e backgrounds são extras opcionais: enriquecem a experiência, mas nunca têm prioridade sobre Core funcional.**
 
 ## 2. Estado técnico atual
 
@@ -29,7 +30,11 @@ Componentes recentes importantes em `cloudflare/src/`:
 - `butler_library.py` — roteamento/busca da biblioteca e ponte de sugestões para o Core;
 - `deterministic_memory.py` / memória pessoal — fatos estruturados por usuário;
 - `companion_safe_fallback.py` — conversa básica/fallback contextual sem o bug de continuadores por substring;
-- `knowledge/cooking.py`;
+- `language_context.py` — normalização informal e proteção de domínios do Core;
+- `knowledge/portuguese_conversation.py` — acervo linguístico auxiliar, não respondente;
+- `knowledge/cooking.py` / `knowledge/cooking_books.py`;
+- `knowledge/brazilian_traditional_foods.py`;
+- `knowledge/meat_cuts.py`;
 - `knowledge/games.py`;
 - `knowledge/pop_culture.py`;
 - `knowledge/philosophy.py`;
@@ -43,12 +48,17 @@ Contrato:
 
 ```text
 mensagem
-→ NLU / memória / Butler Library
+→ Core/fast paths funcionais
+→ memória pessoal
+→ proteção de domínio
+→ Library/backgrounds somente quando não houver intenção funcional protegida
 → resposta ou sugestão
 → confirmação quando houver escrita derivada/ambígua
 → Core
 → D1
 ```
+
+Domínios protegidos incluem, no mínimo: matérias/aulas/provas/faltas, tarefas, compromissos/agenda, mercado/lista, musculação, finanças, metas e rotinas. Se uma mensagem apontar claramente para um desses domínios, acervos de culinária/cultura/conversa não disputam a mensagem, mesmo que exista contexto recente de outra área.
 
 Exemplos aprovados: receita + ingrediente ausente → sugerir item de mercado; série que o usuário quer acompanhar → sugerir rotina diária. A Library não grava essas ações diretamente.
 
@@ -76,11 +86,17 @@ A Butler Library é conhecimento global compartilhado por todos os usuários. El
 
 ### 5.1 Culinária
 
-Receitas são dados estruturados com aliases, ingredientes, porções, preparo, dicas, tags e chaves de despensa. Busca direta e busca por ingrediente são suportadas.
+Receitas são dados estruturados com aliases, ingredientes, porções, preparo, dicas, tags e chaves de despensa. Busca direta, busca por ingrediente, categoria, sobras e fala informal são suportadas.
 
-Objetivo de generalização: `receita de carne moída`, `tenho carne moída e batata`, `como faço strogonoff?` devem ser consultas do mesmo domínio, sem novas features individuais.
+A culinária está organizada em áreas/livros como massas, carnes/cortes, salgados, arroz/feijão, legumes, saladas, frango, doces e cozinha brasileira tradicional.
 
-Follow-up: `não tenho X` após uma receita pode oferecer salvar X em itens faltando; escrita só após confirmação.
+O acervo tradicional inclui, entre outros: moqueca baiana/capixaba, vatapá, baião de dois, acarajé, bobó de camarão, feijão tropeiro, galinhada, barreado, cuscuz nordestino, caruru e vaca atolada.
+
+O acervo de carnes diferencia corte de preparação/conservação e inclui filé mignon, contrafilé, alcatra, picanha, patinho, acém, músculo, costela, cupim, coxões, lagarto, fraldinha, maminha, peito, ossobuco, tutano, carne do sol e charque/carne-seca/jabá.
+
+Objetivo de generalização: `receita de carne moída`, `tenho carne moída e batata`, `queria fazer um macarrão`, `sobrou arroz de ontem`, `como faço strogonoff?` devem ser consultas do mesmo domínio, sem novas features individuais.
+
+Follow-up: `não tenho X` após uma receita pode oferecer salvar X em itens faltando; escrita só após confirmação. `falta` isolado nunca é interpretado como ingrediente porque pode significar falta acadêmica/ausência.
 
 ### 5.2 Jogos
 
@@ -111,9 +127,23 @@ Acervo amplo com prioridade em:
 
 O catálogo cruza título, autor, país, tipo e tags. Inclui Machado de Assis, Graciliano Ramos, Clarice Lispector, Guimarães Rosa, Jorge Amado, Carolina Maria de Jesus, Dostoiévski, Kafka, Camus, Orwell, Hesse, Platão, Spinoza, Nietzsche, Marco Aurélio, Kerouac, Bukowski e John Fante, entre outros.
 
-## 6. Personalidade e conversa cotidiana
+### 5.6 Prioridade dos acervos
+
+A Library é deliberadamente opcional. Regra prática:
+
+```text
+Core explícito > memória funcional > acervo opcional > conversa/fallback
+```
+
+Exemplo de regressão já observada e proibida: após falar de receita, `queria faltar essa aula de Sistemas Digitais I` não pode ser interpretado como ingrediente faltando. A mensagem atual define o domínio; contexto recente apenas ajuda quando a mensagem atual é ambígua dentro do mesmo domínio.
+
+## 6. Personalidade, português informal e conversa cotidiana
 
 O Butler deve aceitar conversa simples sem responder sempre com produtividade. Saudações, agradecimentos, risadas, fome, sono, desânimo e comentários cotidianos devem ter respostas naturais e variadas.
+
+Existe um acervo linguístico auxiliar de português informal com equivalências e marcadores como `oq`, `pq`, `vc`, `tbm`, `hj`, `dps`, `tô/to`, `blz`, `vlw`, `facul`, `trampo`, além de construções como `deu ruim`, `tá osso`, `queria`, `tava pensando`, `me lembra` etc.
+
+Esse acervo **não é uma enciclopédia para perguntas sobre gírias** e não deve responder por conta própria. Sua função é melhorar normalização, intenção, mudança de assunto e separação de domínios.
 
 Tom desejado: familiaridade e parceria, com humor/gírias quando cabem. Evitar frases feitas como transformar todo `oi` em `vamos resolver as coisas agora ou depois?`.
 
@@ -208,6 +238,8 @@ quem foi Spinoza?
 me passa uma receita de strogonoff
 não tenho creme de leite
 pode
+queria fazer um baião de dois
+me explica carne do sol
 me indica um jogo leve pra PC
 monta um time aleatório pra FireRed
 me fala de Supernatural
@@ -218,6 +250,15 @@ me indica um livro brasileiro
 quero algo parecido com Bukowski
 quero algo na vibe de On the Road
 ```
+
+Teste obrigatório de troca de domínio:
+
+```text
+receita de carbonara
+queria faltar essa aula de Sistemas Digitais I
+```
+
+A segunda mensagem deve ir ao Core acadêmico e nunca à culinária.
 
 Também testar dois `chat_id` distintos para confirmar que memória, Day-off, contexto recente e ações nunca vazam entre usuários.
 
