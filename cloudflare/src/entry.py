@@ -25,6 +25,7 @@ from general_memory import handle_message as handle_general_memory
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery_phrase
+from language_context import is_protected_core_message
 from natural_behavior_patch import handle_explicit_simple_reminder, install_recurrence_patch, remember_after_message
 from performance_patch import install_performance_patches
 from personality_variants import install as install_personality_variants
@@ -90,9 +91,12 @@ class Default(WorkerEntrypoint):
                     "generic_personal_entities": True,
                     "per_user_memory": True,
                     "conversational_background": True,
+                    "informal_portuguese_background": True,
+                    "core_domain_protection": True,
                     "cultural_background": True,
                     "butler_library": True,
                     "cooking_books": True,
+                    "traditional_brazilian_cooking": True,
                     "informal_cooking_queries": True,
                     "library_context_actions": True,
                     "companion_action_suggestions": True,
@@ -193,21 +197,27 @@ class Default(WorkerEntrypoint):
                     handled = await handle_general_memory(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_deterministic_memory(self.env.DB, token, message)
-                if not handled:
+
+                # Os acervos ampliam conversa e possibilidades, mas nunca competem com o Core.
+                # Se a mensagem ainda não foi resolvida e contém intenção clara de domínio funcional,
+                # pula culinária/cultura/Library e deixa as NLUs funcionais/fallback do Core resolverem.
+                protected_core = is_protected_core_message((message.get("text") or ""))
+                if not handled and not protected_core:
                     handled = await handle_cooking_library(self.env.DB, token, message)
-                if not handled:
+                if not handled and not protected_core:
                     handled = await handle_library_recipe_queries(self.env.DB, token, message)
-                if not handled:
+                if not handled and not protected_core:
                     handled = await handle_butler_library(self.env.DB, token, message)
-                if not handled:
+                if not handled and not protected_core:
                     handled = await handle_cultural_background(self.env.DB, token, message)
+
                 if not handled:
                     handled = await handle_companion_language_patch(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_companion_life_context(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_companion_nlu_v2(self.env.DB, token, message)
-                if not handled:
+                if not handled and not protected_core:
                     handled = await handle_conversational_background(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_companion_message(self.env.DB, token, message)
