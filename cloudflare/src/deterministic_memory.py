@@ -5,7 +5,6 @@ import unicodedata
 import academic_intelligence as ai
 import companion_nlu_v2 as v2
 from nlu import parse_date, parse_time
-from settings import OWNER_CHAT_ID
 from telegram_api import send_message
 
 PET_SPECIES = ("gato", "gata", "cachorro", "cachorra", "cao", "cão")
@@ -134,7 +133,7 @@ async def _handle_pending_time(db,token,chat_id,uid,text):
 
 async def handle_message(db, token, message):
     chat_id=(message.get("chat") or {}).get("id")
-    if chat_id is None or OWNER_CHAT_ID is None or int(chat_id)!=int(OWNER_CHAT_ID): return False
+    if chat_id is None: return False
     text=(message.get("text") or "").strip()
     if not text:return False
     uid=await v2._uid(db,int(chat_id))
@@ -143,28 +142,23 @@ async def handle_message(db, token, message):
 
     n=_norm(text); entities=await _entities(db,uid); pets=_pets(entities)
 
-    # Correções naturais: "apague Deve, o nome do meu gato é Jake".
     correction=re.search(r"(?:apaga|apague|remove|remova|esquece|esqueça)\s+(?:o\s+)?([A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç-]{2,30})",text,flags=re.I)
     corrected=re.search(r"(?:nome do meu gato|meu gato)\s+(?:e|é|se chama)\s+([A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç-]{2,30})",text,flags=re.I)
     if correction:
         old=correction.group(1); removed=await _delete_entity(db,uid,old)
         if corrected and _valid_name(corrected.group(1)):
             new=corrected.group(1).capitalize(); await _save_entity(db,uid,{"kind":"pet","name":new,"species":"gato"})
-            await send_message(token,int(chat_id),f"Corrigido. Apaguei {old} da memória e deixei {new} como seu gato. Agora o cadastro parou de inventar funcionário."); return True
+            await send_message(token,int(chat_id),f"Corrigido. Apaguei {old} da memória e deixei {new} como seu gato."); return True
         await send_message(token,int(chat_id),f"{'Apaguei '+old+' da memória.' if removed else old+' não estava na minha memória.'}"); return True
 
-    # Declaração corretiva simples: "o nome do meu gato é Jake" também grava.
     if corrected and _valid_name(corrected.group(1)):
-        new=corrected.group(1).capitalize()
-        # Se só havia um pet inválido conhecido, não removemos silenciosamente; apenas garantimos o correto.
-        await _save_entity(db,uid,{"kind":"pet","name":new,"species":"gato"})
+        new=corrected.group(1).capitalize(); await _save_entity(db,uid,{"kind":"pet","name":new,"species":"gato"})
         await send_message(token,int(chat_id),f"Anotado: seu gato é {new}."); return True
 
     if ("qual" in n or "como" in n or "lembra" in n) and "nome" in n and any(x in n for x in ("meu gato","minha gata","meu cachorro","meu pet")):
         if not pets: await send_message(token,int(chat_id),"Ainda não tenho nenhum pet seu registrado."); return True
         names=", ".join(str(p.get("name")) for p in pets); await send_message(token,int(chat_id),f"Tenho sim: {names}."); return True
 
-    # "Você lembra quem é Jake?" / "quem é Jake?"
     referenced=_find_referenced(entities,text)
     if referenced and ("quem e" in n or "quem eh" in n or ("lembra" in n and "quem" in n)):
         if referenced.get("kind")=="pet":
@@ -194,9 +188,9 @@ async def handle_message(db, token, message):
 
     if not referenced:return False
     if referenced.get("kind")=="pet":
-        name=referenced.get("name"); species=referenced.get("species") or "pet"; item=_supply(text)
+        name=referenced.get("name"); item=_supply(text)
         if item and any(x in n for x in ("sem ","acabou","ta sem","falta","faltando","precisa","comprar")):
             await v2._save_state(db,uid,"confirm_pet_supply",{"item":item,"pet":name}); await send_message(token,int(chat_id),f"Ah, {name}. Posso colocar {item} na lista. Anoto?"); return True
         if any(x in n for x in ("aprontou","derrubou","quebrou","doido","maluco","danado")):
-            await send_message(token,int(chat_id),f"Claro que foi {name}. O que o {species} aprontou agora?"); return True
+            await send_message(token,int(chat_id),f"Claro que foi {name}. O que o cidadão aprontou agora?"); return True
     return False
