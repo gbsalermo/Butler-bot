@@ -1,3 +1,4 @@
+import random
 import re
 import unicodedata
 
@@ -23,7 +24,7 @@ KNOWLEDGE = {
     "machado de assis": "Machado de Assis foi um dos maiores escritores brasileiros, fundador e primeiro presidente da Academia Brasileira de Letras. Memórias Póstumas de Brás Cubas e Dom Casmurro são duas das obras mais conhecidas.",
     "clarice lispector": "Clarice Lispector foi uma escritora brasileira conhecida por uma prosa introspectiva e psicológica. A Hora da Estrela e A Paixão Segundo G.H. estão entre suas obras mais conhecidas.",
     "george orwell": "George Orwell foi o escritor inglês de 1984 e A Revolução dos Bichos, obras fortemente associadas a autoritarismo, propaganda e manipulação política.",
-    "stan lee": "Stan Lee foi escritor, editor e figura histórica da Marvel Comics, associado à criação ou cocriacão de personagens como Homem-Aranha, X-Men, Quarteto Fantástico e Hulk ao lado de artistas como Jack Kirby e Steve Ditko.",
+    "stan lee": "Stan Lee foi escritor, editor e figura histórica da Marvel Comics, associado à criação ou cocriação de personagens como Homem-Aranha, X-Men, Quarteto Fantástico e Hulk ao lado de artistas como Jack Kirby e Steve Ditko.",
     "hayao miyazaki": "Hayao Miyazaki é cineasta e animador japonês, cofundador do Studio Ghibli, ligado a filmes como A Viagem de Chihiro, Meu Amigo Totoro e Princesa Mononoke.",
     "studio ghibli": "Studio Ghibli é um estúdio japonês de animação conhecido por filmes como A Viagem de Chihiro, Meu Amigo Totoro, O Castelo Animado e Princesa Mononoke.",
     "breaking bad": "Breaking Bad é uma série de drama criminal sobre Walter White, um professor de química que entra no tráfico de metanfetamina e passa por uma transformação moral cada vez mais pesada.",
@@ -41,25 +42,75 @@ KNOWLEDGE = {
 
 CULTURE_GUIDES = {
     "filmes": "Pra descobrir filme: IMDb e Letterboxd ajudam a explorar elenco, avaliações e listas. No YouTube, canais de análise de cinema e vídeo-ensaios costumam render mais que lista genérica de '10 filmes que mudaram minha vida'.",
-    "series": "Pra séries: IMDb, JustWatch para descobrir onde algo está disponível e comunidades específicas da obra costumam ser mais úteis que ranking solto.",
-    "livros": "Pra livros: Goodreads e Skoob são bons pontos de partida para catálogo e comunidade. Para literatura clássica, Domínio Público e Project Gutenberg podem ser úteis quando a obra está em domínio público.",
+    "series": "Pra séries: IMDb e JustWatch são bons pontos de partida; comunidades específicas da obra costumam ser mais úteis que ranking solto.",
+    "livros": "Pra livros: Goodreads e Skoob são bons pontos de partida para catálogo e comunidade. Para clássicos, Domínio Público e Project Gutenberg podem ajudar quando a obra estiver em domínio público.",
     "arte": "Pra arte: Google Arts & Culture, sites de museus como Louvre, MoMA e The Met e canais de história da arte no YouTube são um bom começo.",
     "filosofia": "Pra filosofia, Stanford Encyclopedia of Philosophy e Internet Encyclopedia of Philosophy são referências fortes para consulta. No YouTube, procure aulas universitárias ou canais que indiquem fontes.",
-    "culinaria": "Pra culinária, prefiro fonte que mostre medida, técnica e resultado. TudoGostoso é útil para receita popular brasileira; Panelinha é boa referência prática. No YouTube, procure receitas que expliquem ponto, temperatura e substituições.",
+    "culinaria": "Pra culinária, prefiro fonte que mostre medida, técnica e resultado. TudoGostoso é útil para receita popular brasileira; Panelinha é boa referência prática.",
     "programacao": "Pra programação, documentação oficial primeiro. MDN para web, documentação da linguagem/framework e depois Stack Overflow ou vídeos para complementar.",
     "youtube": "No YouTube eu usaria a busca como ferramenta: nome do assunto + 'aula', 'documentário', 'video essay', 'receita passo a passo' ou 'review'. Fonte e profundidade importam mais que número de inscritos.",
 }
 
+FIRERED_POOL = [
+    "Venusaur","Charizard","Blastoise","Raichu","Nidoking","Nidoqueen","Clefable","Ninetales","Vileplume","Dugtrio",
+    "Golduck","Primeape","Arcanine","Poliwrath","Alakazam","Machamp","Victreebel","Tentacruel","Golem","Rapidash",
+    "Slowbro","Magneton","Dodrio","Dewgong","Muk","Cloyster","Gengar","Hypno","Kingler","Electrode","Exeggutor",
+    "Marowak","Hitmonlee","Hitmonchan","Weezing","Rhydon","Chansey","Kangaskhan","Seadra","Starmie","Mr. Mime",
+    "Scyther","Jynx","Electabuzz","Magmar","Pinsir","Tauros","Gyarados","Lapras","Vaporeon","Jolteon","Flareon",
+    "Snorlax","Articuno","Zapdos","Moltres","Dragonite"
+]
+
+FEIJOADA = """Feijoada completa — cerca de 6 a 8 porções
+
+Ingredientes:
+• 500 g de feijão preto
+• 250 g de carne-seca dessalgada em cubos
+• 250 g de costelinha suína salgada/dessalgada
+• 200 g de linguiça calabresa em rodelas
+• 200 g de paio em rodelas
+• 150 g de bacon em cubos
+• 1 cebola grande picada
+• 4 dentes de alho picados
+• 2 folhas de louro
+• água suficiente para cozinhar
+• pimenta-do-reino a gosto
+• cheiro-verde opcional
+
+Preparo:
+1. Se usar carne-seca e costelinha salgadas, dessalgue antes, trocando a água algumas vezes. Deixe o feijão de molho por 8 a 12 horas e descarte a água.
+2. Doure o bacon numa panela grande. Junte calabresa e paio e deixe pegar cor. Reserve parte das carnes se a panela ficar muito cheia.
+3. Na gordura que ficou, refogue cebola e alho. Acrescente o feijão, louro, carnes dessalgadas e água até cobrir bem.
+4. Cozinhe até o feijão e as carnes ficarem macios. Na pressão, normalmente o feijão leva algo em torno de 25 a 35 minutos depois de pegar pressão; carnes mais firmes podem precisar de pré-cozimento.
+5. Volte com calabresa, paio e bacon. Cozinhe sem pressão até o caldo engrossar. Amasse uma concha de feijão contra a lateral da panela se quiser engrossar mais.
+6. Acerte o sal só no final: as carnes já trazem bastante sal. Finalize com pimenta e, se quiser, cheiro-verde.
+
+Pra servir completo: arroz branco, couve refogada, farofa, laranja em rodelas e molho de pimenta. Feijoada boa é planejamento: se salgar tudo no começo, o almoço vira projeto de recuperação de desastre."""
+
+QUESTION_PREFIXES = (
+    "quem e ","quem foi ","quem era ","quem eh ","o que e ","o que foi ","voce conhece ","conhece ",
+    "fala sobre ","me fala sobre ","me fale sobre ","me explica ","qual e a desse ","qual a desse ",
+)
+
 
 def _question_target(n):
-    if not any(x in n for x in ("quem e ","o que e ","voce conhece ","fala sobre ","me explica ","me fale sobre ")): return None
     for key in sorted(KNOWLEDGE.keys(),key=len,reverse=True):
-        if key in n:return key
+        if key not in n:
+            continue
+        if any(prefix in n for prefix in QUESTION_PREFIXES):
+            return key
+        if re.search(rf"\b{re.escape(key)}\b.*\b(?:era|foi|e|eh)\s+quem\b", n):
+            return key
+        if re.search(rf"\b{re.escape(key)}\b.*\bquem\s+mesmo\b", n):
+            return key
     return None
 
 
-# Evita que uma memória pessoal de primeiro nome (ex.: Jake, o gato) capture
-# uma entidade cultural composta conhecida (ex.: Jake Peralta).
+def _pokemon_team():
+    team=random.sample(FIRERED_POOL,6)
+    return "🎮 Time aleatório pra Pokémon FireRed:\n" + "\n".join(f"• {p}" for p in team) + "\n\nNão prometo equilíbrio competitivo; você pediu aleatório, então o RH de Kanto fez o que pôde."
+
+
+# Evita que uma memória pessoal de primeiro nome capture entidade cultural composta.
 _original_find = dm._find_referenced
 
 def _cultural_safe_find(entities,text):
@@ -79,9 +130,17 @@ async def handle_message(db,token,message):
     uid=await v2._uid(db,int(chat_id))
     if not uid:return False
     n=_norm(text)
+
     target=_question_target(n)
     if target:
         await send_message(token,int(chat_id),KNOWLEDGE[target]); return True
+
+    if "pokemon" in n and ("fire red" in n or "firered" in n) and any(x in n for x in ("time aleatorio","time random","monta um time","faz um time","gera um time")):
+        await send_message(token,int(chat_id),_pokemon_team()); return True
+
+    if "feijoada" in n and any(x in n for x in ("receita","como fazer","como faco","como preparo","passo a passo","completa")):
+        await send_message(token,int(chat_id),FEIJOADA); return True
+
     if any(x in n for x in ("onde vejo","onde encontro","site pra","site para","onde pesquisar","onde pesquiso","me indica site","canal no youtube","youtube sobre")):
         for topic,answer in CULTURE_GUIDES.items():
             if topic in n or (topic=="filmes" and "filme" in n) or (topic=="series" and "serie" in n) or (topic=="culinaria" and any(x in n for x in ("cozinha","receita","culinaria"))):
