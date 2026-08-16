@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 import app
 import attendance_patch as attendance
+import attendance_manual
 from telegram_api import send_message
 
 ATTENDANCE_GRACE_MINUTES = 10
@@ -35,6 +36,11 @@ def install():
 
 
 async def handle_message(db, token, message):
+    # Frequência manual precisa passar antes dos handlers conversacionais genéricos,
+    # senão frases como "faltei em Física hoje" podem virar só conversa e não ação.
+    if await attendance_manual.handle_message(db, token, message):
+        return True
+
     text = (message.get("text") or "").strip()
     if text not in {"📚 Matérias", "⬅️ Voltar às matérias"}:
         return False
