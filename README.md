@@ -4,7 +4,7 @@
 
 # Butler Bot
 
-**Butler** é um assistente pessoal via Telegram voltado a organização cotidiana, memória contextual e companhia funcional. Ele combina tarefas, compromissos, estudos, casa, musculação, metas e finanças com conversa determinística, memória pessoal e uma biblioteca opcional de conhecimento.
+**Butler** é um assistente pessoal via Telegram voltado a organização cotidiana, memória contextual e companhia funcional. Ele combina tarefas, compromissos, estudos, casa, musculação, metas e finanças com linguagem determinística, memória pessoal e uma biblioteca opcional de conhecimento.
 
 A proposta não é ser um CRUD com personalidade nem uma IA geral. O objetivo é que as funções pareçam partes de **um único assistente pessoal**, mantendo o Core determinístico como autoridade.
 
@@ -12,82 +12,123 @@ Bot pessoal: **Butler** — `@ButlerSal_BOT`.
 
 ## Princípios
 
-- Core funcional sempre vence Library/background/contexto antigo;
+- Core funcional sempre vence Library, background e contexto antigo;
 - texto natural e botões convivem;
-- dados e operações continuam determinísticos;
+- a mensagem atual define o assunto; contexto anterior só ajuda quando realmente existe continuidade;
 - comentário não vira ação automaticamente;
 - problema pode gerar ajuda + sugestão;
 - ação derivada/ambígua exige confirmação;
-- memória pessoal é isolada por usuário;
-- contexto recente é curto e não pode perseguir o usuário após mudança de assunto;
+- escrita sugerida passa pelo gateway do Core;
+- memória e contexto são isolados por `user_id`;
 - conhecimento cultural é global, opcional e separado da memória pessoal;
 - novos exemplos alimentam domínios reutilizáveis, não novos `if`s.
 
 ## 🧠 Arquitetura de conversa
 
-O dispatcher passa a seguir uma hierarquia única:
+A produção usa um dispatcher em tiers:
 
 ```text
 mensagem
    ↓
-Context Router
+Context Router + Intent Parser
    ↓
-Core funcional
+1. Core funcional
    ↓
-Memória pessoal
+2. memória/contexto pessoal
    ↓
-Butler Library (opcional)
+2.5 sugestões confirmáveis
    ↓
-Linguagem / conversa / fallback
+3. Butler Library opcional
+   ↓
+4. linguagem / conversa / fallback
 ```
 
-O `context_router.py` classifica domínio, tier, formato da fala e confiança antes das camadas opcionais. Matérias/aulas/provas/faltas, tarefas, compromissos/agenda, mercado, musculação, finanças, metas e rotinas são domínios protegidos.
+`context_router.py` classifica domínio, tier, formato da fala, intenção, alvo e pista temporal. `intent_parser.py` reconhece famílias estruturais em vez de depender apenas de frases prontas.
 
-A regra é: **a mensagem atual determina o domínio; contexto anterior apenas desempata continuidade plausível**.
+Domínios protegidos incluem matérias/aulas/provas/faltas, tarefas, compromissos/agenda, mercado, musculação, finanças, metas e rotinas. Se a mensagem pertence ao Core, nenhum acervo pode disputá-la.
 
-## 🗣️ Português informal e intenção
+Exemplos que devem convergir para o mesmo domínio acadêmico:
 
-`knowledge/portuguese_conversation.py` funciona como background linguístico, não como chatbot. Normaliza abreviações e fala coloquial (`oq`, `pq`, `vc`, `tbm`, `hj`, `dps`, `tô`, `facul`, `trampo` etc.) e auxilia separação de assunto.
+```text
+segunda eu não vou pra Sistemas
+quero faltar Sistemas segunda
+acho que vou matar Sistemas segunda
+```
 
-`action_policy.py` diferencia três comportamentos:
+## 🗣️ Português informal e política de ação
+
+`knowledge/portuguese_conversation.py` funciona como background linguístico, não como chatbot. Ele normaliza abreviações e fala coloquial (`oq`, `pq`, `vc`, `tbm`, `hj`, `dps`, `tô`, `facul`, `trampo` etc.) para ajudar NLU e roteamento.
+
+`action_policy.py` formaliza:
 
 ```text
 comentário → conversa
 pedido explícito → ação pelo Core
 problema/necessidade → ajuda + possível sugestão
+ação derivada → confirmação antes de escrita
 ```
 
-Assim `tô cansado hoje` não precisa virar tarefa; `me lembra de dormir cedo` é pedido; `acabou a ração do Jake` pode oferecer adicionar ração ao mercado.
+Por isso `comprar café` pode ser ação direta, enquanto `acabou o café` oferece colocar café na lista e espera confirmação. `tô cansado hoje` continua sendo conversa, não uma tarefa inventada.
 
 ## 🧩 Contexto recente
 
-`context_memory.py` fornece memória operacional curta por usuário, limitada a poucos tópicos recentes. Ela existe para follow-ups como `não tenho bacon` depois de carbonara ou `quero assistir ela toda` depois de Supernatural, sem deixar o assunto antigo sequestrar mensagens futuras.
+`context_memory.py` mantém até poucos tópicos recentes por usuário em D1. A tabela possui migration própria (`0004_conversation_context.sql`).
 
-Isso é diferente da memória pessoal permanente.
+`context_sync.py` registra mudanças explícitas de domínio e invalida contextos opcionais legados. `library_context_bridge.py` faz os acervos alimentarem a mesma memória operacional central.
+
+Isso permite continuidade como:
+
+```text
+receita de carbonara
+não tenho bacon
+```
+
+sem permitir que carbonara reapareça depois de:
+
+```text
+queria faltar essa aula de Sistemas Digitais I
+```
 
 ## 👤 Memória pessoal determinística
 
-O Butler mantém entidades pessoais isoladas por `user_id`: pets, familiares, amigos/colegas, relacionamentos, veículos e objetos pessoais. Exemplos:
+O Butler mantém um mapa pessoal isolado por usuário. Entidades atuais incluem pets, familiares, amigos/colegas, relacionamentos, veículos e objetos. `personal_profile.py` acrescenta preferências explícitas como gostos, desgostos, preferências, time e cidade, sem inferir fatos que o usuário não disse.
+
+Exemplos:
 
 ```text
 tenho um gato chamado Jake
-Jake tá sem ração
-qual o nome do meu gato?
+meu gato tá sem ração
 minha mãe se chama Ana
 meu carro é um Corsa 2008
+eu gosto de ficção científica
+o que você sabe sobre mim?
 ```
 
-A direção é formar um pequeno mapa pessoal estruturado, sem salvar indiscriminadamente qualquer conversa.
+A consulta do mapa pessoal reúne apenas fatos realmente estruturados daquele `user_id`.
 
-## ⚙️ Core
+## ⚙️ Core determinístico
 
 O Core cobre tarefas, compromissos, agenda, pendências, matérias/grade, faltas, provas, lembretes, lista persistente de itens faltando, metas/streaks, rotinas, finanças simples e musculação.
 
-A linguagem natural deve convergir diferentes formulações para a mesma operação. Ex.: `segunda eu não vou pra Sistemas`, `quero faltar SD1 segunda` e `segunda vou matar Sistemas` pertencem ao mesmo problema acadêmico; regras de negócio continuam no módulo acadêmico.
+`core_actions.py` é o gateway usado por camadas auxiliares quando uma sugestão foi confirmada. Library, memória e sugestões não mantêm mais uma segunda implementação de escrita para mercado/rotina/tarefa.
+
+## 💡 Sugestões transversais
+
+`suggestion_engine.py` transforma problemas em propostas, não em ações automáticas.
+
+Exemplos:
+
+- `acabou o café` → pergunta se deve colocar café na lista;
+- pet conhecido sem ração → resolve o pet pela memória e oferece salvar ração;
+- ingrediente ausente após receita → oferece mercado;
+- série que o usuário quer assistir inteira → oferece rotina;
+- duas provas no mesmo dia → oferece montar plano de estudo.
+
+`study_plan_flow.py` completa o fluxo das duas provas para qualquer usuário: identifica matérias do próprio usuário, mostra a proposta e, após confirmação, cadastra provas ausentes e distribui blocos de teoria/resumo, exercícios e revisão.
 
 ## 📚 Butler Library
 
-A Library é **extra e opcional**. O manifesto está em `knowledge/library_manifest.py`. Ela pode enriquecer conversa e sugerir ações, mas não compete com Core e não grava operações silenciosamente.
+A Library é **extra e opcional**. `knowledge/library_manifest.py` registra seus acervos e `library_index.py` fornece um índice comum orientado a dados.
 
 Acervos atuais:
 
@@ -99,40 +140,37 @@ Acervos atuais:
 
 A culinária inclui pratos tradicionais como moquecas, vatapá, baião de dois, acarajé, bobó, feijão tropeiro, galinhada, barreado, cuscuz nordestino, caruru e vaca atolada, além de conhecimento de cortes e preparações bovinas.
 
-A Library cresce preferencialmente como **dados estruturados, tags, aliases e documentos pesquisáveis**, separando conteúdo do mecanismo.
+`library_catalog_handler.py` é um fallback genérico sobre o índice comum: novas entradas podem herdar busca por nome, aliases, tags, gênero, autor, resumo e metadados sem ganhar um dispatcher exclusivo.
 
-## 🔗 Sugestões → Core
+A Library pode sugerir ações, mas escritas confirmadas passam pelo `core_actions.py`.
 
-Sugestões são transversais, mas escrita pertence ao Core:
+## 🕴️ Personalidade e cotidiano
 
-```text
-conversa/problema
-→ contexto ou Library
-→ sugestão
-→ confirmação quando necessário
-→ Core
-→ D1
-```
-
-Exemplos: ingrediente ausente → sugerir mercado; série longa → sugerir rotina; pet sem ração → sugerir mercado; duas provas próximas → futuramente sugerir plano de estudo. Nunca criar silenciosamente.
-
-## 🕴️ Personalidade
-
-O Butler aceita conversa simples sem responder sempre com produtividade. Humor e gírias podem variar com contexto, horário e histórico real. Sarcasmo comportamental só usa evidência registrada; primeira ocorrência não vira hábito inventado.
+O Butler aceita saudação, agradecimento, risada, cansaço, fome, desânimo e comentários sem responder sempre com produtividade. Humor e gírias podem variar com contexto, horário e histórico real. Sarcasmo comportamental só usa evidência registrada; primeira ocorrência não vira hábito inventado.
 
 ## 🌙 Day-off
 
-Day-off reduz/silencia cobranças compatíveis. Reativação pode ocorrer chamando novamente o Butler. Estado isolado por usuário.
+Day-off reduz/silencia cobranças compatíveis. Reativação pode ocorrer chamando novamente o Butler. O estado é isolado por usuário.
 
 ## 🏋️ Musculação
 
 No perfil pessoal existe protocolo de 12 semanas iniciado por `🚀 Começar os trabalhos`, com exercício, substitutos, séries, carga, repetições, faltas e evolução. Usuários genéricos começam sem esse protocolo e cadastram a própria musculação.
 
-## 🧪 Qualidade de conversa
+## 🧪 Regressão automática
 
-`cloudflare/tests/test_context_router.py` inicia uma suíte de regressão entre domínios. Testes devem crescer com cenários completos, especialmente trocas bruscas de assunto. Um acervo novo não pode quebrar Core antigo.
+A arquitetura conversacional agora possui proteção automática:
 
-Exemplo obrigatório:
+```text
+cloudflare/tests/test_context_router.py
+cloudflare/tests/test_library_index.py
+.github/workflows/butler-regression.yml
+```
+
+A suíte cobre dezenas de formulações de acadêmico, tarefas, mercado, agenda, musculação, finanças, rotinas, culinária, jogos, livros, filmes/séries e conversa, além de colisões da Library.
+
+Todo push relevante na `main` compila `cloudflare/src` e executa `pytest` no GitHub Actions. Uma regressão já foi encontrada pela própria suíte (`oi butler` recebia resultados irrelevantes do índice de livros) e corrigida exigindo evidência semântica antes do bônus por domínio.
+
+Regressão obrigatória:
 
 ```text
 receita de carbonara
@@ -162,5 +200,7 @@ Prioridade atual:
 6. Library
 7. novas funcionalidades
 ```
+
+A fase atual concluiu a fundação e integração dessas sete frentes. A próxima evolução deve ser principalmente ampliar cobertura/testes e corrigir casos reais, não criar uma nova camada paralela.
 
 Materiais externos devem respeitar licenças e direitos autorais; preferir dados abertos, domínio público, documentos próprios e resumos/metadados produzidos para o projeto.
