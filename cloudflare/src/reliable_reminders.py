@@ -39,6 +39,21 @@ def _inline(rows):
     return {"inline_keyboard": [[{"text": label, "callback_data": data} for label, data in row] for row in rows]}
 
 
+async def _suppress_legacy_item_scheduler(db, uid, iid, today, due, kind):
+    """Marca a chave usada pelo scheduler antigo de app.py.
+
+    O dispatcher oficial de daily_items é este módulo. Enquanto o scheduler legado
+    ainda existir em app.py para resumos/aulas, gravamos sua chave de item para ele
+    não emitir uma segunda mensagem no mesmo ciclo.
+    """
+    legacy_advance = 10 if kind == "compromisso" else 0
+    legacy_target = due - timedelta(minutes=legacy_advance)
+    legacy_key = f"item:{iid}:{today}:{legacy_target.strftime('%H:%M')}"
+    await db.prepare(
+        "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
+    ).bind(uid, legacy_key).run()
+
+
 async def dispatch_due_reminders(db, token):
     """Dispara notificações pendentes de forma idempotente e resiliente.
 
@@ -48,13 +63,12 @@ async def dispatch_due_reminders(db, token):
       cron/deploy perder a janela original; continua pendente até conclusão/cancelamento;
     - compromisso: 5 minutos antes, com tolerância curta para não avisar evento velho;
     - Day-off silencia tarefa/compromisso, mas não lembrete simples explícito;
-    - notification_log impede duplicidade.
+    - notification_log impede duplicidade;
+    - o scheduler legado de app.py é silenciado para daily_items, evitando aviso duplo.
     """
     now = _now()
     today = now.date()
 
-    # LEFT JOIN evita excluir do scheduler um usuário que, por qualquer falha de
-    # inicialização/migração, ainda não possua assistant_state.
     users = await _rows(db.prepare(
         "SELECT u.id,u.telegram_chat_id,COALESCE(a.day_off,0) day_off FROM users u "
         "LEFT JOIN assistant_state a ON a.user_id=u.id"
@@ -75,16 +89,10 @@ async def dispatch_due_reminders(db, token):
             kind = _row(item, "kind")
             details = _row(item, "details") or ""
 
-            # Provas têm scheduler acadêmico próprio.
             if details.startswith("exam:"):
                 continue
 
             simple = details == "simple_reminder"
-
-            # Day-off silencia cobranças operacionais. Um lembrete explícito é
-            # tratado como alarme pedido pelo usuário e continua tocando.
-            if day_off and not simple:
-                continue
 
             try:
                 h, m = map(int, _row(item, "due_time").split(":"))
@@ -94,6 +102,14 @@ async def dispatch_due_reminders(db, token):
             due = datetime.combine(today, datetime.min.time()).replace(
                 hour=h, minute=m, tzinfo=LOCAL_TZ
             )
+
+            # Sempre neutraliza o caminho legado antes que app.scheduled_tick rode.
+            # Isso vale inclusive antes do horário oficial do aviso.
+            await _suppress_legacy_item_scheduler(db, uid, iid, today, due, kind)
+
+            if day_off and not simple:
+                continue
+
             advance = 5 if (kind == "compromisso" and not simple) else 0
             desired = due - timedelta(minutes=advance)
             late = now - desired
@@ -101,10 +117,6 @@ async def dispatch_due_reminders(db, token):
             if late.total_seconds() < 0:
                 continue
 
-            # Tarefas e lembretes explícitos não podem sumir por uma falha curta
-            # de cron/deploy: se ainda estão pendentes e nunca foram notificados,
-            # recuperamos o aviso durante o mesmo dia. Compromissos antigos não
-            # recebem catch-up para evitar alertar um evento que já passou.
             is_task = kind == "tarefa"
             if not simple and not is_task and late > timedelta(minutes=GRACE_MINUTES):
                 continue
@@ -154,8 +166,6 @@ async def dispatch_due_reminders(db, token):
                 "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
             ).bind(uid, key).run()
 
-            # Lembrete simples encerra depois do aviso. Tarefa comum permanece
-            # pendente, inclusive quando o aviso foi recuperado com atraso.
             if simple:
                 await db.prepare(
                     "UPDATE daily_items SET status='concluido',completed_at=CURRENT_TIMESTAMP WHERE id=?"
