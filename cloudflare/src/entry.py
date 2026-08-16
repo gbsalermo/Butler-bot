@@ -11,6 +11,7 @@ from attendance_patch import dispatch_class_attendance, handle_message as handle
 from attendance_enhancement import ensure_schema as ensure_attendance_schema, handle_callback as handle_attendance_callback, install as install_attendance_enhancement
 from attendance_management import handle_message as handle_attendance_management, install as install_attendance_management
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
+from conversational_background import handle_message as handle_conversational_background
 from companion_safe_fallback import handle_message as handle_companion_message
 from companion_language_patch import handle_message as handle_companion_language_patch
 from companion_life_context import handle_message as handle_companion_life_context
@@ -81,6 +82,7 @@ class Default(WorkerEntrypoint):
                     "companion_chat_v1": True,
                     "companion_nlu_v2": True,
                     "deterministic_personal_memory": True,
+                    "conversational_background": True,
                     "companion_action_suggestions": True,
                     "companion_social_mode": True,
                     "companion_study_plan": True,
@@ -183,6 +185,8 @@ class Default(WorkerEntrypoint):
                     handled = await handle_companion_life_context(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_companion_nlu_v2(self.env.DB, token, message)
+                if not handled:
+                    handled = await handle_conversational_background(self.env.DB, token, message)
                 if not handled:
                     handled = await handle_companion_message(self.env.DB, token, message)
                 if not handled:
