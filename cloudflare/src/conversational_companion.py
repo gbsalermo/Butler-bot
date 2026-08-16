@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from settings import OWNER_CHAT_ID, UTC_OFFSET_HOURS
 from telegram_api import send_message
@@ -80,7 +80,9 @@ async def _remember_state(db, uid, mood):
 
 
 async def _last_state(db, uid):
-    row = await db.prepare("SELECT detail FROM natural_events WHERE user_id=? AND event_type='conversation_state' ORDER BY id DESC LIMIT 1").bind(uid).first()
+    row = await db.prepare(
+        "SELECT detail FROM natural_events WHERE user_id=? AND event_type='conversation_state' AND created_at>=datetime('now','-6 hours') ORDER BY id DESC LIMIT 1"
+    ).bind(uid).first()
     if not row:
         return None
     detail = _row(row, "detail") or ""
@@ -107,7 +109,7 @@ async def _recent_context(db, uid):
     ).bind(uid, today.isoformat()).first()
 
     workout = await db.prepare(
-        "SELECT COUNT(*) n FROM workout_logs WHERE user_id=? AND workout_date>=? AND status='feito'"
+        "SELECT COUNT(*) n FROM protocol_mass_sessions WHERE user_id=? AND training_date>=? AND completed_at IS NOT NULL"
     ).bind(uid, seven_days_ago.isoformat()).first()
     workouts = int(_row(workout, "n", 0))
 
@@ -137,8 +139,7 @@ def _contains_any(n, markers):
 
 
 async def _reply_greeting(token, chat_id):
-    now = _now()
-    period = _period_phrase(now)
+    period = _period_phrase(_now())
     if period == "madrugada":
         text = "Fala daí, chefe. Aconteceu alguma coisa ou a madrugada só resolveu render conversa?"
     elif period == "noite":
