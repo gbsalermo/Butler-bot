@@ -7,9 +7,10 @@ import app
 import runtime_guard
 from academic_intelligence import handle_message as handle_academic_message, install as install_academic_intelligence
 from academic_polish import install as install_academic_polish
-from attendance_patch import dispatch_class_attendance, handle_message as handle_attendance_message, install as install_attendance
+from attendance_patch import handle_message as handle_attendance_message, install as install_attendance
 from attendance_enhancement import ensure_schema as ensure_attendance_schema, handle_callback as handle_attendance_callback, install as install_attendance_enhancement
 from attendance_management import handle_message as handle_attendance_management, install as install_attendance_management
+from attendance_production_fix import dispatch_class_attendance_reliable, handle_message as handle_attendance_production_ui, install as install_attendance_production_fix
 from butler_library import handle_message as handle_butler_library
 from cooking_library import handle_message as handle_cooking_library
 from library_recipe_queries import handle_message as handle_library_recipe_queries
@@ -53,7 +54,7 @@ from task_emoji_patch import install as install_task_emoji_patch
 from ux_bugfixes import handle_global_navigation, install as install_ux_bugfixes
 from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress
 
-install_performance_patches(); install_scheduler_patches(); install_routine_integration(); install_routine_ui(); install_conversation_layer(); install_quality_patch(); install_recurrence_patch(); install_academic_intelligence(); install_academic_polish(); install_exam_cancel(); install_personality_variants(); install_reminder_policy(); install_ux_bugfixes(); install_task_context(); install_attendance(); install_attendance_enhancement(); install_attendance_management(); install_task_emoji_patch(); install_workout_progress()
+install_performance_patches(); install_scheduler_patches(); install_routine_integration(); install_routine_ui(); install_conversation_layer(); install_quality_patch(); install_recurrence_patch(); install_academic_intelligence(); install_academic_polish(); install_exam_cancel(); install_personality_variants(); install_reminder_policy(); install_ux_bugfixes(); install_task_context(); install_attendance(); install_attendance_enhancement(); install_attendance_management(); install_attendance_production_fix(); install_task_emoji_patch(); install_workout_progress()
 
 def _optional_env(env,name):
     try:return getattr(env,name)
@@ -61,13 +62,13 @@ def _optional_env(env,name):
 
 async def _attendance_tick(db,token):
     await ensure_attendance_schema(db)
-    await dispatch_class_attendance(db,token)
+    await dispatch_class_attendance_reliable(db,token)
 
 class Default(WorkerEntrypoint):
     async def fetch(self,request):
         parsed=urlparse(request.url); path=parsed.path
         if request.method=="GET" and path=="/health":
-            return Response(json.dumps({"ok":True,"service":"butler-bot","runtime":"cloudflare-python-worker","d1":True,"owner_chat_id_configured":OWNER_CHAT_ID is not None,"dispatcher":"context-router-v8-core-fast-path","core_priority_fast_path":True,"compound_message_router":True,"fast_path":True,"structured_intent_parser":True,"central_context_router":True,"short_context_memory":True,"context_switch_invalidation":True,"library_short_context_bridge":True,"deterministic_personal_memory":True,"generic_personal_entities":True,"explicit_preference_memory":True,"personal_memory_map":True,"per_user_memory":True,"action_policy":True,"core_action_gateway":True,"cross_domain_suggestions":True,"problem_vs_action_policy":True,"generic_study_plan_flow":True,"conversational_background":True,"informal_portuguese_background":True,"core_domain_protection":True,"butler_library":True,"library_manifest":True,"library_common_index":True,"library_catalog_fallback":True,"cooking_books":True,"traditional_brazilian_cooking":True,"informal_cooking_queries":True,"library_context_actions":True,"companion_action_suggestions":True,"companion_social_mode":True,"companion_study_plan":True,"companion_everyday_context":True,"routine_agenda":True,"routine_editing":True,"routine_checkpoint_editing":True,"routine_edit_button":True,"start_resets_transient_state":True,"natural_add_intents":True,"inline_actions":True,"smart_agenda":True,"flexible_routines":True,"simple_reminders":True,"natural_references":True,"task_reminder_minutes":0,"appointment_reminder_minutes":5,"informal_grocery":True,"informal_grocery_suffix":True,"late_routine_confirmation":True,"natural_agenda_queries":True,"academic_exams":True,"exam_reminders_days":[7,3,1,0],"exam_agenda_section":True,"full_routine_completion":True,"sarcasm_v3":True,"varied_reminder_personality":True,"natural_exam_phrases":True,"exam_cancel":True,"exam_wizard_cancel":True,"reliable_reminders":True,"isolated_scheduler":True,"routine_scheduler_direct":True,"reminder_grace_minutes":10,"single_reminder_policy":True,"global_back_navigation":True,"workout_exercise_progress":True,"workout_auto_refresh_on_completion":True,"workout_load_references":True,"workout_daily_cardio":True,"contextual_task_postpone":True,"task_list_retention_hours":24,"task_list_ephemeral_numbering":True,"task_agenda_emoji":"📝","attendance_tracking":True,"attendance_class_prompt":True,"attendance_limit_per_subject":True,"attendance_duration_based":True,"attendance_schema_guard":True,"attendance_humor_thresholds":[30,50,75,100],"attendance_lost_when_over_limit":True,"attendance_edit_limit":True,"attendance_delete_absence":True,"attendance_delete_confirmation":True,"natural_greetings":True,"priority_farewells":True}),headers={"Content-Type":"application/json; charset=utf-8"})
+            return Response(json.dumps({"ok":True,"service":"butler-bot","runtime":"cloudflare-python-worker","d1":True,"owner_chat_id_configured":OWNER_CHAT_ID is not None,"dispatcher":"context-router-v8-core-fast-path","core_priority_fast_path":True,"compound_message_router":True,"fast_path":True,"structured_intent_parser":True,"central_context_router":True,"short_context_memory":True,"context_switch_invalidation":True,"library_short_context_bridge":True,"deterministic_personal_memory":True,"generic_personal_entities":True,"explicit_preference_memory":True,"personal_memory_map":True,"per_user_memory":True,"action_policy":True,"core_action_gateway":True,"cross_domain_suggestions":True,"problem_vs_action_policy":True,"generic_study_plan_flow":True,"conversational_background":True,"informal_portuguese_background":True,"core_domain_protection":True,"butler_library":True,"library_manifest":True,"library_common_index":True,"library_catalog_fallback":True,"cooking_books":True,"traditional_brazilian_cooking":True,"informal_cooking_queries":True,"library_context_actions":True,"companion_action_suggestions":True,"companion_social_mode":True,"companion_study_plan":True,"companion_everyday_context":True,"routine_agenda":True,"routine_editing":True,"routine_checkpoint_editing":True,"routine_edit_button":True,"start_resets_transient_state":True,"natural_add_intents":True,"inline_actions":True,"smart_agenda":True,"flexible_routines":True,"simple_reminders":True,"natural_references":True,"task_reminder_minutes":0,"appointment_reminder_minutes":5,"informal_grocery":True,"informal_grocery_suffix":True,"late_routine_confirmation":True,"natural_agenda_queries":True,"academic_exams":True,"exam_reminders_days":[7,3,1,0],"exam_agenda_section":True,"full_routine_completion":True,"sarcasm_v3":True,"varied_reminder_personality":True,"natural_exam_phrases":True,"exam_cancel":True,"exam_wizard_cancel":True,"reliable_reminders":True,"isolated_scheduler":True,"routine_scheduler_direct":True,"reminder_grace_minutes":10,"single_reminder_policy":True,"global_back_navigation":True,"workout_exercise_progress":True,"workout_auto_refresh_on_completion":True,"workout_load_references":True,"workout_daily_cardio":True,"contextual_task_postpone":True,"task_list_retention_hours":24,"task_list_ephemeral_numbering":True,"task_agenda_emoji":"📝","attendance_tracking":True,"attendance_class_prompt":True,"attendance_limit_per_subject":True,"attendance_duration_based":True,"attendance_schema_guard":True,"attendance_humor_thresholds":[30,50,75,100],"attendance_lost_when_over_limit":True,"attendance_edit_limit":True,"attendance_delete_absence":True,"attendance_delete_confirmation":True,"attendance_reliable_class_alerts":True,"attendance_grace_minutes":10,"attendance_authoritative_menu":True,"natural_greetings":True,"priority_farewells":True}),headers={"Content-Type":"application/json; charset=utf-8"})
         if request.method=="POST" and path=="/telegram/webhook":
             webhook_secret=_optional_env(self.env,"TELEGRAM_WEBHOOK_SECRET")
             if webhook_secret and request.headers.get("X-Telegram-Bot-Api-Secret-Token")!=webhook_secret:return Response("forbidden",status=403)
@@ -81,7 +82,6 @@ class Default(WorkerEntrypoint):
             message=update.get("message") or update.get("edited_message")
             if message:
                 text=(message.get("text") or ""); route=classify(text); chat_id=(message.get("chat") or {}).get("id")
-                # /start é a saída de emergência: antes de qualquer wizard/roteador.
                 handled=await handle_start_reset(self.env.DB,token,message)
                 if handled:return Response("ok")
                 if is_priority_farewell(text):
@@ -90,6 +90,8 @@ class Default(WorkerEntrypoint):
                 handled=await handle_routine_ui(self.env.DB,token,message)
                 if handled:return Response("ok")
                 handled=await handle_routine_editing(self.env.DB,token,message)
+                if handled:return Response("ok")
+                handled=await handle_attendance_production_ui(self.env.DB,token,message)
                 if handled:return Response("ok")
                 handled=await handle_core_fast_path(self.env.DB,token,message)
                 if handled:return Response("ok")
