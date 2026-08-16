@@ -3,12 +3,16 @@
 Permite editar horários sem recriar a rotina. A rotina continua sendo a mesma
 entidade; somente os campos escolhidos são alterados. Logs históricos não são apagados.
 """
+import json
 import re
 import unicodedata
+from datetime import datetime, timedelta, timezone
 
 import runtime_guard
+from settings import UTC_OFFSET_HOURS
 from telegram_api import send_message
 
+LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
 ROUTINE_EDIT_KB=[
     ["➕ Adicionar horário","➖ Remover horário"],
     ["🕐 Alterar horário","✏️ Renomear rotina"],
@@ -61,9 +65,43 @@ async def _find(db,uid,text):
         if name and (name in n or n in name):matches.append(r)
     return matches[0] if len(matches)==1 else None
 
+async def _today_done(db,rid,old_times):
+    """Lê o progresso de hoje usando os horários ANTERIORES à edição.
+
+    O status legado `feito` quer dizer que todos os checkpoints que existiam naquele
+    momento foram cumpridos. Ele não pode significar automaticamente que horários
+    adicionados depois também foram feitos.
+    """
+    today=datetime.now(timezone.utc).astimezone(LOCAL_TZ).date().isoformat()
+    row=await db.prepare("SELECT status FROM routine_logs WHERE routine_id=? AND log_date=?").bind(rid,today).first()
+    if not row:return set(),False
+    status=_row(row,"status") or ""
+    if status=="feito":return set(old_times),True
+    try:
+        payload=json.loads(status)
+        return set(payload.get("done") or []),True
+    except Exception:
+        return set(),True
+
+async def _reconcile_today_log(db,rid,old_times,new_times):
+    """Preserva só checkpoints realmente concluídos após uma edição de horários."""
+    done,exists=await _today_done(db,rid,old_times)
+    if not exists:return
+    kept=sorted(t for t in done if t in set(new_times))
+    today=datetime.now(timezone.utc).astimezone(LOCAL_TZ).date().isoformat()
+    if new_times and all(t in kept for t in new_times):
+        status="feito"
+    else:
+        status=json.dumps({"done":kept,"total":sorted(new_times)},ensure_ascii=False)
+    await db.prepare("UPDATE routine_logs SET status=? WHERE routine_id=? AND log_date=?").bind(status,rid,today).run()
+
 async def _save_times(db,uid,rid,times):
-    value=",".join(sorted(set(times))) if times else None
+    old=await db.prepare("SELECT time_hhmm FROM routines WHERE id=? AND user_id=? AND active=1").bind(rid,uid).first()
+    old_times=_times(_row(old,"time_hhmm")) if old else []
+    new_times=sorted(set(times))
+    value=",".join(new_times) if new_times else None
     await db.prepare("UPDATE routines SET time_hhmm=? WHERE id=? AND user_id=? AND active=1").bind(value,rid,uid).run()
+    await _reconcile_today_log(db,rid,old_times,new_times)
 
 async def _show_list(db,token,chat,uid,prompt="Qual rotina quer editar?\nMande o número, #ID ou o nome da rotina."):
     rs=await _rows(db.prepare("SELECT id,name,time_hhmm,weekdays,category FROM routines WHERE user_id=? AND active=1 ORDER BY name").bind(uid))
@@ -92,7 +130,6 @@ async def handle_message(db,token,message):
             await _open_edit_menu(db,token,chat,uid,routine);return True
         await runtime_guard._set_state(db,uid,"guard_routine_edit_pick",{});await _show_list(db,token,chat,uid);return True
 
-    # Ações naturais diretas: adiciona/remove/troca horário na rotina X.
     direct=re.match(r"^(?:adiciona|adicionar|coloca|bota)\s+(.+?)\s+(?:na|à|a)\s+rotina\s+(?:de\s+)?(.+)$",text,re.I)
     if direct:
         times=_parse_times(direct.group(1));routine=await _find(db,uid,direct.group(2))
