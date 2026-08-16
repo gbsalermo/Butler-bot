@@ -1,11 +1,12 @@
 """Roteador central de contexto do Butler.
 
-Não executa regra de negócio. Classifica a mensagem para que o dispatcher preserve
-uma ordem única: Core > contexto explícito > memória > Library > conversa.
+Não executa regra de negócio. Classifica a mensagem para preservar a ordem:
+Core > contexto explícito > memória > Library > conversa.
 """
 from dataclasses import dataclass
 
 from language_context import normalize_informal, detect_core_domain, conversation_shape
+from intent_parser import parse as parse_intent
 
 OPTIONAL_HINTS = {
     "cooking": ("receita","cozinhar","fazer comida","macarrao","massa","carne","frango","arroz","feijao","salada","bolo","doce","moqueca","vatapa","baiao"),
@@ -22,27 +23,39 @@ class Route:
     shape: str
     confidence: int
     normalized: str
+    intent: str = "conversation"
+    target: str | None = None
+    time_hint: str | None = None
 
 
 def classify(text):
     n=normalize_informal(text)
     shape=conversation_shape(text)
+    parsed=parse_intent(text)
+
+    # Intenção estrutural forte ganha da contagem de palavras.
+    if parsed.domain != "conversation" and parsed.confidence >= 75:
+        tier="core" if parsed.domain in {"academic","tasks","appointments","grocery","workout","finance","routine"} else "library"
+        return Route(parsed.domain,tier,shape,parsed.confidence,n,parsed.intent,parsed.target,parsed.time_hint)
+
     core=detect_core_domain(text)
     if core:
-        return Route(core,"core",shape,100,n)
+        return Route(core,"core",shape,100,n,parsed.intent,parsed.target,parsed.time_hint)
+
     scores={}
+    words=set(n.split())
     for domain,hints in OPTIONAL_HINTS.items():
         for hint in hints:
             h=normalize_informal(hint)
-            if h and (h in n or (" " not in h and h in set(n.split()))):
+            if h and (h in n or (" " not in h and h in words)):
                 scores[domain]=scores.get(domain,0)+(3 if " " in h else 2)
     if scores:
         domain,score=max(scores.items(),key=lambda x:x[1])
-        return Route(domain,"library",shape,min(90,40+score*5),n)
-    return Route("conversation","conversation",shape,20,n)
+        return Route(domain,"library",shape,min(90,40+score*5),n,parsed.intent,parsed.target,parsed.time_hint)
+    return Route("conversation","conversation",shape,20,n,parsed.intent,parsed.target,parsed.time_hint)
 
 
-def allow_optional(route, domain=None):
+def allow_optional(route,domain=None):
     if route.tier=="core":return False
     if domain is None:return True
     return route.domain in (domain,"conversation","culture")
