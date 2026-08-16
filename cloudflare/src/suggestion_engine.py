@@ -12,6 +12,7 @@ from telegram_api import send_message
 
 YES={"sim","pode","pode sim","bora","faz","faz isso","manda","manda ver","confirma"}
 NO={"nao","não","deixa","deixa quieto","cancela","melhor nao","melhor não"}
+OTHER_DOMAIN_WORDS={"aula","materia","prova","treino","dinheiro","tempo","sono","energia","vontade","trabalho","faculdade","rotina"}
 
 async def _handle_pending(db,token,chat_id,uid,text,n):
     state=await v2._last_state(db,uid)
@@ -38,6 +39,21 @@ async def _handle_pending(db,token,chat_id,uid,text,n):
         return True
     return False
 
+def _household_shortage(n):
+    if any(word in n for word in OTHER_DOMAIN_WORDS):return None
+    patterns=(
+        r"^(?:acabou|cabou) (?:o |a )?(.+)$",
+        r"^(.+?) (?:acabou|acabaram|esta acabando|ta acabando)$",
+        r"^(?:estou sem|to sem) (.+)$",
+        r"^(.+?) (?:nao tem mais|nao temos mais)$",
+    )
+    for pattern in patterns:
+        m=re.match(pattern,n)
+        if m:
+            item=m.group(1).strip(" .,!?")[:80]
+            if 1<len(item)<=80:return item
+    return None
+
 async def handle_message(db,token,message):
     chat_id=(message.get("chat") or {}).get("id")
     if chat_id is None:return False
@@ -58,13 +74,9 @@ async def handle_message(db,token,message):
         await send_message(token,int(chat_id),"Duas provas no mesmo dia dá para organizar. Que dia elas são? Depois eu peço as matérias e te mostro um plano antes de salvar qualquer coisa.")
         return True
 
-    # Problema doméstico explícito. Evita palavras de outros domínios.
-    if any(x in n for x in ("acabou o ","acabou a ","estou sem ","to sem ")) and not any(x in n for x in ("aula","materia","prova","treino","dinheiro","tempo","sono","energia","vontade")):
-        m=re.search(r"(?:acabou (?:o|a)|estou sem|to sem)\s+(.+)$",n)
-        if m:
-            item=m.group(1).strip(" .,!?")[:80]
-            if item:
-                await v2._save_state(db,uid,"suggest_grocery_item",{"item":item})
-                await send_message(token,int(chat_id),f"Quer que eu coloque {item} na lista de itens faltando? Se foi só comentário, manda `deixa`; se quiser salvar, `pode`.")
-                return True
+    item=_household_shortage(n)
+    if item:
+        await v2._save_state(db,uid,"suggest_grocery_item",{"item":item})
+        await send_message(token,int(chat_id),f"Quer que eu coloque {item} na lista de itens faltando? Se foi só comentário, manda `deixa`; se quiser salvar, `pode`.")
+        return True
     return False
