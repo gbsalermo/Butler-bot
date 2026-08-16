@@ -6,6 +6,7 @@ prioriza apenas os núcleos do assistente cotidiano.
 
 import app
 import runtime_guard
+from telegram_api import send_message
 
 
 MAIN_KB = [
@@ -29,11 +30,14 @@ ADD_KB = [
 ]
 
 
+def _kb(rows):
+    return {"keyboard": rows, "resize_keyboard": True}
+
+
 def install():
     app.MAIN_KB = [list(row) for row in MAIN_KB]
     app.COTIDIANO_KB = [list(row) for row in COTIDIANO_KB]
 
-    # Alguns patches usam referências próprias aos teclados do app.
     try:
         runtime_guard.MAIN_KB = [list(row) for row in MAIN_KB]
     except Exception:
@@ -44,5 +48,28 @@ def install():
         pass
 
 
-def add_keyboard():
-    return [list(row) for row in ADD_KB]
+async def handle_message(db, token, message):
+    text = (message.get("text") or "").strip()
+    chat_id = (message.get("chat") or {}).get("id")
+    if chat_id is None:
+        return False
+
+    if text == "🏠 Cotidiano":
+        await send_message(
+            token,
+            int(chat_id),
+            "🏠 Cotidiano. Tarefas, compromissos, rotinas e o que está faltando em casa. O resto não precisa disputar sua atenção.",
+            reply_markup=_kb(COTIDIANO_KB),
+        )
+        return True
+
+    if text == "➕ Adicionar":
+        await send_message(
+            token,
+            int(chat_id),
+            "O que vamos adicionar?",
+            reply_markup=_kb(ADD_KB),
+        )
+        return True
+
+    return False
