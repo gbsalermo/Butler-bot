@@ -4,8 +4,9 @@ import app
 import attendance_patch as attendance
 from telegram_api import send_message
 
-# Os primeiros 10 minutos continuam sendo a janela "normal". Se o Worker perder
-# essa janela, o alerta ainda pode ser recuperado enquanto a aula estiver em andamento.
+# Regra global para TODAS as aulas ativas, independentemente de terem sido
+# pré-cadastradas, importadas ou criadas depois pelo usuário.
+PRE_CLASS_MINUTES = 10
 ATTENDANCE_GRACE_MINUTES = 10
 
 ACADEMIC_KB_FULL = [
@@ -23,7 +24,6 @@ def _kb(rows):
 
 
 def install():
-    # Fonte autoritativa para os dois módulos que exibem o menu acadêmico.
     try:
         app.ACADEMIC_KB[:] = [list(row) for row in ACADEMIC_KB_FULL]
     except Exception:
@@ -52,14 +52,8 @@ async def handle_message(db, token, message):
 
 
 def _session_bounds(now, start_text, end_text):
-    """Retorna início/fim locais da sessão no dia de hoje.
-
-    Se o horário final estiver ausente ou inválido, usa uma recuperação conservadora
-    de 60 minutos após o início em vez de perder o alerta definitivamente.
-    """
     h, m = map(int, start_text.split(":"))
     start = now.replace(hour=h, minute=m, second=0, microsecond=0)
-
     try:
         eh, em = map(int, (end_text or "").split(":"))
         end = now.replace(hour=eh, minute=em, second=0, microsecond=0)
@@ -67,8 +61,23 @@ def _session_bounds(now, start_text, end_text):
             end += timedelta(days=1)
     except Exception:
         end = start + timedelta(minutes=60)
-
     return start, end
+
+
+async def _already_sent(db, uid, *keys):
+    for key in keys:
+        row = await db.prepare(
+            "SELECT id FROM notification_log WHERE user_id=? AND notification_key=?"
+        ).bind(uid, key).first()
+        if row:
+            return True
+    return False
+
+
+async def _mark_sent(db, uid, key):
+    await db.prepare(
+        "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
+    ).bind(uid, key).run()
 
 
 async def dispatch_class_attendance_reliable(db, token):
@@ -85,58 +94,69 @@ async def dispatch_class_attendance_reliable(db, token):
     """).bind(weekday))
 
     for session in sessions:
+        sid = int(attendance._row(session, "id"))
+        uid = int(attendance._row(session, "user_id"))
+        chat_id = int(attendance._row(session, "telegram_chat_id"))
         start_text = attendance._row(session, "start_time")
         end_text = attendance._row(session, "end_time")
         if not start_text:
             continue
 
         try:
-            target, end_target = _session_bounds(now, start_text, end_text)
+            start_target, end_target = _session_bounds(now, start_text, end_text)
         except Exception:
             continue
 
-        # Nunca dispara antes da aula. Depois do início, continua recuperável enquanto
-        # a aula estiver acontecendo. Isso evita perder a chamada por atraso de cron,
-        # deploy ou falha temporária do Worker/Telegram.
-        if now < target or now >= end_target:
-            continue
+        pre_target = start_target - timedelta(minutes=PRE_CLASS_MINUTES)
+        pre_key = f"attendance:pre:{today}:{sid}"
+        start_key = f"attendance:start:{today}:{sid}"
+        legacy_key = f"attendance:{today}:{sid}"
 
-        delay_minutes = max(0, int((now - target).total_seconds() / 60))
+        # 1) AVISO 10 MINUTOS ANTES.
+        # É recuperável até o instante de início da aula. Depois disso não faz sentido
+        # mandar 'faltam 10 minutos'; o aviso de início assume a responsabilidade.
+        if pre_target <= now < start_target:
+            if not await _already_sent(db, uid, pre_key):
+                minutes = max(0, int((start_target - now).total_seconds() / 60))
+                await send_message(
+                    token,
+                    chat_id,
+                    f"⏰ Aula em {minutes if minutes else 'menos de 1'} min: "
+                    f"{attendance._row(session,'name')} — {start_text}–{end_text}"
+                    + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
+                    + "\nVai ajeitando as coisas. O conhecimento infelizmente ainda exige presença física às vezes.",
+                )
+                await _mark_sent(db, uid, pre_key)
 
-        uid = int(attendance._row(session, "user_id"))
-        key = f"attendance:{today}:{attendance._row(session,'id')}"
-        sent = await db.prepare(
-            "SELECT id FROM notification_log WHERE user_id=? AND notification_key=?"
-        ).bind(uid, key).first()
-        if sent:
-            continue
+        # 2) AVISO NA HORA + CONTROLE DE FALTA.
+        # O aviso continua recuperável enquanto a aula estiver acontecendo.
+        if start_target <= now < end_target:
+            # Compatibilidade: versões anteriores usavam attendance:<data>:<id> para
+            # representar o aviso de início. Se essa chave existir, não duplicamos.
+            if await _already_sent(db, uid, start_key, legacy_key):
+                continue
 
-        chat_id = int(attendance._row(session, "telegram_chat_id"))
-        if delay_minutes <= 0:
-            late_note = ""
-        elif delay_minutes <= ATTENDANCE_GRACE_MINUTES:
-            late_note = (
-                f"\n(O cron chegou {delay_minutes} min atrasado, mas eu não vou usar isso "
-                "como desculpa pra faltar por você.)"
+            delay_minutes = max(0, int((now - start_target).total_seconds() / 60))
+            if delay_minutes <= 0:
+                late_note = ""
+            elif delay_minutes <= ATTENDANCE_GRACE_MINUTES:
+                late_note = (
+                    f"\n(O cron chegou {delay_minutes} min atrasado, mas eu não vou usar isso "
+                    "como desculpa pra faltar por você.)"
+                )
+            else:
+                late_note = (
+                    f"\n⚠️ O aviso atrasou {delay_minutes} min. A aula ainda está acontecendo, "
+                    "então recuperei a chamada em vez de fingir que ela nunca existiu."
+                )
+
+            await send_message(
+                token,
+                chat_id,
+                f"🎓 Aula agora: {attendance._row(session,'name')} — {start_text}–{end_text}"
+                + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
+                + "\nVocê vai?"
+                + late_note,
+                reply_markup=attendance._inline(sid, today),
             )
-        else:
-            late_note = (
-                f"\n⚠️ O aviso atrasou {delay_minutes} min. A aula ainda está acontecendo, "
-                "então recuperei a chamada em vez de fingir que ela nunca existiu."
-            )
-
-        # scheduled_delivery_guard troca este send_message por uma versão que lança
-        # exceção quando o Telegram não confirma a entrega. Assim o log só é gravado
-        # depois de um envio realmente aceito e o próximo cron pode tentar novamente.
-        await send_message(
-            token,
-            chat_id,
-            f"🎓 Aula agora: {attendance._row(session,'name')} — {start_text}–{end_text}"
-            + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
-            + "\nVocê vai?"
-            + late_note,
-            reply_markup=attendance._inline(int(attendance._row(session, "id")), today),
-        )
-        await db.prepare(
-            "INSERT INTO notification_log(user_id,notification_key) VALUES(?,?)"
-        ).bind(uid, key).run()
+            await _mark_sent(db, uid, start_key)
