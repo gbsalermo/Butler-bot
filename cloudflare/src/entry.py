@@ -25,6 +25,7 @@ from personality_variants import install as install_personality_variants
 from quality_patch import handle_message as handle_quality_message, install as install_quality_patch
 from reference_patch import handle_reference
 from reliable_reminders import dispatch_due_reminders
+from reliable_summaries import dispatch_summaries
 from reminder_policy import install as install_reminder_policy
 from routine_editing import handle_message as handle_routine_editing
 from routine_integration import install_routine_integration, _routine_reminders
@@ -73,7 +74,7 @@ BASE_BUTTONS = {
     "➕ Item faltando", "➕ Adicionar item", "📋 Ver itens faltando", "✅ Tarefas",
     "📅 Compromissos", "📚 Matérias", "📚 Minhas matérias", "⚙️ Gerenciar matérias",
     "➕ Adicionar matéria", "🗑️ Remover matéria", "🚫 Trancar matéria", "✏️ Editar matéria",
-    "📥 Importar grade por PDF/texto", "🧘 Rotinas", "🏋️ Musculação",
+    "📥 Importar grade por PDF/texto", "🧘 Rotinas", "🎯 Metas", "🏋️ Musculação",
     "🚀 Começar os trabalhos", "📅 Treino de hoje", "📝 Registrar série",
     "😕 Não consegui treinar hoje", "✅ Finalizar treino", "📈 Progresso",
     "🔄 Reiniciar treinos", "📥 Importar treino por PDF/texto", "🔁 Substituir exercício",
@@ -131,7 +132,7 @@ class Default(WorkerEntrypoint):
                     "operational_focus": True,
                     "operational_menu": True,
                     "finance_hidden_from_primary_menu": True,
-                    "goals_hidden_from_primary_menu": True,
+                    "goals_hidden_from_primary_menu": False,
                     "broad_nlu_disabled": True,
                     "legacy_nlu_fallback_blocked": True,
                     "cultural_background_disabled": True,
@@ -159,6 +160,10 @@ class Default(WorkerEntrypoint):
                     "exam_cancel": True,
                     "exam_wizard_cancel": True,
                     "reliable_reminders": True,
+                    "reliable_summaries": True,
+                    "morning_summary_hour": "07:00",
+                    "weekly_summary": "domingo 20:00",
+                    "summary_grace_minutes": 60,
                     "isolated_scheduler": True,
                     "scheduler_signature_fixed": True,
                     "telegram_delivery_confirmation": True,
@@ -289,4 +294,5 @@ class Default(WorkerEntrypoint):
         await run_isolated("daily_items", dispatch_due_reminders, db, token)
         await run_isolated("routines", _routine_reminders, db, token)
         await run_isolated("attendance", _attendance_tick, db, token)
+        await run_isolated("summaries", dispatch_summaries, db, token)
         await run_isolated("legacy", app.scheduled_tick, db, token)
