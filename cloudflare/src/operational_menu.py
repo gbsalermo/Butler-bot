@@ -12,16 +12,17 @@ from telegram_api import send_message
 
 
 MAIN_KB = [
-    ["🌙 Day-off"],
     ["➕ Adicionar", "🗓️ Hoje"],
     ["🛒 Item faltando", "📚 Matérias"],
     ["🏠 Cotidiano", "🏋️ Musculação"],
+    ["🌙 Day-off"],
 ]
 
 COTIDIANO_KB = [
     ["✅ Tarefas", "📅 Compromissos"],
     ["🧘 Rotinas", "🎯 Metas"],
     ["🛒 O que está faltando?", "➕ Item faltando"],
+    ["📌 Ler/ver depois"],
     ["👤 Como me chamar", "🏠 Menu principal"],
 ]
 
@@ -145,7 +146,7 @@ async def handle_message(db, token, message):
         await send_message(
             token,
             chat_id,
-            "🏠 Cotidiano. Tarefas, compromissos, rotinas, metas e o que está faltando em casa. O resto não precisa disputar sua atenção.",
+            "🏠 Cotidiano. Tarefas, compromissos, rotinas, metas, lista para depois e o que está faltando em casa.",
             reply_markup=_kb(COTIDIANO_KB),
         )
         return True
