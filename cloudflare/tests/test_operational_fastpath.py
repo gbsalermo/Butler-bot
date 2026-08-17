@@ -1,5 +1,6 @@
 from operational_informal_fastpath import classify
 from colloquial_reminder_fastpath import _looks_like_request
+from routine_natural_fastpath import _looks_like_create as looks_like_routine_create
 from core_fast_path import is_core_candidate
 
 
@@ -23,6 +24,13 @@ def test_informal_appointments():
     assert classify("reunião terça 10h") == "compromisso"
     assert classify("marca um compromisso com João sexta") == "compromisso"
     assert classify("cria um compromisso reunião amanhã") == "compromisso"
+    assert classify("quero um compromisso dentista amanhã") is None  # ambíguo demais: não inventa ação
+
+
+def test_informal_routine_creation():
+    assert looks_like_routine_create("cria uma rotina de estudar inglês")
+    assert looks_like_routine_create("quero adicionar uma rotina de beber água")
+    assert looks_like_routine_create("nova rotina estudar programação")
 
 
 def test_reminder_language_is_recognized_even_without_time():
@@ -40,9 +48,15 @@ def test_fast_path_candidates():
         "cria uma tarefa assistir entergalatic",
         "tenho que limpar a casa amanhã",
         "dentista amanhã 14h",
+        "cria um compromisso reunião amanhã",
+        "cria uma rotina de estudar inglês",
+        "quero adicionar uma rotina de beber água",
         "prova de álgebra dia 24/09",
         "marca a prova de física próxima terça",
         "ovo acabou",
+        "acabou café",
+        "tô sem detergente",
+        "quero adicionar arroz na lista",
         "comprar milho de pipoca",
         "treino de hoje",
     ]
