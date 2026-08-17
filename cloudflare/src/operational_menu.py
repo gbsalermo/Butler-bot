@@ -39,6 +39,19 @@ def _kb(rows):
     return {"keyboard": rows, "resize_keyboard": True}
 
 
+async def _uid(db, chat_id):
+    row = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(chat_id).first()
+    if not row:
+        return None
+    try:
+        return int(getattr(row, "id"))
+    except Exception:
+        try:
+            return int(row["id"])
+        except Exception:
+            return None
+
+
 def install():
     app.MAIN_KB = [list(row) for row in MAIN_KB]
     app.COTIDIANO_KB = [list(row) for row in COTIDIANO_KB]
@@ -89,6 +102,22 @@ async def handle_message(db, token, message):
             int(chat_id),
             "O que vamos adicionar?",
             reply_markup=_kb(ADD_KB),
+        )
+        return True
+
+    # A listagem curta de tarefas é autoritativa aqui. Ela mostra todas as
+    # pendentes, mas mantém concluídas/canceladas somente por 24h. O restante
+    # continua disponível no Histórico de tarefas.
+    if text == "✅ Tarefas":
+        uid = await _uid(db, int(chat_id))
+        if uid is None:
+            return False
+        task_list = await runtime_guard._task_list(db, uid)
+        await send_message(
+            token,
+            int(chat_id),
+            task_list,
+            reply_markup=_kb(COTIDIANO_KB),
         )
         return True
 
