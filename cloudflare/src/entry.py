@@ -22,6 +22,7 @@ from natural_behavior_patch import handle_explicit_simple_reminder, install_recu
 from operational_menu import handle_message as handle_operational_menu, install as install_operational_menu
 from performance_patch import install_performance_patches
 from personality_variants import install as install_personality_variants
+from production_usability_patch import handle_message as handle_production_usability, install as install_production_usability
 from quality_patch import handle_message as handle_quality_message, install as install_quality_patch
 from reference_patch import handle_reference
 from reliable_reminders import dispatch_due_reminders
@@ -64,6 +65,7 @@ install_task_emoji_patch()
 install_workout_progress()
 install_scheduled_delivery_guard()
 install_operational_menu()
+install_production_usability()
 
 
 BASE_BUTTONS = {
@@ -78,6 +80,8 @@ BASE_BUTTONS = {
     "🚀 Começar os trabalhos", "📅 Treino de hoje", "📝 Registrar série",
     "😕 Não consegui treinar hoje", "✅ Finalizar treino", "📈 Progresso",
     "🔄 Reiniciar treinos", "📥 Importar treino por PDF/texto", "🔁 Substituir exercício",
+    "📌 Ler/ver depois", "➕ Adicionar à lista", "📚 Livros", "🎬 Filmes", "🗂️ Outras",
+    "✏️ Editar item", "🗑️ Remover item", "⬅️ Voltar ao cotidiano",
     "❌ Cancelar ação", "/cancelar",
 }
 
@@ -193,6 +197,10 @@ class Default(WorkerEntrypoint):
                     "attendance_reliable_class_alerts": True,
                     "attendance_grace_minutes": 10,
                     "attendance_authoritative_menu": True,
+                    "production_usability_patch": True,
+                    "later_list": True,
+                    "reminder_date_followup": True,
+                    "day_off_bottom": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -231,6 +239,10 @@ class Default(WorkerEntrypoint):
                     handled = await handle_fallback_message(self.env.DB, token, message)
                     if handled:
                         return Response("ok")
+
+                handled = await handle_production_usability(self.env.DB, token, message)
+                if handled:
+                    return Response("ok")
 
                 for handler in (
                     handle_operational_menu,
