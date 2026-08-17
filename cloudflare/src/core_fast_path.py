@@ -13,6 +13,7 @@ from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery
 from natural_behavior_patch import handle_explicit_simple_reminder
 from operational_informal_fastpath import handle_message as handle_informal_action
+from routine_natural_fastpath import handle_message as handle_natural_routine
 from task_context_patch import handle_message as handle_task_context
 from ux_bugfixes import handle_global_navigation
 from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress
@@ -38,6 +39,9 @@ CORE_HINTS = (
     "marca um compromisso", "marque um compromisso", "cria um compromisso", "crie um compromisso",
     "adiciona compromisso", "anota compromisso", "tenho consulta", "tenho dentista", "tenho reuniao",
     "tenho reunião", "tenho entrevista", "consulta", "dentista", "reuniao", "reunião", "entrevista",
+    # rotinas
+    "cria uma rotina", "crie uma rotina", "faz uma rotina", "adiciona uma rotina", "adicione uma rotina",
+    "quero adicionar uma rotina", "quero criar uma rotina", "cadastra uma rotina", "nova rotina", "rotina de",
     # agenda
     "minha agenda", "o que tenho hoje", "o que tenho amanha", "o que tenho amanhã",
     "o que tenho agendado", "agenda de hoje", "agenda de amanha", "agenda de amanhã",
@@ -46,7 +50,7 @@ CORE_HINTS = (
     "minhas faltas", "quantas faltas", "minhas materias", "minhas matérias",
     # mercado
     "item faltando", "o que esta faltando", "o que está faltando", "bota na lista",
-    "coloca na lista", "adiciona na lista", "acabou", "cabou", "to sem", "tô sem", "comprar",
+    "coloca na lista", "adiciona na lista", "quero adicionar", "acabou", "cabou", "to sem", "tô sem", "comprar",
     # musculação
     "treino de hoje", "qual treino", "comecar os trabalhos", "começar os trabalhos",
     "registrar serie", "registrar série", "finalizar treino", "nao consegui treinar", "não consegui treinar",
@@ -65,6 +69,7 @@ def _looks_compound(n):
     groups=0
     checks=(
         ("tarefa","lembra","avisa","compromisso","agenda"),
+        ("rotina",),
         ("treino","musculacao","serie"),
         ("materia","aula","prova","faltar","faltas"),
         ("lista","item faltando","acabou","to sem","comprar"),
@@ -104,14 +109,12 @@ async def handle_message(db,token,message):
     if await handle_global_navigation(db,token,message):
         return True
 
-    # Botão exato nunca passa por parser informal. Isso evita que "✅ Tarefa"
-    # vire uma tarefa cujo título seja o próprio botão.
+    # Botão exato nunca passa por parser informal.
     if stripped in CORE_BUTTONS:
         await app.handle_message(db,token,message)
         return True
 
-    # Respostas curtas de data/horário podem pertencer a um lembrete iniciado
-    # anteriormente. Só consultamos esse estado para formatos temporais curtos.
+    # Respostas curtas de data/horário podem pertencer a um lembrete iniciado.
     if _looks_temporal_followup(n):
         if await handle_colloquial_reminder(db,token,message):
             return True
@@ -122,6 +125,7 @@ async def handle_message(db,token,message):
     if await handle_explicit_simple_reminder(db,token,message):return True
     if await handle_colloquial_reminder(db,token,message):return True
     if await handle_exam_phrase(db,token,message):return True
+    if await handle_natural_routine(db,token,message):return True
     if await handle_informal_action(db,token,message):return True
     if await handle_task_context(db,token,message):return True
     if await handle_workout_progress(db,token,message):return True
