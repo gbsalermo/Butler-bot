@@ -7,6 +7,7 @@ prioriza apenas os núcleos do assistente cotidiano.
 import app
 import runtime_guard
 import goal_operational
+import goal_polish
 from telegram_api import send_message
 
 
@@ -39,6 +40,7 @@ def install():
     app.MAIN_KB = [list(row) for row in MAIN_KB]
     app.COTIDIANO_KB = [list(row) for row in COTIDIANO_KB]
     goal_operational.install()
+    goal_polish.install()
 
     try:
         runtime_guard.MAIN_KB = [list(row) for row in MAIN_KB]
@@ -51,7 +53,9 @@ def install():
 
 
 async def handle_message(db, token, message):
-    # Metas pertencem ao núcleo operacional e têm prioridade antes do menu base.
+    # Polimento/edição antes do handler base de metas.
+    if await goal_polish.handle_message(db, token, message):
+        return True
     if await goal_operational.handle_message(db, token, message):
         return True
 
