@@ -1,7 +1,7 @@
 """Fast path conservador para ações operacionais do Butler.
 
-Somente ações claras do núcleo passam por aqui. Botões exatos têm prioridade
-sobre linguagem natural para nunca virarem títulos acidentalmente.
+Somente ações claras do núcleo passam por aqui. Botões exatos são diferenciados
+de respostas digitadas como "hoje"/"amanhã" para não quebrar fluxos guiados.
 """
 import re
 import unicodedata
@@ -20,6 +20,8 @@ from workout_progress_patch import handle_message as handle_workout_progress, in
 
 install_workout_progress()
 
+# Palavras/intenções que fazem uma mensagem entrar no caminho rápido. Isso NÃO é
+# usado para decidir se algo veio de um botão do Telegram.
 CORE_BUTTONS = {
     "adicionar","tarefa","tarefas","compromisso","compromissos","hoje","amanha",
     "outra data","proximos 7 dias","historico","item faltando","o que esta faltando",
@@ -27,6 +29,19 @@ CORE_BUTTONS = {
     "comecar os trabalhos","registrar serie","substituir exercicio","finalizar treino",
     "nao consegui treinar hoje","progresso","historico de cargas","reiniciar treinos",
     "menu principal","cancelar acao","materias","minhas materias","rotinas","metas",
+}
+
+# Aqui sim ficam os textos reais dos botões. Uma mensagem digitada "Hoje" não é
+# igual a "🗓️ Hoje" e portanto pode continuar um lembrete em andamento.
+EXACT_BUTTONS = {
+    "➕ Adicionar", "✅ Tarefa", "✅ Tarefas", "📅 Compromisso", "📅 Compromissos",
+    "🗓️ Hoje", "⏭️ Amanhã", "📆 Outra data", "🗓️ Próximos 7 dias", "📚 Histórico",
+    "🛒 Item faltando", "🛒 O que está faltando?", "➕ Item faltando", "➕ Adicionar item",
+    "📋 Ver itens faltando", "🏠 Cotidiano", "🏋️ Musculação", "📅 Treino de hoje",
+    "🚀 Começar os trabalhos", "📝 Registrar série", "🔁 Substituir exercício",
+    "✅ Finalizar treino", "😕 Não consegui treinar hoje", "📈 Progresso",
+    "🔄 Reiniciar treinos", "🏠 Menu principal", "❌ Cancelar ação", "📚 Matérias",
+    "📚 Minhas matérias", "🧘 Rotinas", "🎯 Metas",
 }
 
 CORE_HINTS = (
@@ -103,21 +118,22 @@ def is_core_candidate(text):
 async def handle_message(db,token,message):
     text=(message.get("text") or "").strip()
     n=_norm(text)
-    stripped=re.sub(r"^butler\s+","",n).strip()
 
     # Navegação primeiro.
     if await handle_global_navigation(db,token,message):
         return True
 
-    # Botão exato nunca passa por parser informal.
-    if stripped in CORE_BUTTONS:
-        await app.handle_message(db,token,message)
-        return True
-
-    # Respostas curtas de data/horário podem pertencer a um lembrete iniciado.
+    # Continuação temporal tem prioridade sobre classificação genérica. Isso é o
+    # que permite: "me lembra de X" -> "Hoje" -> "15h".
     if _looks_temporal_followup(n):
         if await handle_colloquial_reminder(db,token,message):
             return True
+
+    # Só textos reais de botões entram aqui. Nunca usamos a versão normalizada
+    # para decidir isso, senão "Hoje" digitado vira "🗓️ Hoje" por engano.
+    if text in EXACT_BUTTONS:
+        await app.handle_message(db,token,message)
+        return True
 
     if not is_core_candidate(text):
         return False
