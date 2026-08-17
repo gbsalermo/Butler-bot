@@ -58,8 +58,21 @@ async def handle_message(db,token,message):
         else:msg="🤨 Entendi a compra, mas não achei esses itens como faltantes. Não vou apagar no chute."
         await send_message(token,int(chat_id),msg,reply_markup=_kb(GROCERY_KB)); return True
 
-    # Escrita direta só com comando explícito. Problemas como "acabou café" seguem
-    # para suggestion_engine e pedem confirmação.
+    # Formas informais explícitas de dizer que algo acabou/falta em casa.
+    suffix=re.match(r"^(.+?)\s+(?:acabou|cabou)$",n)
+    prefix=re.match(r"^(?:acabou|cabou|falta|faltou)\s+(.+)$",n)
+    without=re.match(r"^(?:to|tô|estou)\s+sem\s+(.+)$",n)
+    want=re.match(r"^(?:quero|preciso)\s+(?:adicionar|colocar|botar)\s+(.+?)\s+(?:na|pra|para a)\s+lista$",n)
+    direct = suffix or prefix or without or want
+    if direct:
+        items=_split_items(direct.group(1))
+        if not items:return False
+        saved=await add_grocery_items(db,uid,items)
+        if not saved:return False
+        msg=(f"🛒 Anotado: {saved[0]}. Entrou na lista." if len(saved)==1 else "🛒 Anotado: "+", ".join(saved)+". Entraram na lista.")
+        await send_message(token,int(chat_id),msg,reply_markup=_kb(GROCERY_KB)); return True
+
+    # Comando direto de compra/lista.
     m=re.match(r"^(?:comprar|compra|compre|bota na lista|coloca na lista|adiciona na lista)\s+(?:o|a|os|as\s+)?(.+)$",n)
     if not m:
         m=re.match(r"^(?:bota|coloca|adiciona)\s+(?:o|a|os|as\s+)?(.+?)\s+na lista$",n)
