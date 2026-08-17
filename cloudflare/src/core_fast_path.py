@@ -1,7 +1,7 @@
 """Fast path conservador para ações operacionais do Butler.
 
-Somente ações claras do núcleo passam por aqui. Texto livre nunca é enviado ao
-interpretador amplo do app base; apenas botões exatos podem cair no app.
+Somente ações claras do núcleo passam por aqui. Botões exatos têm prioridade
+sobre linguagem natural para nunca virarem títulos acidentalmente.
 """
 import re
 import unicodedata
@@ -32,12 +32,12 @@ CORE_HINTS = (
     # lembretes / tarefas
     "me lembra", "me avisa", "me da um toque", "não deixa eu esquecer", "nao deixa eu esquecer",
     "recorda", "lembra eu", "cria um lembrete", "crie um lembrete", "faz um lembrete", "anota um lembrete",
-    "cria uma tarefa", "crie uma tarefa", "adiciona uma tarefa", "adicione uma tarefa",
+    "cria uma tarefa", "crie uma tarefa", "faz uma tarefa", "adiciona uma tarefa", "adicione uma tarefa",
     "anota uma tarefa", "bota como tarefa", "marca como tarefa", "tenho que", "tenho de", "preciso",
     # compromissos
-    "marca um compromisso", "marque um compromisso", "adiciona compromisso", "anota compromisso",
-    "tenho consulta", "tenho dentista", "tenho reuniao", "tenho reunião", "tenho entrevista",
-    "consulta", "dentista", "reuniao", "reunião", "entrevista",
+    "marca um compromisso", "marque um compromisso", "cria um compromisso", "crie um compromisso",
+    "adiciona compromisso", "anota compromisso", "tenho consulta", "tenho dentista", "tenho reuniao",
+    "tenho reunião", "tenho entrevista", "consulta", "dentista", "reuniao", "reunião", "entrevista",
     # agenda
     "minha agenda", "o que tenho hoje", "o que tenho amanha", "o que tenho amanhã",
     "o que tenho agendado", "agenda de hoje", "agenda de amanha", "agenda de amanhã",
@@ -75,6 +75,16 @@ def _looks_compound(n):
     return groups>=2 and len(n)>90
 
 
+def _looks_temporal_followup(n):
+    if n in ("hoje","amanha","segunda","terca","quarta","quinta","sexta","sabado","domingo"):
+        return True
+    if re.fullmatch(r"\d{1,2}(?:h\d{0,2}|:\d{2})?", n):
+        return True
+    if re.fullmatch(r"\d{1,2}/\d{1,2}(?:/\d{2,4})?", n):
+        return True
+    return False
+
+
 def is_core_candidate(text):
     n=_norm(text)
     if not n or _looks_compound(n):
@@ -88,10 +98,27 @@ def is_core_candidate(text):
 async def handle_message(db,token,message):
     text=(message.get("text") or "").strip()
     n=_norm(text)
+    stripped=re.sub(r"^butler\s+","",n).strip()
+
+    # Navegação primeiro.
+    if await handle_global_navigation(db,token,message):
+        return True
+
+    # Botão exato nunca passa por parser informal. Isso evita que "✅ Tarefa"
+    # vire uma tarefa cujo título seja o próprio botão.
+    if stripped in CORE_BUTTONS:
+        await app.handle_message(db,token,message)
+        return True
+
+    # Respostas curtas de data/horário podem pertencer a um lembrete iniciado
+    # anteriormente. Só consultamos esse estado para formatos temporais curtos.
+    if _looks_temporal_followup(n):
+        if await handle_colloquial_reminder(db,token,message):
+            return True
+
     if not is_core_candidate(text):
         return False
 
-    if await handle_global_navigation(db,token,message):return True
     if await handle_explicit_simple_reminder(db,token,message):return True
     if await handle_colloquial_reminder(db,token,message):return True
     if await handle_exam_phrase(db,token,message):return True
@@ -100,9 +127,4 @@ async def handle_message(db,token,message):
     if await handle_workout_progress(db,token,message):return True
     if await runtime_guard.handle_pre_dispatch(db,token,message):return True
     if await handle_grocery(db,token,message):return True
-
-    stripped=re.sub(r"^butler\s+","",n).strip()
-    if stripped in CORE_BUTTONS:
-        await app.handle_message(db,token,message)
-        return True
     return False
