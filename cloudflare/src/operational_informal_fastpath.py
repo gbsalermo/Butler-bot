@@ -73,7 +73,6 @@ def classify(text):
     n = _norm(text)
     if not n:
         return None
-    # Lembretes explícitos ficam no handler especializado já existente.
     if re.match(r"^(?:butler\s+)?(?:me\s+)?(?:lembra|lembre|avisa|avise)\b", n):
         return "lembrete"
     if re.match(r"^(?:butler\s+)?(?:cria|crie|faz|faca|anota|coloca|adiciona)\s+(?:um\s+|uma\s+)?lembrete\b", n):
@@ -92,6 +91,7 @@ def classify(text):
         r"^(?:butler\s+)?(?:novo compromisso|compromisso)\b",
         r"^(?:butler\s+)?tenho\s+(?:consulta|dentista|reuniao|entrevista|medico|medica)\b",
         r"^(?:butler\s+)?vou ter\s+(?:consulta|dentista|reuniao|entrevista|compromisso)\b",
+        r"^(?:butler\s+)?(?:consulta|dentista|reuniao|entrevista|medico|medica)\b",
     )
     if any(re.search(p, n) for p in appointment_patterns):
         return "compromisso"
@@ -116,7 +116,6 @@ async def handle_message(db, token, message):
     due = parse_date(text, today)
     tm = parse_time(text)
 
-    # Se não houver data explícita, abre o mesmo fluxo guiado dos botões.
     if not due:
         await app.set_state(db, uid, "item_date", {"kind": kind, "title": title})
         await send_message(
@@ -137,7 +136,6 @@ async def handle_message(db, token, message):
     ).bind(uid, kind, title, due.isoformat(), tm).first()
     iid = int(_row(row, "id"))
 
-    # Mantém contexto curto para 'adia', 'cancela essa', 'feito', etc.
     try:
         import conversation_layer
         await conversation_layer._remember(db, uid, kind, iid)
