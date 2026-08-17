@@ -48,6 +48,19 @@ async def _notified(db, uid, key):
     return bool(row)
 
 
+def _class_bounds(now, start, end):
+    sh, sm = map(int, start.split(":"))
+    target = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+    try:
+        eh, em = map(int, (end or "").split(":"))
+        end_target = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+        if end_target <= target:
+            end_target += timedelta(days=1)
+    except Exception:
+        end_target = target + timedelta(minutes=60)
+    return target, end_target
+
+
 async def handle_message(db, token, message):
     text = (message.get("text") or "").strip()
     n = _norm(text)
@@ -69,7 +82,6 @@ async def handle_message(db, token, message):
     assistant = await db.prepare("SELECT COALESCE(day_off,0) day_off FROM assistant_state WHERE user_id=?").bind(uid).first()
     out.append(f"Day-off: {'sim' if int(_row(assistant,'day_off',0) or 0) else 'não'}")
 
-    # Tarefas, compromissos e lembretes simples.
     items = await _rows(db.prepare("SELECT id,kind,title,details,due_time,status FROM daily_items WHERE user_id=? AND due_date=? AND due_time IS NOT NULL ORDER BY due_time").bind(uid, today.isoformat()))
     out.append("\n📋 Itens do dia")
     if not items:
@@ -90,7 +102,6 @@ async def handle_message(db, token, message):
         state = "🔔 notificado" if sent else ("✅ concluído" if _row(item,"status")=="concluido" else ("⏳ pendente" if now < desired else "🚨 vencido sem notificação"))
         out.append(f"• {due} {label}: {_row(item,'title')} — {state}")
 
-    # Rotinas.
     routines = await _rows(db.prepare("SELECT id,name,time_hhmm,weekdays FROM routines WHERE user_id=? AND active=1 AND time_hhmm IS NOT NULL ORDER BY name").bind(uid))
     out.append("\n🧘 Rotinas")
     if not routines:
@@ -115,24 +126,28 @@ async def handle_message(db, token, message):
                     state = "⚠️ horário inválido"
             out.append(f"  {target} — {state}")
 
-    # Aulas de hoje.
     weekday = app.WEEKDAY_NAMES[now.weekday()]
     sessions = await _rows(db.prepare("SELECT ss.id,ss.start_time,ss.end_time,s.name FROM subject_sessions ss JOIN subjects s ON s.id=ss.subject_id WHERE s.user_id=? AND s.active=1 AND ss.weekday=? ORDER BY ss.start_time").bind(uid,weekday))
     out.append("\n🎓 Aulas")
     if not sessions:
         out.append("• nenhuma hoje")
     for session in sessions:
-        sid=int(_row(session,"id")); start=_row(session,"start_time"); key=f"attendance:{today.isoformat()}:{sid}"; sent=await _notified(db,uid,key)
+        sid=int(_row(session,"id")); start=_row(session,"start_time"); end=_row(session,"end_time"); key=f"attendance:{today.isoformat()}:{sid}"; sent=await _notified(db,uid,key)
         try:
-            h,m=map(int,start.split(":")); target=now.replace(hour=h,minute=m,second=0,microsecond=0); delay=(now-target).total_seconds()/60
-            if sent: state="🔔 perguntado"
-            elif delay < 0: state="⏳ ainda não chegou"
-            elif delay <= 10: state="🚨 deveria disparar agora"
-            else: state="⚠️ janela de 10 min passou sem registro"
+            target,end_target=_class_bounds(now,start,end)
+            delay=(now-target).total_seconds()/60
+            if sent:
+                state="🔔 perguntado"
+            elif delay < 0:
+                state="⏳ ainda não chegou"
+            elif now < end_target:
+                state="🚨 aula em andamento sem notificação — deve recuperar"
+            else:
+                state="⚠️ aula terminou sem registro de aviso"
         except Exception:
             state="⚠️ horário inválido"
-        out.append(f"• {start}–{_row(session,'end_time')} {_row(session,'name')} — {state}")
+        out.append(f"• {start}–{end} {_row(session,'name')} — {state}")
 
-    out.append("\nSe aparecer 🚨, o dado está pendente e o scheduler deveria ter enviado. Se aparecer 🔔 sem você ter recebido, precisamos investigar a resposta da API do Telegram.")
+    out.append("\nSe aparecer 🚨, o scheduler ainda deve recuperar o alerta. Se aparecer 🔔 sem você ter recebido, precisamos investigar a resposta da API do Telegram.")
     await send_message(token,chat_id,"\n".join(out))
     return True
