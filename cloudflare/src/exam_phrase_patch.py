@@ -31,14 +31,14 @@ async def handle_message(db, token, message):
     if "prova" not in n:
         return False
 
-    # Variações imperativas/coloquiais que o parser anterior não cobria bem.
     starters = (
         "marca a prova", "marque a prova", "marca minha prova", "marque minha prova",
         "coloca a prova", "coloque a prova", "bota a prova", "anota a prova",
         "agenda a prova", "agende a prova", "registra a prova", "registre a prova",
         "cadastra a prova", "cadastre a prova", "adiciona a prova", "adicione a prova",
         "marca prova", "coloca prova", "bota prova", "anota prova", "agenda prova",
-        "tenho uma prova", "vou ter prova", "vai ter prova", "minha prova de",
+        "tenho uma prova", "tenho prova", "vou ter prova", "vai ter prova", "minha prova de",
+        "prova de", "prova da", "prova do",
     )
     if not any(n.startswith(x) for x in starters):
         return False
@@ -47,8 +47,6 @@ async def handle_message(db, token, message):
     due = ai._date_from_phrase(text, today)
     tm = app.parse_time(text)
 
-    # Captura a matéria até a expressão temporal. Aceita "prova de Álgebra para 24/09",
-    # "marca a prova de Álgebra dia 24/09", "agenda prova de Física próxima terça", etc.
     m = re.search(
         r"prova\s+(?:de|da|do)\s+(.+?)(?=\s+(?:para|pro|pra|em|no|na|dia|hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo|proxima|proximo|as)\b|\s+\d{1,2}/\d{1,2}(?:/\d{2,4})?|$)",
         n,
@@ -68,7 +66,6 @@ async def handle_message(db, token, message):
         return False
 
     if not due:
-        # Já sabemos a matéria: continua pelo fluxo normal perguntando só a data.
         await ai.runtime_guard._set_state(db, uid, "ai_exam_date", {
             "subject_id": int(ai._row(subject, "id")),
             "subject": ai._row(subject, "name"),
