@@ -15,8 +15,9 @@ COTIDIANO_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["✅ Tarefas", "📅 Compromissos"],
         ["🛒 O que está faltando?", "➕ Item faltando"],
-        ["🎯 Metas", "🧘 Rotinas"],
-        ["💰 Finanças", "👤 Como me chamar"],
+        ["📌 Ler/ver depois", "🎯 Metas"],
+        ["🧘 Rotinas", "💰 Finanças"],
+        ["👤 Como me chamar"],
         ["🏠 Menu principal"],
     ],
     resize_keyboard=True,
