@@ -8,6 +8,7 @@ import app
 import runtime_guard
 import goal_operational
 import goal_polish
+import goal_deadline_patch
 from telegram_api import send_message
 
 
@@ -41,6 +42,7 @@ def install():
     app.COTIDIANO_KB = [list(row) for row in COTIDIANO_KB]
     goal_operational.install()
     goal_polish.install()
+    goal_deadline_patch.install()
 
     try:
         runtime_guard.MAIN_KB = [list(row) for row in MAIN_KB]
@@ -53,7 +55,9 @@ def install():
 
 
 async def handle_message(db, token, message):
-    # Polimento/edição antes do handler base de metas.
+    # Guardas de prazo e edição antes do handler base de metas.
+    if await goal_deadline_patch.handle_message(db, token, message):
+        return True
     if await goal_polish.handle_message(db, token, message):
         return True
     if await goal_operational.handle_message(db, token, message):
