@@ -63,9 +63,12 @@ def _clean_title(text, kind):
         if new != value:
             value = new
             break
+
     value = re.sub(r"\b(?:hoje|amanhã|amanha)\b", "", value, flags=re.I)
+    value = re.sub(r"\b(?:segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)(?:-feira)?\b", "", value, flags=re.I)
     value = re.sub(r"\b(?:dia\s+)?\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", "", value, flags=re.I)
     value = re.sub(r"(?:às|as)\s*\d{1,2}(?::\d{2}|h\d{0,2})?", "", value, flags=re.I)
+    value = re.sub(r"\b\d{1,2}(?::\d{2}|h\d{0,2})\b", "", value, flags=re.I)
     return re.sub(r"\s+", " ", value).strip(" ,.-")
 
 
