@@ -132,90 +132,107 @@ async def _agenda_routines(db, uid, target):
     return "\n".join(out)
 
 
-async def _routine_reminders(db, token):
-    """Dispara checkpoints de rotina com recuperação de minuto perdido.
+async def _dispatch_one_routine(db, token, uid, chat, routine, today, now):
+    """Processa uma rotina sem permitir que falhas contaminem outras rotinas/usuários."""
+    if not _applies(_row(routine, "weekdays"), today):
+        return
 
-    O cron da Cloudflare é best-effort. A implementação antiga exigia igualdade
-    exata HH:MM; se 10:00 não executasse, 10:01 nunca mais lembrava. Agora cada
-    rotina procura checkpoints vencidos ainda não notificados e envia o mais
-    recente. Checkpoints anteriores vencidos são marcados apenas como aviso
-    perdido (não como concluídos), evitando rajada de notificações atrasadas.
-    """
+    rid = int(_row(routine, "id"))
+    scheduled = _times(_row(routine, "time_hhmm"))
+    done = await _status(db, rid, today, scheduled)
+
+    due_unnotified = []
+    for target_time in scheduled:
+        if target_time in done:
+            continue
+        try:
+            h, m = map(int, target_time.split(":"))
+        except Exception:
+            continue
+        desired = datetime.combine(today, datetime.min.time()).replace(hour=h, minute=m, tzinfo=LOCAL_TZ)
+        if now < desired:
+            continue
+        key = f"routine:{rid}:{today.isoformat()}:{target_time}"
+        existing = await db.prepare(
+            "SELECT id FROM notification_log WHERE user_id=? AND notification_key=?"
+        ).bind(uid, key).first()
+        if not existing:
+            due_unnotified.append((desired, target_time, key))
+
+    if not due_unnotified:
+        return
+
+    due_unnotified.sort(key=lambda x: x[0])
+    latest_desired, latest_time, latest_key = due_unnotified[-1]
+
+    # Não registramos checkpoints antigos como "enviados" antes de uma entrega real.
+    # Eles simplesmente deixam de ser candidatos enquanto houver um checkpoint mais recente,
+    # evitando falsos positivos no diagnóstico e preservando o histórico real.
+    late_minutes = max(0, int((now - latest_desired).total_seconds() // 60))
+    payload = {"routine_id": rid, "time": latest_time, "name": _row(routine, "name")}
+    await runtime_guard._set_state(db, uid, "guard_routine_checkpoint", payload)
+    timing = (
+        f"⏰ Checkpoint {latest_time} — aviso atrasou {late_minutes} min."
+        if late_minutes > 2 else f"⏰ Checkpoint {latest_time}."
+    )
+
+    # scheduled_delivery_guard substitui send_message por envio confirmado.
+    # Se falhar, a exceção fica restrita a esta rotina e o notification_log não é gravado.
+    await send_message(
+        token,
+        chat,
+        f"🧘 Rotina — {_row(routine,'name')}\n{timing}\n\nQuando cumprir, pode responder só `certo`, `feito` ou usar o botão.",
+        reply_markup=_kb([[f"✅ Feito — #{rid} {latest_time}"], ["🏠 Menu principal"]]),
+    )
+    await db.prepare(
+        "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
+    ).bind(uid, latest_key).run()
+
+
+async def _routine_reminders(db, token):
+    """Scheduler autoritativo de rotinas, resiliente por usuário e por rotina."""
     now = datetime.now(timezone.utc).astimezone(LOCAL_TZ)
     today = now.date()
     users = await _rows(db.prepare(
         "SELECT u.id,u.telegram_chat_id,COALESCE(a.day_off,0) day_off FROM users u "
         "LEFT JOIN assistant_state a ON a.user_id=u.id"
     ))
+
     for user in users:
         if int(_row(user, "day_off", 0)):
             continue
-        uid = int(_row(user, "id"))
-        chat = int(_row(user, "telegram_chat_id"))
-        routines = await _rows(db.prepare("SELECT id,name,category,time_hhmm,weekdays FROM routines WHERE user_id=? AND active=1 AND time_hhmm IS NOT NULL").bind(uid))
+        try:
+            uid = int(_row(user, "id"))
+            chat = int(_row(user, "telegram_chat_id"))
+        except Exception as exc:
+            print(f"[routine-scheduler] invalid-user error={type(exc).__name__}:{exc}")
+            continue
+
+        routines = await _rows(db.prepare(
+            "SELECT id,name,category,time_hhmm,weekdays FROM routines "
+            "WHERE user_id=? AND active=1 AND time_hhmm IS NOT NULL ORDER BY id"
+        ).bind(uid))
+
         for routine in routines:
-            if not _applies(_row(routine, "weekdays"), today):
+            rid = _row(routine, "id")
+            try:
+                await _dispatch_one_routine(db, token, uid, chat, routine, today, now)
+            except Exception as exc:
+                print(
+                    f"[routine-scheduler] error user_id={uid} routine_id={rid} "
+                    f"type={type(exc).__name__} message={str(exc)[:300]}"
+                )
                 continue
-            rid = int(_row(routine, "id"))
-            scheduled = _times(_row(routine, "time_hhmm"))
-            done = await _status(db, rid, today, scheduled)
-
-            due_unnotified = []
-            for target_time in scheduled:
-                if target_time in done:
-                    continue
-                try:
-                    h, m = map(int, target_time.split(":"))
-                except Exception:
-                    continue
-                desired = datetime.combine(today, datetime.min.time()).replace(hour=h, minute=m, tzinfo=LOCAL_TZ)
-                if now < desired:
-                    continue
-                key = f"routine:{rid}:{today.isoformat()}:{target_time}"
-                existing = await db.prepare("SELECT id FROM notification_log WHERE user_id=? AND notification_key=?").bind(uid, key).first()
-                if not existing:
-                    due_unnotified.append((desired, target_time, key))
-
-            if not due_unnotified:
-                continue
-
-            due_unnotified.sort(key=lambda x: x[0])
-            latest_desired, latest_time, latest_key = due_unnotified[-1]
-
-            # Evita uma enxurrada após indisponibilidade longa: avisos antigos são
-            # registrados como perdidos, mas o progresso da rotina segue pendente.
-            for _, _, stale_key in due_unnotified[:-1]:
-                await db.prepare("INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)").bind(uid, stale_key).run()
-
-            late_minutes = max(0, int((now - latest_desired).total_seconds() // 60))
-            payload = {"routine_id": rid, "time": latest_time, "name": _row(routine, "name")}
-            await runtime_guard._set_state(db, uid, "guard_routine_checkpoint", payload)
-            if late_minutes > 2:
-                timing = f"⏰ Checkpoint {latest_time} — aviso atrasou {late_minutes} min."
-            else:
-                timing = f"⏰ Checkpoint {latest_time}."
-            await send_message(
-                token,
-                chat,
-                f"🧘 Rotina — {_row(routine,'name')}\n{timing}\n\nQuando cumprir, pode responder só `certo`, `feito` ou usar o botão.",
-                reply_markup=_kb([[f"✅ Feito — #{rid} {latest_time}"], ["🏠 Menu principal"]]),
-            )
-            await db.prepare("INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)").bind(uid, latest_key).run()
 
 
 def install_routine_integration():
     original_agenda = app.agenda_text
-    original_scheduled = app.scheduled_tick
     original_pre_dispatch = runtime_guard.handle_pre_dispatch
 
     async def agenda_with_routines(db, uid, target, include_overdue=False):
         base = await original_agenda(db, uid, target, include_overdue)
         extra = await _agenda_routines(db, uid, target)
         return base + extra
-
-    async def scheduled_with_routines(db, token):
-        await original_scheduled(db, token)
-        await _routine_reminders(db, token)
 
     async def pre_dispatch_with_routines(db, token, message):
         chat = message.get("chat") or {}
@@ -275,5 +292,6 @@ def install_routine_integration():
         return await original_pre_dispatch(db, token, message)
 
     app.agenda_text = agenda_with_routines
-    app.scheduled_tick = scheduled_with_routines
+    # Importante: não embrulhar app.scheduled_tick. O entry.py já chama
+    # _routine_reminders diretamente como scheduler autoritativo.
     runtime_guard.handle_pre_dispatch = pre_dispatch_with_routines
