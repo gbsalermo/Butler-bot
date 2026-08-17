@@ -37,6 +37,7 @@ CORE_HINTS = (
     # compromissos
     "marca um compromisso", "marque um compromisso", "adiciona compromisso", "anota compromisso",
     "tenho consulta", "tenho dentista", "tenho reuniao", "tenho reunião", "tenho entrevista",
+    "consulta", "dentista", "reuniao", "reunião", "entrevista",
     # agenda
     "minha agenda", "o que tenho hoje", "o que tenho amanha", "o que tenho amanhã",
     "o que tenho agendado", "agenda de hoje", "agenda de amanha", "agenda de amanhã",
@@ -90,8 +91,6 @@ async def handle_message(db,token,message):
     if not is_core_candidate(text):
         return False
 
-    # Ordem: ações mais específicas primeiro, para evitar que um parser genérico
-    # capture uma frase que já tem um significado operacional claro.
     if await handle_global_navigation(db,token,message):return True
     if await handle_explicit_simple_reminder(db,token,message):return True
     if await handle_colloquial_reminder(db,token,message):return True
@@ -102,8 +101,6 @@ async def handle_message(db,token,message):
     if await runtime_guard.handle_pre_dispatch(db,token,message):return True
     if await handle_grocery(db,token,message):return True
 
-    # App monolítico somente para botões exatos. Se uma frase natural chegou até
-    # aqui sem handler, devolvemos ao dispatcher operacional.
     stripped=re.sub(r"^butler\s+","",n).strip()
     if stripped in CORE_BUTTONS:
         await app.handle_message(db,token,message)
