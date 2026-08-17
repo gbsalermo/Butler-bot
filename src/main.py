@@ -17,6 +17,7 @@ from src.history_handlers import register_history_handlers
 from src.home_handlers import register_home_handlers
 from src.home_menu import register_home_menu
 from src.home_store import init_home_tables
+from src.later_handlers import register_later_handlers
 from src.lifestyle_handlers import register_lifestyle_handlers
 from src.natural_handlers import register_natural_handlers
 from src.natural_store import init_natural_tables
@@ -60,6 +61,7 @@ def main() -> None:
     register_behavior_handlers(application)
     register_quick_capture(application)
     register_lifestyle_handlers(application)
+    register_later_handlers(application)
     register_home_handlers(application)
     register_handlers(application)
     register_natural_handlers(application)
