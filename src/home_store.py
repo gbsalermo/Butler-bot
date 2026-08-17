@@ -53,6 +53,15 @@ def init_home_tables() -> None:
                 position INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY(workout_day_id) REFERENCES workout_days(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS later_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL CHECK(category IN ('LIVRO', 'FILME', 'OUTRA')),
+                custom_category TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
 
@@ -141,3 +150,78 @@ def list_workout() -> list[sqlite3.Row]:
                 we.position
             """
         ).fetchall()
+
+
+def add_later_item(name: str, category: str, custom_category: str | None = None) -> int:
+    now = datetime.now().isoformat(timespec="seconds")
+    category = category.strip().upper()
+    custom_category = custom_category.strip() if custom_category else None
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO later_items (name, category, custom_category, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (name.strip(), category, custom_category, now, now),
+        )
+        return int(cur.lastrowid)
+
+
+def list_later_items(category: str | None = None) -> list[sqlite3.Row]:
+    with _connect() as conn:
+        if category:
+            return conn.execute(
+                """
+                SELECT id, name, category, custom_category
+                FROM later_items
+                WHERE category = ?
+                ORDER BY COALESCE(custom_category, ''), name COLLATE NOCASE
+                """,
+                (category.strip().upper(),),
+            ).fetchall()
+        return conn.execute(
+            """
+            SELECT id, name, category, custom_category
+            FROM later_items
+            ORDER BY category, COALESCE(custom_category, ''), name COLLATE NOCASE
+            """
+        ).fetchall()
+
+
+def get_later_item(item_id: int) -> sqlite3.Row | None:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT id, name, category, custom_category FROM later_items WHERE id = ?",
+            (item_id,),
+        ).fetchone()
+
+
+def update_later_item(
+    item_id: int,
+    name: str,
+    category: str,
+    custom_category: str | None = None,
+) -> bool:
+    now = datetime.now().isoformat(timespec="seconds")
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            UPDATE later_items
+            SET name = ?, category = ?, custom_category = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                name.strip(),
+                category.strip().upper(),
+                custom_category.strip() if custom_category else None,
+                now,
+                item_id,
+            ),
+        )
+        return cur.rowcount > 0
+
+
+def remove_later_item(item_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM later_items WHERE id = ?", (item_id,))
+        return cur.rowcount > 0
