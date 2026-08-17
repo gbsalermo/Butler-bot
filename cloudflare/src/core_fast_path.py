@@ -8,6 +8,7 @@ import unicodedata
 
 import app
 import runtime_guard
+from colloquial_reminder_fastpath import handle_message as handle_colloquial_reminder
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery
 from natural_behavior_patch import handle_explicit_simple_reminder
@@ -30,7 +31,7 @@ CORE_BUTTONS = {
 CORE_HINTS = (
     # lembretes / tarefas
     "me lembra", "me avisa", "me da um toque", "não deixa eu esquecer", "nao deixa eu esquecer",
-    "cria um lembrete", "crie um lembrete", "faz um lembrete", "anota um lembrete",
+    "recorda", "lembra eu", "cria um lembrete", "crie um lembrete", "faz um lembrete", "anota um lembrete",
     "cria uma tarefa", "crie uma tarefa", "adiciona uma tarefa", "adicione uma tarefa",
     "anota uma tarefa", "bota como tarefa", "marca como tarefa", "tenho que", "tenho de", "preciso",
     # compromissos
@@ -93,6 +94,7 @@ async def handle_message(db,token,message):
     # capture uma frase que já tem um significado operacional claro.
     if await handle_global_navigation(db,token,message):return True
     if await handle_explicit_simple_reminder(db,token,message):return True
+    if await handle_colloquial_reminder(db,token,message):return True
     if await handle_exam_phrase(db,token,message):return True
     if await handle_informal_action(db,token,message):return True
     if await handle_task_context(db,token,message):return True
