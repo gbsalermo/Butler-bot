@@ -22,6 +22,7 @@ from src.lifestyle_handlers import register_lifestyle_handlers
 from src.natural_handlers import register_natural_handlers
 from src.natural_store import init_natural_tables
 from src.onboarding import register_onboarding
+from src.pending_followup_guard import register_pending_followup_guard
 from src.personality_navigation import register_personality_navigation
 from src.protocol_mass_handlers import register_protocol_mass_handlers
 from src.protocol_mass_navigation import register_protocol_mass_navigation
@@ -44,6 +45,7 @@ def main() -> None:
     logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
+    register_pending_followup_guard(application)
     register_onboarding(application)
     register_schedule_import(application)
     register_wellbeing_handlers(application)
