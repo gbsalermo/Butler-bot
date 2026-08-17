@@ -3,10 +3,10 @@ from telegram import ReplyKeyboardMarkup
 
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
-        ["🌙 Day-off"],
         ["➕ Adicionar", "🗓️ Hoje"],
         ["🛒 Item faltando", "📚 Matérias"],
         ["🏠 Cotidiano", "🏋️ Musculação"],
+        ["🌙 Day-off"],
     ],
     resize_keyboard=True,
 )
