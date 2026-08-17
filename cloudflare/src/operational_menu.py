@@ -18,15 +18,15 @@ MAIN_KB = [
 
 COTIDIANO_KB = [
     ["✅ Tarefas", "📅 Compromissos"],
-    ["🧘 Rotinas", "🛒 O que está faltando?"],
-    ["➕ Item faltando", "👤 Como me chamar"],
-    ["🏠 Menu principal"],
+    ["🧘 Rotinas", "🎯 Metas"],
+    ["🛒 O que está faltando?", "➕ Item faltando"],
+    ["👤 Como me chamar", "🏠 Menu principal"],
 ]
 
 ADD_KB = [
     ["✅ Tarefa", "📅 Compromisso"],
-    ["🧘 Rotinas", "➕ Item faltando"],
-    ["🏠 Menu principal"],
+    ["🧘 Rotinas", "🎯 Metas"],
+    ["➕ Item faltando", "🏠 Menu principal"],
 ]
 
 
@@ -58,7 +58,7 @@ async def handle_message(db, token, message):
         await send_message(
             token,
             int(chat_id),
-            "🏠 Cotidiano. Tarefas, compromissos, rotinas e o que está faltando em casa. O resto não precisa disputar sua atenção.",
+            "🏠 Cotidiano. Tarefas, compromissos, rotinas, metas e o que está faltando em casa. O resto não precisa disputar sua atenção.",
             reply_markup=_kb(COTIDIANO_KB),
         )
         return True
