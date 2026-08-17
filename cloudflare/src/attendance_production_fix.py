@@ -4,6 +4,8 @@ import app
 import attendance_patch as attendance
 from telegram_api import send_message
 
+# Os primeiros 10 minutos continuam sendo a janela "normal". Se o Worker perder
+# essa janela, o alerta ainda pode ser recuperado enquanto a aula estiver em andamento.
 ATTENDANCE_GRACE_MINUTES = 10
 
 ACADEMIC_KB_FULL = [
@@ -49,6 +51,26 @@ async def handle_message(db, token, message):
     return True
 
 
+def _session_bounds(now, start_text, end_text):
+    """Retorna início/fim locais da sessão no dia de hoje.
+
+    Se o horário final estiver ausente ou inválido, usa uma recuperação conservadora
+    de 60 minutos após o início em vez de perder o alerta definitivamente.
+    """
+    h, m = map(int, start_text.split(":"))
+    start = now.replace(hour=h, minute=m, second=0, microsecond=0)
+
+    try:
+        eh, em = map(int, (end_text or "").split(":"))
+        end = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+        if end <= start:
+            end += timedelta(days=1)
+    except Exception:
+        end = start + timedelta(minutes=60)
+
+    return start, end
+
+
 async def dispatch_class_attendance_reliable(db, token):
     now = attendance._now()
     weekday = app.WEEKDAY_NAMES[now.weekday()]
@@ -59,21 +81,27 @@ async def dispatch_class_attendance_reliable(db, token):
         JOIN subjects s ON s.id=ss.subject_id
         JOIN users u ON u.id=s.user_id
         WHERE s.active=1 AND ss.weekday=?
+        ORDER BY ss.start_time
     """).bind(weekday))
 
     for session in sessions:
         start_text = attendance._row(session, "start_time")
+        end_text = attendance._row(session, "end_time")
         if not start_text:
             continue
+
         try:
-            h, m = map(int, start_text.split(":"))
+            target, end_target = _session_bounds(now, start_text, end_text)
         except Exception:
             continue
-        target = now.replace(hour=h, minute=m, second=0, microsecond=0)
-        delay_minutes = (now - target).total_seconds() / 60
-        # Não dispara antes da aula; recupera ticks atrasados por até 10 minutos.
-        if delay_minutes < 0 or delay_minutes > ATTENDANCE_GRACE_MINUTES:
+
+        # Nunca dispara antes da aula. Depois do início, continua recuperável enquanto
+        # a aula estiver acontecendo. Isso evita perder a chamada por atraso de cron,
+        # deploy ou falha temporária do Worker/Telegram.
+        if now < target or now >= end_target:
             continue
+
+        delay_minutes = max(0, int((now - target).total_seconds() / 60))
 
         uid = int(attendance._row(session, "user_id"))
         key = f"attendance:{today}:{attendance._row(session,'id')}"
@@ -84,12 +112,26 @@ async def dispatch_class_attendance_reliable(db, token):
             continue
 
         chat_id = int(attendance._row(session, "telegram_chat_id"))
-        late = int(delay_minutes)
-        late_note = "" if late <= 0 else f"\n(O cron chegou {late} min atrasado, mas eu não vou usar isso como desculpa pra faltar por você.)"
+        if delay_minutes <= 0:
+            late_note = ""
+        elif delay_minutes <= ATTENDANCE_GRACE_MINUTES:
+            late_note = (
+                f"\n(O cron chegou {delay_minutes} min atrasado, mas eu não vou usar isso "
+                "como desculpa pra faltar por você.)"
+            )
+        else:
+            late_note = (
+                f"\n⚠️ O aviso atrasou {delay_minutes} min. A aula ainda está acontecendo, "
+                "então recuperei a chamada em vez de fingir que ela nunca existiu."
+            )
+
+        # scheduled_delivery_guard troca este send_message por uma versão que lança
+        # exceção quando o Telegram não confirma a entrega. Assim o log só é gravado
+        # depois de um envio realmente aceito e o próximo cron pode tentar novamente.
         await send_message(
             token,
             chat_id,
-            f"🎓 Aula agora: {attendance._row(session,'name')} — {start_text}–{attendance._row(session,'end_time')}"
+            f"🎓 Aula agora: {attendance._row(session,'name')} — {start_text}–{end_text}"
             + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
             + "\nVocê vai?"
             + late_note,
