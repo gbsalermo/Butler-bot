@@ -8,6 +8,7 @@ from settings import UTC_OFFSET_HOURS
 from telegram_api import send_message
 
 LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
+PRE_CLASS_MINUTES = 10
 
 
 def _norm(text):
@@ -132,22 +133,39 @@ async def handle_message(db, token, message):
     if not sessions:
         out.append("• nenhuma hoje")
     for session in sessions:
-        sid=int(_row(session,"id")); start=_row(session,"start_time"); end=_row(session,"end_time"); key=f"attendance:{today.isoformat()}:{sid}"; sent=await _notified(db,uid,key)
+        sid = int(_row(session,"id")); start = _row(session,"start_time"); end = _row(session,"end_time")
         try:
-            target,end_target=_class_bounds(now,start,end)
-            delay=(now-target).total_seconds()/60
-            if sent:
-                state="🔔 perguntado"
-            elif delay < 0:
-                state="⏳ ainda não chegou"
-            elif now < end_target:
-                state="🚨 aula em andamento sem notificação — deve recuperar"
+            target, end_target = _class_bounds(now,start,end)
+            pre_target = target - timedelta(minutes=PRE_CLASS_MINUTES)
+            pre_sent = await _notified(db, uid, f"attendance:pre:{today.isoformat()}:{sid}")
+            start_sent = (
+                await _notified(db, uid, f"attendance:start:{today.isoformat()}:{sid}")
+                or await _notified(db, uid, f"attendance:{today.isoformat()}:{sid}")
+            )
+
+            if pre_sent:
+                pre_state = "🔔 10 min enviado"
+            elif now < pre_target:
+                pre_state = "⏳ pré-aviso pendente"
+            elif now < target:
+                pre_state = "🚨 pré-aviso deveria disparar"
             else:
-                state="⚠️ aula terminou sem registro de aviso"
+                pre_state = "⚠️ pré-aviso perdido"
+
+            if start_sent:
+                start_state = "🔔 início enviado"
+            elif now < target:
+                start_state = "⏳ início pendente"
+            elif now < end_target:
+                start_state = "🚨 aula em andamento sem aviso inicial — deve recuperar"
+            else:
+                start_state = "⚠️ aula terminou sem aviso inicial"
+
+            state = f"{pre_state}; {start_state}"
         except Exception:
-            state="⚠️ horário inválido"
+            state = "⚠️ horário inválido"
         out.append(f"• {start}–{end} {_row(session,'name')} — {state}")
 
-    out.append("\nSe aparecer 🚨, o scheduler ainda deve recuperar o alerta. Se aparecer 🔔 sem você ter recebido, precisamos investigar a resposta da API do Telegram.")
+    out.append("\nCada aula deve ter dois registros: 🔔 10 min e 🔔 início. Se aparecer 🚨, o scheduler ainda deve agir; ⚠️ indica que a janela daquele aviso passou sem registro.")
     await send_message(token,chat_id,"\n".join(out))
     return True
