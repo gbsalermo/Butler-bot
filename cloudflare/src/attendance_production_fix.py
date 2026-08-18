@@ -80,6 +80,86 @@ async def _mark_sent(db, uid, key):
     ).bind(uid, key).run()
 
 
+async def _heartbeat(db, now, weekday, session_count):
+    """Guarda evidência real de que o scheduler acadêmico executou naquele minuto."""
+    await db.prepare("""
+        CREATE TABLE IF NOT EXISTS attendance_scheduler_ticks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ran_at_local TEXT NOT NULL,
+            weekday TEXT NOT NULL,
+            session_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """).run()
+    await db.prepare(
+        "INSERT INTO attendance_scheduler_ticks(ran_at_local,weekday,session_count) VALUES(?,?,?)"
+    ).bind(now.strftime("%Y-%m-%d %H:%M"), weekday, int(session_count)).run()
+    # Quatro horas de ticks são suficientes para diagnosticar pré-aviso e início
+    # sem transformar o heartbeat em histórico infinito.
+    await db.prepare("""
+        DELETE FROM attendance_scheduler_ticks
+        WHERE id NOT IN (
+            SELECT id FROM attendance_scheduler_ticks ORDER BY id DESC LIMIT 240
+        )
+    """).run()
+
+
+async def _dispatch_pre(db, token, session, uid, chat_id, sid, today, now, start_target, end_text):
+    pre_target = start_target - timedelta(minutes=PRE_CLASS_MINUTES)
+    if not (pre_target <= now < start_target):
+        return
+
+    pre_key = f"attendance:pre:{today}:{sid}"
+    if await _already_sent(db, uid, pre_key):
+        return
+
+    minutes = max(0, int((start_target - now).total_seconds() / 60))
+    await send_message(
+        token,
+        chat_id,
+        f"⏰ Aula em {minutes if minutes else 'menos de 1'} min: "
+        f"{attendance._row(session,'name')} — {attendance._row(session,'start_time')}–{end_text}"
+        + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
+        + "\nVai ajeitando as coisas. O conhecimento infelizmente ainda exige presença física às vezes.",
+    )
+    await _mark_sent(db, uid, pre_key)
+
+
+async def _dispatch_start(db, token, session, uid, chat_id, sid, today, now, start_target, end_target, end_text):
+    if not (start_target <= now < end_target):
+        return
+
+    start_key = f"attendance:start:{today}:{sid}"
+    legacy_key = f"attendance:{today}:{sid}"
+    if await _already_sent(db, uid, start_key, legacy_key):
+        return
+
+    delay_minutes = max(0, int((now - start_target).total_seconds() / 60))
+    if delay_minutes <= 0:
+        late_note = ""
+    elif delay_minutes <= ATTENDANCE_GRACE_MINUTES:
+        late_note = (
+            f"\n(O cron chegou {delay_minutes} min atrasado, mas eu não vou usar isso "
+            "como desculpa pra faltar por você.)"
+        )
+    else:
+        late_note = (
+            f"\n⚠️ O aviso atrasou {delay_minutes} min. A aula ainda está acontecendo, "
+            "então recuperei a chamada; isso é contingência, não o comportamento esperado."
+        )
+
+    await send_message(
+        token,
+        chat_id,
+        f"🎓 Aula agora: {attendance._row(session,'name')} — {attendance._row(session,'start_time')}–{end_text}"
+        + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
+        + "\nVocê vai?"
+        + late_note,
+        reply_markup=attendance._inline(sid, today),
+    )
+    await _mark_sent(db, uid, start_key)
+
+
 async def dispatch_class_attendance_reliable(db, token):
     now = attendance._now()
     weekday = app.WEEKDAY_NAMES[now.weekday()]
@@ -93,70 +173,49 @@ async def dispatch_class_attendance_reliable(db, token):
         ORDER BY ss.start_time
     """).bind(weekday))
 
+    # O heartbeat acontece antes de qualquer envio. Assim até uma falha no Telegram
+    # deixa evidência de que o cron acadêmico realmente executou naquele minuto.
+    try:
+        await _heartbeat(db, now, weekday, len(sessions))
+    except Exception as exc:
+        print(f"[attendance-heartbeat] error type={type(exc).__name__} message={str(exc)[:300]}")
+
+    # Uma matéria nunca pode derrubar os avisos das outras.
     for session in sessions:
-        sid = int(attendance._row(session, "id"))
-        uid = int(attendance._row(session, "user_id"))
-        chat_id = int(attendance._row(session, "telegram_chat_id"))
-        start_text = attendance._row(session, "start_time")
-        end_text = attendance._row(session, "end_time")
-        if not start_text:
-            continue
-
+        sid = attendance._row(session, "id")
         try:
-            start_target, end_target = _session_bounds(now, start_text, end_text)
-        except Exception:
-            continue
-
-        pre_target = start_target - timedelta(minutes=PRE_CLASS_MINUTES)
-        pre_key = f"attendance:pre:{today}:{sid}"
-        start_key = f"attendance:start:{today}:{sid}"
-        legacy_key = f"attendance:{today}:{sid}"
-
-        # 1) AVISO 10 MINUTOS ANTES.
-        # É recuperável até o instante de início da aula. Depois disso não faz sentido
-        # mandar 'faltam 10 minutos'; o aviso de início assume a responsabilidade.
-        if pre_target <= now < start_target:
-            if not await _already_sent(db, uid, pre_key):
-                minutes = max(0, int((start_target - now).total_seconds() / 60))
-                await send_message(
-                    token,
-                    chat_id,
-                    f"⏰ Aula em {minutes if minutes else 'menos de 1'} min: "
-                    f"{attendance._row(session,'name')} — {start_text}–{end_text}"
-                    + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
-                    + "\nVai ajeitando as coisas. O conhecimento infelizmente ainda exige presença física às vezes.",
-                )
-                await _mark_sent(db, uid, pre_key)
-
-        # 2) AVISO NA HORA + CONTROLE DE FALTA.
-        # O aviso continua recuperável enquanto a aula estiver acontecendo.
-        if start_target <= now < end_target:
-            # Compatibilidade: versões anteriores usavam attendance:<data>:<id> para
-            # representar o aviso de início. Se essa chave existir, não duplicamos.
-            if await _already_sent(db, uid, start_key, legacy_key):
+            sid = int(sid)
+            uid = int(attendance._row(session, "user_id"))
+            chat_id = int(attendance._row(session, "telegram_chat_id"))
+            start_text = attendance._row(session, "start_time")
+            end_text = attendance._row(session, "end_time")
+            if not start_text:
                 continue
+            start_target, end_target = _session_bounds(now, start_text, end_text)
 
-            delay_minutes = max(0, int((now - start_target).total_seconds() / 60))
-            if delay_minutes <= 0:
-                late_note = ""
-            elif delay_minutes <= ATTENDANCE_GRACE_MINUTES:
-                late_note = (
-                    f"\n(O cron chegou {delay_minutes} min atrasado, mas eu não vou usar isso "
-                    "como desculpa pra faltar por você.)"
+            try:
+                await _dispatch_pre(
+                    db, token, session, uid, chat_id, sid, today, now, start_target, end_text
                 )
-            else:
-                late_note = (
-                    f"\n⚠️ O aviso atrasou {delay_minutes} min. A aula ainda está acontecendo, "
-                    "então recuperei a chamada em vez de fingir que ela nunca existiu."
+            except Exception as exc:
+                print(
+                    f"[attendance-pre] error session_id={sid} user_id={uid} "
+                    f"type={type(exc).__name__} message={str(exc)[:300]}"
                 )
 
-            await send_message(
-                token,
-                chat_id,
-                f"🎓 Aula agora: {attendance._row(session,'name')} — {start_text}–{end_text}"
-                + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
-                + "\nVocê vai?"
-                + late_note,
-                reply_markup=attendance._inline(sid, today),
+            try:
+                await _dispatch_start(
+                    db, token, session, uid, chat_id, sid, today, now,
+                    start_target, end_target, end_text
+                )
+            except Exception as exc:
+                print(
+                    f"[attendance-start] error session_id={sid} user_id={uid} "
+                    f"type={type(exc).__name__} message={str(exc)[:300]}"
+                )
+        except Exception as exc:
+            print(
+                f"[attendance-session] error session_id={sid} "
+                f"type={type(exc).__name__} message={str(exc)[:300]}"
             )
-            await _mark_sent(db, uid, start_key)
+            continue
