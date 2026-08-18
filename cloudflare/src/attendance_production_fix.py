@@ -4,8 +4,7 @@ import app
 import attendance_patch as attendance
 from telegram_api import send_message
 
-# Regra global para TODAS as aulas ativas, independentemente de terem sido
-# pré-cadastradas, importadas ou criadas depois pelo usuário.
+# Regra global para TODAS as aulas ativas.
 PRE_CLASS_MINUTES = 10
 ATTENDANCE_GRACE_MINUTES = 10
 
@@ -81,7 +80,6 @@ async def _mark_sent(db, uid, key):
 
 
 async def _heartbeat(db, now, weekday, session_count):
-    """Guarda evidência real de que o scheduler acadêmico executou naquele minuto."""
     await db.prepare("""
         CREATE TABLE IF NOT EXISTS attendance_scheduler_ticks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,8 +92,6 @@ async def _heartbeat(db, now, weekday, session_count):
     await db.prepare(
         "INSERT INTO attendance_scheduler_ticks(ran_at_local,weekday,session_count) VALUES(?,?,?)"
     ).bind(now.strftime("%Y-%m-%d %H:%M"), weekday, int(session_count)).run()
-    # Quatro horas de ticks são suficientes para diagnosticar pré-aviso e início
-    # sem transformar o heartbeat em histórico infinito.
     await db.prepare("""
         DELETE FROM attendance_scheduler_ticks
         WHERE id NOT IN (
@@ -108,7 +104,6 @@ async def _dispatch_pre(db, token, session, uid, chat_id, sid, today, now, start
     pre_target = start_target - timedelta(minutes=PRE_CLASS_MINUTES)
     if not (pre_target <= now < start_target):
         return
-
     pre_key = f"attendance:pre:{today}:{sid}"
     if await _already_sent(db, uid, pre_key):
         return
@@ -128,7 +123,6 @@ async def _dispatch_pre(db, token, session, uid, chat_id, sid, today, now, start
 async def _dispatch_start(db, token, session, uid, chat_id, sid, today, now, start_target, end_target, end_text):
     if not (start_target <= now < end_target):
         return
-
     start_key = f"attendance:start:{today}:{sid}"
     legacy_key = f"attendance:{today}:{sid}"
     if await _already_sent(db, uid, start_key, legacy_key):
@@ -138,14 +132,11 @@ async def _dispatch_start(db, token, session, uid, chat_id, sid, today, now, sta
     if delay_minutes <= 0:
         late_note = ""
     elif delay_minutes <= ATTENDANCE_GRACE_MINUTES:
-        late_note = (
-            f"\n(O cron chegou {delay_minutes} min atrasado, mas eu não vou usar isso "
-            "como desculpa pra faltar por você.)"
-        )
+        late_note = f"\n(O aviso chegou {delay_minutes} min atrasado. Isso não é o comportamento esperado.)"
     else:
         late_note = (
             f"\n⚠️ O aviso atrasou {delay_minutes} min. A aula ainda está acontecendo, "
-            "então recuperei a chamada; isso é contingência, não o comportamento esperado."
+            "então recuperei a chamada; isso é apenas contingência."
         )
 
     await send_message(
@@ -160,27 +151,39 @@ async def _dispatch_start(db, token, session, uid, chat_id, sid, today, now, sta
     await _mark_sent(db, uid, start_key)
 
 
-async def dispatch_class_attendance_reliable(db, token):
+async def dispatch_class_attendance_reliable(
+    db, token, user_id=None, strict=False, heartbeat=True
+):
+    """Dispara T-10/T0.
+
+    Cron chama sem filtro e com isolamento por sessão. Durable Object chama com
+    user_id + strict=True; nesse modo uma falha de entrega escapa para o Alarm e
+    a Cloudflare aplica retry automático.
+    """
     now = attendance._now()
     weekday = app.WEEKDAY_NAMES[now.weekday()]
     today = now.date().isoformat()
-    sessions = await attendance._rows(db.prepare("""
+
+    sql = """
         SELECT ss.id,ss.start_time,ss.end_time,ss.location,s.name,u.id user_id,u.telegram_chat_id
         FROM subject_sessions ss
         JOIN subjects s ON s.id=ss.subject_id
         JOIN users u ON u.id=s.user_id
         WHERE s.active=1 AND ss.weekday=?
-        ORDER BY ss.start_time
-    """).bind(weekday))
+    """
+    if user_id is not None:
+        sql += " AND u.id=?"
+        stmt = db.prepare(sql + " ORDER BY ss.start_time").bind(weekday, int(user_id))
+    else:
+        stmt = db.prepare(sql + " ORDER BY ss.start_time").bind(weekday)
+    sessions = await attendance._rows(stmt)
 
-    # O heartbeat acontece antes de qualquer envio. Assim até uma falha no Telegram
-    # deixa evidência de que o cron acadêmico realmente executou naquele minuto.
-    try:
-        await _heartbeat(db, now, weekday, len(sessions))
-    except Exception as exc:
-        print(f"[attendance-heartbeat] error type={type(exc).__name__} message={str(exc)[:300]}")
+    if heartbeat:
+        try:
+            await _heartbeat(db, now, weekday, len(sessions))
+        except Exception as exc:
+            print(f"[attendance-heartbeat] error type={type(exc).__name__} message={str(exc)[:300]}")
 
-    # Uma matéria nunca pode derrubar os avisos das outras.
     for session in sessions:
         sid = attendance._row(session, "id")
         try:
@@ -194,28 +197,20 @@ async def dispatch_class_attendance_reliable(db, token):
             start_target, end_target = _session_bounds(now, start_text, end_text)
 
             try:
-                await _dispatch_pre(
-                    db, token, session, uid, chat_id, sid, today, now, start_target, end_text
-                )
+                await _dispatch_pre(db, token, session, uid, chat_id, sid, today, now, start_target, end_text)
             except Exception as exc:
-                print(
-                    f"[attendance-pre] error session_id={sid} user_id={uid} "
-                    f"type={type(exc).__name__} message={str(exc)[:300]}"
-                )
+                print(f"[attendance-pre] error session_id={sid} user_id={uid} type={type(exc).__name__} message={str(exc)[:300]}")
+                if strict:
+                    raise
 
             try:
-                await _dispatch_start(
-                    db, token, session, uid, chat_id, sid, today, now,
-                    start_target, end_target, end_text
-                )
+                await _dispatch_start(db, token, session, uid, chat_id, sid, today, now, start_target, end_target, end_text)
             except Exception as exc:
-                print(
-                    f"[attendance-start] error session_id={sid} user_id={uid} "
-                    f"type={type(exc).__name__} message={str(exc)[:300]}"
-                )
+                print(f"[attendance-start] error session_id={sid} user_id={uid} type={type(exc).__name__} message={str(exc)[:300]}")
+                if strict:
+                    raise
         except Exception as exc:
-            print(
-                f"[attendance-session] error session_id={sid} "
-                f"type={type(exc).__name__} message={str(exc)[:300]}"
-            )
+            print(f"[attendance-session] error session_id={sid} type={type(exc).__name__} message={str(exc)[:300]}")
+            if strict:
+                raise
             continue
