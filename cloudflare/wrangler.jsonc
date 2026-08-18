@@ -17,6 +17,20 @@
       "database_id": "9dad2543-b75f-48f7-9aac-7f0248732c5d"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ATTENDANCE_ALARMS",
+        "class_name": "AttendanceAlarm"
+      }
+    ]
+  },
+  "exports": {
+    "AttendanceAlarm": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
   "triggers": {
     "crons": ["* * * * *"]
   }
