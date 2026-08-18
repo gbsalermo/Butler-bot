@@ -196,6 +196,9 @@ class Default(WorkerEntrypoint):
                     "attendance_delete_confirmation": True,
                     "attendance_reliable_class_alerts": True,
                     "attendance_grace_minutes": 10,
+                    "attendance_pre_minutes": 10,
+                    "attendance_priority_first": True,
+                    "attendance_scheduler_heartbeat": True,
                     "attendance_authoritative_menu": True,
                     "production_usability_patch": True,
                     "later_list": True,
@@ -303,8 +306,10 @@ class Default(WorkerEntrypoint):
     async def scheduled(self, controller, env, ctx):
         token = self.env.TELEGRAM_BOT_TOKEN
         db = self.env.DB
+        # Aula é o único subsistema com dois eventos rígidos de tempo (T-10 e T0).
+        # Ele roda primeiro para não esperar tarefas, rotinas, resumos ou legado.
+        await run_isolated("attendance", _attendance_tick, db, token)
         await run_isolated("daily_items", dispatch_due_reminders, db, token)
         await run_isolated("routines", _routine_reminders, db, token)
-        await run_isolated("attendance", _attendance_tick, db, token)
         await run_isolated("summaries", dispatch_summaries, db, token)
         await run_isolated("legacy", app.scheduled_tick, db, token)
