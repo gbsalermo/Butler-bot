@@ -5,33 +5,17 @@
   "compatibility_date": "2026-08-14",
   "compatibility_flags": ["python_workers"],
   "keep_vars": true,
-  "secrets": {
-    "required": [
-      "TELEGRAM_BOT_TOKEN"
-    ]
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "butler-db",
-      "database_id": "9dad2543-b75f-48f7-9aac-7f0248732c5d"
-    }
-  ],
+  "secrets": {"required": ["TELEGRAM_BOT_TOKEN"]},
+  "d1_databases": [{"binding": "DB", "database_name": "butler-db", "database_id": "9dad2543-b75f-48f7-9aac-7f0248732c5d"}],
   "durable_objects": {
     "bindings": [
-      {
-        "name": "ATTENDANCE_ALARMS",
-        "class_name": "AttendanceAlarm"
-      }
+      {"name": "ATTENDANCE_ALARMS", "class_name": "AttendanceAlarm"},
+      {"name": "PERSONAL_ALARMS", "class_name": "PersonalAlarm"}
     ]
   },
   "exports": {
-    "AttendanceAlarm": {
-      "type": "durable-object",
-      "storage": "sqlite"
-    }
+    "AttendanceAlarm": {"type": "durable-object", "storage": "sqlite"},
+    "PersonalAlarm": {"type": "durable-object", "storage": "sqlite"}
   },
-  "triggers": {
-    "crons": ["* * * * *"]
-  }
+  "triggers": {"crons": ["* * * * *"]}
 }
