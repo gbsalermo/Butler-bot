@@ -9,8 +9,8 @@ OWNER_SUBJECTS = [
     {"name": "Física II", "weekday": "segunda-feira", "start": "10:00", "end": "12:00", "location": "PAV III, Sala 07"},
     {"name": "Física II", "weekday": "quarta-feira", "start": "10:00", "end": "12:00", "location": "PAV III, Sala 07"},
     {"name": "Laboratório de Sistemas Digitais I", "weekday": "segunda-feira", "start": "14:00", "end": "16:00", "location": "PAV Eng., Sala D6"},
-    {"name": "Princípios de Eletrônica Analógica", "weekday": "terça-feira", "start": "08:00", "end": "10:00", "location": "PAV I, Sala 104"},
-    {"name": "Princípios de Eletrônica Analógica", "weekday": "quinta-feira", "start": "08:00", "end": "10:00", "location": "PAV I, Sala 104"},
+    {"name": "Princípios de Eletrônica Analógica", "weekday": "terça-feira", "start": "08:00", "end": "10:00", "location": "PAV Eng., Sala D4"},
+    {"name": "Princípios de Eletrônica Analógica", "weekday": "quinta-feira", "start": "08:00", "end": "10:00", "location": "PAV Eng., Sala D4"},
     {"name": "Sistemas Digitais I", "weekday": "segunda-feira", "start": "08:00", "end": "10:00", "location": "PAV I, Sala 11"},
     {"name": "Sistemas Digitais I", "weekday": "quarta-feira", "start": "08:00", "end": "10:00", "location": "PAV I, Sala 114"},
 ]
