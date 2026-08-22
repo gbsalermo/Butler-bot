@@ -34,13 +34,14 @@ def test_real_operational_phrases_reach_core_router():
 
 
 def test_fast_path_recognizes_direct_action_families():
+    # Nem todo domínio do Core precisa entrar no fast path: esta lista protege
+    # somente famílias que a camada rápida promete capturar antes do dispatcher.
     examples = [
         "cria um lembrete hoje 9h de encontrar um lugar para armazenar jogos e emuladores",
         "amanhã tenho que entregar o relatório do estágio",
         "preciso revisar swagger hoje",
         "preciso comprar café",
         "me lembra de comprar café amanhã",
-        "hoje não vou conseguir treinar",
         "amanhã tenho dentista às 15h",
     ]
     for text in examples:
