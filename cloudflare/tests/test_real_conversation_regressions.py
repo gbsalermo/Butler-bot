@@ -23,7 +23,7 @@ REAL_OPERATIONAL_CASES = [
 ]
 
 
-def test_real_operational_phrases_reach_core():
+def test_real_operational_phrases_reach_core_router():
     for text, domain, intent in REAL_OPERATIONAL_CASES:
         route = classify(text)
         parsed = parse(text)
@@ -31,6 +31,19 @@ def test_real_operational_phrases_reach_core():
         assert route.tier == "core", (text, route)
         assert parsed.domain == domain, (text, parsed)
         assert parsed.intent == intent, (text, parsed)
+
+
+def test_fast_path_recognizes_direct_action_families():
+    examples = [
+        "cria um lembrete hoje 9h de encontrar um lugar para armazenar jogos e emuladores",
+        "amanhã tenho que entregar o relatório do estágio",
+        "preciso revisar swagger hoje",
+        "preciso comprar café",
+        "me lembra de comprar café amanhã",
+        "hoje não vou conseguir treinar",
+        "amanhã tenho dentista às 15h",
+    ]
+    for text in examples:
         assert is_core_candidate(text), text
 
 
