@@ -1,5 +1,7 @@
 .env
 .env.generic
+.dev.vars
+cloudflare/.dev.vars
 .venv/
 venv/
 __pycache__/
@@ -7,5 +9,7 @@ __pycache__/
 *.pyo
 *.db
 .pytest_cache/
+.wrangler/
+cloudflare/.wrangler/
 .vscode/
 .idea/

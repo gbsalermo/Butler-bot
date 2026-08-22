@@ -1,0 +1,4 @@
+# Copie para cloudflare/.dev.vars e preencha apenas localmente.
+# Nunca commite o arquivo .dev.vars real.
+TELEGRAM_BOT_TOKEN=COLE_AQUI_O_TOKEN_DO_BOT_DE_TESTE
+TELEGRAM_WEBHOOK_SECRET=troque-por-um-segredo-local
