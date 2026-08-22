@@ -102,7 +102,7 @@ preciso comprar café
 me lembra de comprar café amanhã às 18h
 segunda eu não vou pra Sistemas Digitais I
 hoje não vou conseguir treinar
-ameanhã tenho dentista às 15h
+amanhã tenho dentista às 15h
 gastei 27 reais no almoço
 ```
 
