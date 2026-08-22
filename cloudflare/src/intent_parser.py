@@ -46,16 +46,21 @@ PATTERNS=(
         r"prova de (?P<target>.+)",
     ),82),
 
-    # Tarefas / lembretes
+    # Tarefas / lembretes. Pedidos explícitos de lembrete ficam antes de qualquer
+    # domínio citado no conteúdo ("me lembra de comprar café" continua tarefa).
     ("task_reminder","tasks",(
         r"me lembra(?: de)? (?P<target>.+)",
         r"me lembre(?: de)? (?P<target>.+)",
         r"nao posso esquecer(?: de)? (?P<target>.+)",
+        r"(?:cria|crie|faz|faca|anota|anote|coloca|coloque|adiciona|adicione|bota|marca|marque)\s+(?:ai\s+)?(?:um\s+|uma\s+)?lembrete\s*(?:de\s+|pra\s+|para\s+)?(?P<target>.+)",
     ),96),
     ("task_create","tasks",(
         r"(?:tenho|preciso) (?:que|de)? ?fazer (?P<target>.+)",
         r"anota(?: pra mim| para mim)? (?P<target>.+)",
         r"cria(?: uma)? tarefa(?: pra| para)? (?P<target>.+)",
+        # Família de ações cotidianas/profissionais claras. Evita um "preciso"
+        # genérico disputar mercado, compromisso ou conversa casual.
+        r"(?:tenho que|tenho de|preciso) (?P<target>(?:entregar|enviar|mandar|revisar|estudar|terminar|finalizar|resolver|ligar|buscar|levar|organizar|preparar|preencher|responder|fazer)\b.+)",
     ),84),
     ("task_complete","tasks",(
         r"(?:ja fiz|terminei|conclui) (?P<target>.+)",
@@ -80,7 +85,7 @@ PATTERNS=(
     ),82),
     ("appointment_create","appointments",(
         r"(?:marca|marque|agenda|agende) (?P<target>.+)",
-        r"tenho (?:dentista|consulta|reuniao|reunião|compromisso) (?P<target>.+)",
+        r"tenho (?:dentista|consulta|reuniao|reunião|compromisso|entrevista) (?P<target>.+)",
     ),84),
 
     # Finanças
