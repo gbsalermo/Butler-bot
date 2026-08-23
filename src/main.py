@@ -1,3 +1,15 @@
+"""Entrypoint LEGADO do Butler pessoal em polling + SQLite.
+
+Este arquivo não é usado pelo deploy Cloudflare da ``main``. Ele permanece como
+referência/fallback da implementação anterior baseada em ``python-telegram-bot``.
+
+Produção atual:
+    cloudflare/src/worker.py -> cloudflare/src/entry.py
+
+Não aplique correções de produção somente aqui esperando efeito no bot
+implantado. Veja ``src/README.md`` e ``docs/ARCHITECTURE.md``.
+"""
+
 import logging
 
 from telegram.ext import ApplicationBuilder
@@ -38,13 +50,28 @@ from src.wellbeing_handlers import register_wellbeing_handlers
 
 
 def main() -> None:
+    """Inicializa o banco local, registra handlers e inicia long polling."""
     validate_config()
-    init_database(); init_daily_store(); init_home_tables(); init_assistant_state(); init_finance_tables(); init_natural_tables(); init_protocol_mass_tables()
-    seed_default_schedule(); apply_layout_overrides()
 
-    logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+    # O bootstrap é específico do runtime SQLite legado; o Worker usa D1.
+    init_database()
+    init_daily_store()
+    init_home_tables()
+    init_assistant_state()
+    init_finance_tables()
+    init_natural_tables()
+    init_protocol_mass_tables()
+    seed_default_schedule()
+    apply_layout_overrides()
+
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO,
+    )
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
+    # Em python-telegram-bot a ordem de registro também afeta quem recebe uma
+    # atualização primeiro. Esta ordem é histórica do runtime legado.
     register_pending_followup_guard(application)
     register_onboarding(application)
     register_schedule_import(application)
@@ -70,8 +97,9 @@ def main() -> None:
     register_casual_handlers(application)
     register_scheduler(application)
 
-    print("Butler pessoal iniciado em polling.")
+    print("Butler pessoal iniciado em polling (runtime legado).")
     application.run_polling(drop_pending_updates=True)
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()
