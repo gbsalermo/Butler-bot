@@ -1,3 +1,22 @@
+"""Scheduler autoritativo de tarefas, compromissos e lembretes simples.
+
+Chamado por: ``entry.Default.scheduled`` no subsistema ``daily_items``.
+
+Política atual:
+- tarefa: avisa no horário configurado;
+- compromisso: avisa 5 minutos antes;
+- lembrete simples: avisa no horário, aceitando no máximo 2 minutos de atraso;
+- ``notification_log`` impede duplicidade;
+- Day-off bloqueia itens normais, mas lembrete pessoal simples continua válido.
+
+Este módulo também grava chaves do scheduler legado para impedir que
+``app.scheduled_tick`` envie a mesma obrigação por regras antigas.
+
+Atenção: ``scheduled_delivery_guard.install()`` substitui o canal
+``quality_patch.send_message`` usado aqui por um proxy que exige confirmação
+real da Telegram Bot API. Não remova essa relação sem revisar idempotência.
+"""
+
 from datetime import datetime, timedelta, timezone
 
 import conversation_layer
@@ -6,12 +25,16 @@ from maintenance import run_maintenance
 from settings import UTC_OFFSET_HOURS
 
 LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
+
+# Janela para compromissos comuns quando o cron atrasou um pouco. Tarefas
+# continuam pendentes e podem ser avisadas depois; lembretes simples são mais
+# estritos porque um aviso pontual perde utilidade rapidamente.
 GRACE_MINUTES = 10
-# Lembrete pessoal só é útil perto do horário pedido. Nunca enviar 20, 40 ou 70 min depois.
 STRICT_REMINDER_DELAY_MINUTES = 2
 
 
 def _row(row, key, default=None):
+    """Compatibilidade entre objetos D1/Pyodide e dicts usados em testes."""
     if row is None:
         return default
     try:
@@ -24,6 +47,7 @@ def _row(row, key, default=None):
 
 
 async def _rows(stmt):
+    """Normaliza o resultado D1 para uma lista Python."""
     result = await stmt.all()
     data = getattr(result, "results", None)
     if data is None:
@@ -39,17 +63,31 @@ def _now():
 
 
 def _inline(rows):
-    return {"inline_keyboard": [[{"text": label, "callback_data": data} for label, data in row] for row in rows]}
+    return {
+        "inline_keyboard": [
+            [{"text": label, "callback_data": data} for label, data in row]
+            for row in rows
+        ]
+    }
 
 
 async def _suppress_legacy_item_scheduler(db, uid, iid, today, due, kind):
+    """Marca antecipadamente a chave que o scheduler antigo tentaria usar.
+
+    O ``app.scheduled_tick`` ainda roda no fim do cron por compatibilidade. Sem
+    esta chave, o mesmo item poderia receber dois avisos com políticas diferentes.
+    """
     legacy_advance = 10 if kind == "compromisso" else 0
     legacy_target = due - timedelta(minutes=legacy_advance)
     legacy_key = f"item:{iid}:{today}:{legacy_target.strftime('%H:%M')}"
-    await db.prepare("INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)").bind(uid, legacy_key).run()
+    await db.prepare(
+        "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
+    ).bind(uid, legacy_key).run()
 
 
 async def dispatch_due_reminders(db, token):
+    """Entrega os itens temporais de todos os usuários de forma idempotente."""
+    # Manutenção é útil, mas não deve impedir a entrega de lembretes se falhar.
     try:
         await run_maintenance(db, token)
     except Exception as exc:
@@ -57,53 +95,131 @@ async def dispatch_due_reminders(db, token):
 
     now = _now()
     today = now.date()
-    users = await _rows(db.prepare("SELECT u.id,u.telegram_chat_id,COALESCE(a.day_off,0) day_off FROM users u LEFT JOIN assistant_state a ON a.user_id=u.id"))
+    users = await _rows(
+        db.prepare(
+            "SELECT u.id,u.telegram_chat_id,COALESCE(a.day_off,0) day_off "
+            "FROM users u LEFT JOIN assistant_state a ON a.user_id=u.id"
+        )
+    )
 
     for user in users:
-        uid = int(_row(user, "id")); chat = int(_row(user, "telegram_chat_id")); day_off = bool(int(_row(user, "day_off", 0)))
-        items = await _rows(db.prepare("SELECT id,kind,title,details,due_time FROM daily_items WHERE user_id=? AND status='pendente' AND due_date=? AND due_time IS NOT NULL").bind(uid, today.isoformat()))
+        uid = int(_row(user, "id"))
+        chat = int(_row(user, "telegram_chat_id"))
+        day_off = bool(int(_row(user, "day_off", 0)))
+
+        items = await _rows(
+            db.prepare(
+                "SELECT id,kind,title,details,due_time FROM daily_items "
+                "WHERE user_id=? AND status='pendente' AND due_date=? "
+                "AND due_time IS NOT NULL"
+            ).bind(uid, today.isoformat())
+        )
 
         for item in items:
-            iid = int(_row(item, "id")); kind = _row(item, "kind"); details = _row(item, "details") or ""
-            if details.startswith("exam:"): continue
+            iid = int(_row(item, "id"))
+            kind = _row(item, "kind")
+            details = _row(item, "details") or ""
+
+            # Provas têm política própria em reliable_exam_reminders.
+            if details.startswith("exam:"):
+                continue
+
             simple = details == "simple_reminder"
-            try: h, m = map(int, _row(item, "due_time").split(":"))
-            except Exception: continue
-            due = datetime.combine(today, datetime.min.time()).replace(hour=h, minute=m, tzinfo=LOCAL_TZ)
+            try:
+                h, m = map(int, _row(item, "due_time").split(":"))
+            except Exception:
+                # Item temporal inválido não pode derrubar o cron inteiro.
+                continue
+
+            due = datetime.combine(today, datetime.min.time()).replace(
+                hour=h,
+                minute=m,
+                tzinfo=LOCAL_TZ,
+            )
+
+            # Sempre neutraliza a chave antiga antes de decidir o envio novo.
             await _suppress_legacy_item_scheduler(db, uid, iid, today, due, kind)
-            if day_off and not simple: continue
+
+            # Lembrete pessoal explícito é tratado como pedido pontual do usuário;
+            # os demais itens respeitam Day-off.
+            if day_off and not simple:
+                continue
+
             advance = 5 if (kind == "compromisso" and not simple) else 0
             desired = due - timedelta(minutes=advance)
             late = now - desired
-            if late.total_seconds() < 0: continue
+            if late.total_seconds() < 0:
+                continue
 
             is_task = kind == "tarefa"
-            # Lembretes simples são estritos: depois de 2 min o aviso perdeu a utilidade.
-            # Não registramos como entregue; o diagnóstico pode mostrar que o horário foi perdido.
+
+            # Um lembrete simples chegando muito depois do horário é mais ruído do
+            # que ajuda. Não gravamos como entregue, permitindo diagnóstico posterior.
             if simple and late > timedelta(minutes=STRICT_REMINDER_DELAY_MINUTES):
                 continue
+
+            # Compromisso atrasado além da janela também é suprimido. Tarefa não:
+            # ela continua pendente até o usuário concluir/cancelar.
             if not simple and not is_task and late > timedelta(minutes=GRACE_MINUTES):
                 continue
 
             key = f"item:new:{iid}:{today}:{desired.strftime('%H:%M')}"
-            exists = await db.prepare("SELECT id FROM notification_log WHERE user_id=? AND notification_key=?").bind(uid, key).first()
-            if exists: continue
+            exists = await db.prepare(
+                "SELECT id FROM notification_log WHERE user_id=? AND notification_key=?"
+            ).bind(uid, key).first()
+            if exists:
+                continue
 
             if simple:
                 markup = _inline([[("👌 Entendi", f"item:done:{iid}")]])
                 text = f"🔔 {_row(item,'title')} — {_row(item,'due_time')}. Só um aviso."
             elif is_task:
-                markup = _inline([[("✅ Feito", f"item:done:{iid}"), ("⏰ +30 min", f"item:snooze:{iid}:30")],[("🚫 Cancelar", f"item:cancel:{iid}")]])
+                markup = _inline(
+                    [
+                        [
+                            ("✅ Feito", f"item:done:{iid}"),
+                            ("⏰ +30 min", f"item:snooze:{iid}:30"),
+                        ],
+                        [("🚫 Cancelar", f"item:cancel:{iid}")],
+                    ]
+                )
                 if late > timedelta(minutes=2):
-                    minutes = max(1, int(late.total_seconds() // 60)); text = f"✅ {_row(item,'title')} — era para {_row(item,'due_time')}. O aviso atrasou {minutes} min, mas a tarefa continua pendente até você concluir ou cancelar."
+                    minutes = max(1, int(late.total_seconds() // 60))
+                    text = (
+                        f"✅ {_row(item,'title')} — era para {_row(item,'due_time')}. "
+                        f"O aviso atrasou {minutes} min, mas a tarefa continua pendente "
+                        "até você concluir ou cancelar."
+                    )
                 else:
-                    text = f"✅ {_row(item,'title')} — {_row(item,'due_time')}. Chegou a hora. Agora a tarefa saiu oficialmente da categoria 'problema do eu do futuro'. 😏"
+                    text = (
+                        f"✅ {_row(item,'title')} — {_row(item,'due_time')}. Chegou a hora. "
+                        "Agora a tarefa saiu oficialmente da categoria 'problema do eu do futuro'. 😏"
+                    )
             else:
-                markup = _inline([[("👌 Ciente", f"item:done:{iid}"), ("⏰ +30 min", f"item:snooze:{iid}:30")]])
+                markup = _inline(
+                    [[("👌 Ciente", f"item:done:{iid}"), ("⏰ +30 min", f"item:snooze:{iid}:30")]]
+                )
                 text = f"📅 {_row(item,'title')} às {_row(item,'due_time')}. Faltam 5 minutos. Se organize."
 
-            await conversation_layer._remember(db, uid, "lembrete" if simple else kind, iid)
+            # Mantém referência operacional para callbacks/follow-ups curtos.
+            await conversation_layer._remember(
+                db,
+                uid,
+                "lembrete" if simple else kind,
+                iid,
+            )
+
+            # Em produção, scheduled_delivery_guard troca este sender por um
+            # wrapper que levanta erro quando Telegram não confirma a entrega.
             await quality_patch.send_message(token, chat, text, reply_markup=markup)
-            await db.prepare("INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)").bind(uid, key).run()
+
+            # Só chega aqui após o sender crítico retornar com sucesso.
+            await db.prepare(
+                "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
+            ).bind(uid, key).run()
+
+            # Lembrete simples é um evento de aviso, não uma tarefa persistente.
             if simple:
-                await db.prepare("UPDATE daily_items SET status='concluido',completed_at=CURRENT_TIMESTAMP WHERE id=?").bind(iid).run()
+                await db.prepare(
+                    "UPDATE daily_items SET status='concluido',completed_at=CURRENT_TIMESTAMP WHERE id=?"
+                ).bind(iid).run()
