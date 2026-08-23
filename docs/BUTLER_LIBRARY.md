@@ -1,82 +1,109 @@
 # Butler Library
 
-## Objetivo
+> **Status atual:** arquitetura e acervo preservados. O dispatcher genérico da Library **não está habilitado no webhook operacional de produção**. Para o fluxo ativo, consulte `docs/ARCHITECTURE.md` e `cloudflare/src/entry.py`.
 
-A Butler Library é a camada global de conhecimento do bot. Ela existe para evitar transformar exemplos do usuário em regras individuais de código.
+## Objetivo original e ainda válido
 
-Exemplos como `Walter White`, `Spinoza`, `strogonoff`, `parmegiana` e `Pokémon FireRed` devem ser tratados como dados/fontes de um domínio, não como funcionalidades isoladas.
+A Butler Library foi criada como camada global de conhecimento para evitar transformar cada exemplo em um `if` de código.
 
-## Separação de responsabilidades
+Entidades como personagens, filósofos, receitas, jogos e livros devem preferencialmente existir como dados/metadata de um domínio, e não como nova funcionalidade isolada.
 
-- **Butler Core:** tarefas, agenda, rotinas, mercado, treino, finanças e demais operações determinísticas.
-- **Memória pessoal:** entidades e fatos privados, sempre isolados por `user_id`.
-- **Butler Library:** conhecimento global compartilhado entre usuários.
-- **Contexto da biblioteca:** últimos assuntos consultados por cada usuário, persistidos em `natural_events` e filtrados por `user_id`.
+## Separação conceitual
 
-## Estrutura atual
+- **Butler Core:** operações determinísticas — tarefas, agenda, mercado, treino, rotinas, metas etc.;
+- **memória pessoal:** fatos privados, sempre isolados por usuário;
+- **Butler Library:** conhecimento global compartilhável;
+- **contexto da Library:** continuidade curta das consultas daquele usuário.
+
+Essa separação continua sendo uma boa direção arquitetural caso a Library seja reativada.
+
+## Estrutura preservada
+
+Os principais arquivos permanecem no repositório:
 
 ```text
 cloudflare/src/
   butler_library.py
+  cooking_library.py
+  library_catalog_handler.py
+  library_context_bridge.py
+  library_index.py
+  library_recipe_queries.py
   knowledge/
-    __init__.py
+    books.py
+    brazilian_traditional_foods.py
     cooking.py
-    pop_culture.py
-    philosophy.py
+    cooking_books.py
+    cooking_pasta.py
     games.py
+    library_manifest.py
+    meat_cuts.py
+    philosophy.py
+    pop_culture.py
+    portuguese_conversation.py
 ```
 
-Novos domínios devem preferencialmente entrar em `knowledge/` e ser recuperados pelo roteador, em vez de criar novo `if` no dispatcher principal.
+O mapa completo está em `cloudflare/src/README.md`.
 
-## Recuperação
+## Estado no runtime atual
 
-A primeira versão usa aliases, normalização de português e intenção textual. Não há LLM nem embeddings.
+O `/health` da produção declara explicitamente o dispatcher genérico da Library e o background cultural como desabilitados.
 
-O roteador consegue:
+Isso significa que:
 
-- localizar receitas por aliases;
-- localizar séries/personagens e devolver resumo ou detalhe;
-- localizar filósofos por diferentes formas de pergunta;
-- executar geradores determinísticos apoiados por dados da biblioteca, como times de Pokémon FireRed.
+- editar uma entrada em `knowledge/` não garante que o webhook a responderá;
+- `library_catalog_handler.py` não deve ser tratado como fallback final de produção hoje;
+- testes de `library_index.py` preservam a qualidade do acervo, mas não provam integração com `entry.py`;
+- uma futura reativação precisa escolher posição e precedência no dispatcher.
 
-## Contexto e continuidade
+## Recuperação preservada
 
-Ao responder uma entrada, o Butler persiste `library_context` por usuário.
+A implementação existente usa normalização, aliases, tags e metadata. Não depende de LLM ou embeddings.
 
-Isso permite fluxos como:
+O desenho permite:
+
+- busca de receitas e ingredientes;
+- busca de jogos;
+- filmes, séries e personagens;
+- livros/literatura;
+- filosofia;
+- conhecimento culinário estruturado.
+
+## Contexto preservado
+
+A arquitetura anterior conseguia registrar assuntos recentes e continuar diálogos como:
 
 ```text
-usuário: me passa uma receita de bolo
-Butler: [consulta cooking.py e responde]
-usuário: não tenho leite
-Butler: quer que eu coloque leite na lista de itens faltando?
-usuário: pode
-Core: grava no mercado
+receita de bolo
+→ não tenho leite
 ```
 
-Ou:
+ou:
 
 ```text
-usuário: me fala de Supernatural
-Butler: [consulta pop_culture.py]
-usuário: quero assistir ela toda
-Butler: posso criar uma rotina diária; que horas?
-usuário: 20h
-Butler: confirma rotina diária às 20h?
-usuário: pode
-Core: cria a rotina
+me fala de uma série
+→ quero assistir ela toda
 ```
+
+Essa continuidade deve continuar obedecendo a uma regra se for reativada:
+
+```text
+mensagem explícita atual > contexto antigo
+```
+
+Uma consulta cultural nunca pode sequestrar uma tarefa, compromisso, ausência acadêmica ou outra operação clara do Core.
 
 ## Regra de escrita
 
-A biblioteca nunca escreve diretamente por sugestão implícita.
+A Library não deve ganhar autoridade para escrever silenciosamente no Core.
 
-Ações propostas são persistidas como `library_pending`; somente uma confirmação explícita executa o Core.
+Se for reativada:
 
-Ações iniciais:
-
-- `grocery_add`;
-- `routine_create`.
+- consulta pode responder;
+- comentário pode gerar proposta;
+- ação derivada precisa de confirmação quando não foi pedida explicitamente;
+- escrita confirmada deve passar por uma API/gateway do domínio correspondente;
+- toda escrita deve ser limitada ao usuário correto.
 
 ## Dados e direitos autorais
 
@@ -88,14 +115,24 @@ Preferir:
 - fontes abertas/licenciadas;
 - documentos fornecidos pelo usuário quando apropriado.
 
-Não copiar livros, revistas, guias ou obras protegidas integralmente para o repositório sem autorização/licença adequada.
+Não armazenar obras comerciais completas sem autorização/licença.
 
-## Evolução recomendada
+## Como reativar com segurança
 
-1. ampliar os domínios e aliases de forma curada;
-2. criar importadores de documentos/dados abertos;
-3. adicionar busca por tags/tokens quando o catálogo crescer;
-4. manter o contexto recente no D1;
-5. somente considerar embeddings/LLM local quando a recuperação determinística deixar de ser suficiente.
+Uma reativação futura deve ser um trabalho explícito, não um import casual. Checklist:
 
-Se uma LLM local for retomada futuramente, ela deve receber os trechos recuperados pela Butler Library e continuar sem autoridade direta sobre o Core.
+1. definir quais domínios entram primeiro;
+2. definir em que ponto de `entry.py` a Library roda;
+3. garantir que Core/fast paths tenham prioridade;
+4. decidir política de contexto e expiração;
+5. garantir isolamento de qualquer contexto pessoal;
+6. conectar escritas somente por gateways do Core;
+7. adicionar testes do dispatcher final, não apenas do índice;
+8. atualizar flags do `/health`;
+9. atualizar README/arquitetura.
+
+## Direção recomendada
+
+Não ampliar o catálogo apenas porque o arquivo existe. Primeiro decidir se a Library voltará ao runtime de produção e em qual escopo.
+
+Quando voltar, a prioridade deve ser recuperação orientada a dados e cobertura de integração, evitando o retorno de uma cadeia de `if`s por exemplo.
