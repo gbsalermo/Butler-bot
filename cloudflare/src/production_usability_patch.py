@@ -1,6 +1,15 @@
+"""Ajustes de usabilidade de produção e lista persistente Ler/Ver Depois.
+
+Chamado diretamente por ``entry.py`` antes do Core. A função ``install`` roda
+por último na sequência de instalação atual; por isso ela NÃO deve recriar menus
+operacionais com uma definição própria. Menus são autoritativos em
+``operational_menu.py`` e aqui apenas sincronizamos ``app`` com essa fonte.
+"""
+
 import json
 
 import app
+import operational_menu
 from nlu import parse_date, parse_time, validate_future
 from telegram_api import send_message
 
@@ -36,6 +45,7 @@ async def _send(token, chat_id, text, rows=None):
 
 
 async def ensure_schema(db):
+    """Garante defensivamente a tabela da lista; migration formal é preferível."""
     await db.prepare(
         """CREATE TABLE IF NOT EXISTS later_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,21 +64,14 @@ async def ensure_schema(db):
 
 
 def install():
-    # Produção usa app.MAIN_KB diretamente. Day-off fica por último para evitar toque acidental.
-    app.MAIN_KB = [
-        ["➕ Adicionar", "🗓️ Hoje"],
-        ["🛒 Item faltando", "📚 Matérias"],
-        ["🏠 Cotidiano", "🏋️ Musculação"],
-        ["🌙 Day-off"],
-    ]
-    app.COTIDIANO_KB = [
-        ["✅ Tarefas", "📅 Compromissos"],
-        ["🛒 O que está faltando?", "➕ Item faltando"],
-        ["📌 Ler/ver depois", "🎯 Metas"],
-        ["🧘 Rotinas", "💰 Finanças"],
-        ["👤 Como me chamar"],
-        ["🏠 Menu principal"],
-    ]
+    """Sincroniza os fallbacks de ``app`` com o menu operacional autoritativo.
+
+    Antes desta auditoria este patch reconstruía ``COTIDIANO_KB`` e reintroduzia
+    Finanças ao voltar da lista Ler/Ver Depois, apesar de o menu operacional e o
+    ``/health`` declararem Finanças ocultas da navegação primária.
+    """
+    app.MAIN_KB = [list(row) for row in operational_menu.MAIN_KB]
+    app.COTIDIANO_KB = [list(row) for row in operational_menu.COTIDIANO_KB]
 
 
 async def _resolve_user(db, chat_id):
@@ -100,6 +103,7 @@ async def _handle_reminder_followup(db, token, chat_id, uid, text, state, payloa
         d_raw = payload.get("due_date")
         try:
             from datetime import date
+
             d = date.fromisoformat(d_raw) if d_raw else None
         except Exception:
             d = None
@@ -196,7 +200,9 @@ async def _handle_later_state(db, token, chat_id, uid, text, state, payload):
         if not raw.isdigit():
             await _send(token, chat_id, "Digite somente o número do item.", CANCEL_KB)
             return True
-        row = await db.prepare("SELECT id,name,category,custom_category FROM later_items WHERE user_id=? AND id=?").bind(uid, int(raw)).first()
+        row = await db.prepare(
+            "SELECT id,name,category,custom_category FROM later_items WHERE user_id=? AND id=?"
+        ).bind(uid, int(raw)).first()
         if not row:
             await _send(token, chat_id, "Não encontrei esse item.", CANCEL_KB)
             return True
@@ -205,7 +211,11 @@ async def _handle_later_state(db, token, chat_id, uid, text, state, payload):
             await app.clear_state(db, uid)
             await _send(token, chat_id, f"🗑️ {_rowget(row, 'name')} removido da lista.", LATER_KB)
             return True
-        payload = {"id": int(raw), "category": _rowget(row, "category"), "custom_category": _rowget(row, "custom_category")}
+        payload = {
+            "id": int(raw),
+            "category": _rowget(row, "category"),
+            "custom_category": _rowget(row, "custom_category"),
+        }
         await app.set_state(db, uid, "later_edit_name", payload)
         await _send(token, chat_id, f"Novo nome para {_rowget(row, 'name')}?", CANCEL_KB)
         return True
@@ -215,7 +225,9 @@ async def _handle_later_state(db, token, chat_id, uid, text, state, payload):
         if not name:
             await _send(token, chat_id, "Informe um nome válido.", CANCEL_KB)
             return True
-        await db.prepare("UPDATE later_items SET name=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?").bind(name, uid, payload["id"]).run()
+        await db.prepare(
+            "UPDATE later_items SET name=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND id=?"
+        ).bind(name, uid, payload["id"]).run()
         await app.clear_state(db, uid)
         await _send(token, chat_id, "✅ Item atualizado.", LATER_KB)
         return True
@@ -241,9 +253,15 @@ async def handle_message(db, token, message):
         return True
 
     if text == "📌 Ler/ver depois":
-        await _send(token, chat_id, "📌 Ler/ver depois\n\nUma lista simples para guardar coisas que você quer ler ou ver mais tarde.", LATER_KB)
+        await _send(
+            token,
+            chat_id,
+            "📌 Ler/ver depois\n\nUma lista simples para guardar coisas que você quer ler ou ver mais tarde.",
+            LATER_KB,
+        )
         return True
     if text == "⬅️ Voltar ao cotidiano":
+        # Usa app.COTIDIANO_KB, sincronizado no install() com operational_menu.
         await _send(token, chat_id, "🏠 Cotidiano", app.COTIDIANO_KB)
         return True
     if text == "➕ Adicionar à lista":
