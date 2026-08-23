@@ -1,4 +1,21 @@
+"""Helper idempotente de schema preservado para compatibilidade/manutenção.
+
+Importante: o dispatcher de produção atual NÃO chama ``ensure_runtime_schema``
+como bootstrap geral. A fonte formal de evolução do D1 são as migrations em
+``cloudflare/migrations``.
+
+Use este helper apenas quando um fluxo de manutenção explícito precisar garantir
+as tabelas históricas abaixo. Adicionar uma tabela somente aqui não significa que
+ela será criada automaticamente em produção.
+"""
+
+
 async def ensure_runtime_schema(db):
+    """Garante um subconjunto histórico de tabelas incrementais.
+
+    Esta função é idempotente e segura para chamadas explícitas, mas não é um
+    catálogo completo do banco. Mudanças de schema novas devem receber migration.
+    """
     statements = [
         """CREATE TABLE IF NOT EXISTS user_sessions (
             user_id INTEGER PRIMARY KEY,
