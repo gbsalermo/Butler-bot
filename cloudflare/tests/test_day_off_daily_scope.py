@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -64,7 +65,7 @@ class _DB:
         return _Statement(self, sql)
 
 
-async def test_expire_stale_day_offs_clears_previous_day_and_keeps_today():
+def test_expire_stale_day_offs_clears_previous_day_and_keeps_today():
     db = _DB(
         [
             {"user_id": 1, "day_off": 1, "updated_at": "2026-08-22 15:00:00"},
@@ -73,7 +74,9 @@ async def test_expire_stale_day_offs_clears_previous_day_and_keeps_today():
         ]
     )
 
-    expired = await expire_stale_day_offs(db, now=local_dt(2026, 8, 23, 13))
+    expired = asyncio.run(
+        expire_stale_day_offs(db, now=local_dt(2026, 8, 23, 13))
+    )
 
     assert expired == 1
     assert db.rows[0]["day_off"] == 0
