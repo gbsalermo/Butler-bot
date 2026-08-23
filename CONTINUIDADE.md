@@ -1,227 +1,314 @@
 # Continuidade do desenvolvimento — Butler
 
-> Consolidado em agosto/2026. Este documento registra decisões arquiteturais que devem sobreviver às próximas expansões.
+> Documento de decisões duradouras e contexto histórico. Para saber **o que a produção executa hoje**, use `docs/ARCHITECTURE.md` como fonte de verdade e confirme o dispatcher em `cloudflare/src/entry.py`.
 
-## 1. Objetivo
+## 1. Objetivo permanente
 
-Butler é um assistente pessoal via Telegram. Não deve ser apenas CRUD/menu nem tentar ser IA geral. O objetivo é unir organização cotidiana, memória contextual, conversa familiar e conhecimento útil, mantendo operações críticas determinísticas.
+Butler é um assistente pessoal via Telegram. Não deve virar apenas um CRUD com botões nem uma coleção de respostas soltas.
 
-Princípios permanentes:
+Princípios que permanecem válidos independentemente da implementação:
 
-1. Core funcional é autoridade;
-2. texto natural e botões convivem;
-3. comentário não precisa virar produtividade;
-4. problemas podem gerar sugestões, nunca escrita silenciosa;
-5. ambiguidade de escrita exige confirmação;
-6. não inventar presença, conclusão, treino, gasto, compromisso ou memória;
-7. cada usuário possui dados, memória e contexto isolados;
-8. conhecimento global pertence à Library, não à memória pessoal;
-9. Library/background são extras opcionais;
-10. exemplos novos alimentam domínios reutilizáveis, não `if`s individuais.
+1. operações críticas são determinísticas;
+2. ação explícita do usuário tem prioridade sobre contexto antigo;
+3. o sistema não inventa presença, conclusão, gasto, compromisso, treino ou memória;
+4. dados e estado são isolados por usuário;
+5. ambiguidade de escrita deve ser tratada conservadoramente;
+6. botões e texto natural podem coexistir;
+7. contexto ajuda, mas não deve sequestrar uma mudança explícita de assunto;
+8. comportamento novo precisa de regressão;
+9. não criar uma camada nova quando o módulo dono já pode resolver o problema;
+10. documentação deve distinguir código ativo de código preservado.
 
-## 2. Arquitetura oficial de linguagem
+## 2. Runtime oficial atual
 
-A `main` usa Cloudflare Worker + Telegram webhook + D1. Não há LLM externa ativa.
-
-Fluxo oficial:
+A `main` usa:
 
 ```text
-mensagem
-→ Context Router + Intent Parser
-→ Core funcional
-→ memória/contexto pessoal
-→ sugestões confirmáveis
-→ Library opcional
-→ NLU/conversa/fallback
+Telegram Webhook
+→ Cloudflare Python Worker
+→ D1 / Durable Objects
+→ Telegram Bot API
 ```
 
-Hierarquia obrigatória:
+Entrypoint de deploy:
 
 ```text
-Core > contexto explícito atual > memória > Library > conversa genérica
+cloudflare/src/worker.py
 ```
 
-`context_router.py` classifica domínio, tier, formato, confiança, intenção, alvo e pista temporal. `intent_parser.py` reconhece famílias de intenção. Domínios protegidos incluem matérias/aulas/provas/faltas, tarefas, compromissos/agenda, mercado, musculação, finanças, metas e rotinas.
-
-Regressão proibida: após falar de receita, `queria faltar essa aula de Sistemas Digitais I` jamais pode ser tratado como ingrediente ausente.
-
-## 3. Contexto recente — concluído
-
-`context_memory.py` mantém memória operacional curta por `user_id`, limitada aos poucos tópicos mais recentes. A tabela possui migration D1 `0004_conversation_context.sql` e também está no guard de schema.
-
-`context_sync.py` registra mudanças explícitas e cria barreiras contra contextos opcionais antigos. `library_context_bridge.py` conecta os handlers da Library à mesma memória curta central.
-
-Objetivo prático:
+Dispatcher:
 
 ```text
-receita de carbonara
-não tenho bacon
+cloudflare/src/entry.py
 ```
 
-mantém continuidade, mas:
+O diretório `src/` na raiz é a implementação antiga de polling/SQLite e não governa a produção atual.
+
+## 3. Evolução arquitetural importante
+
+Em uma fase anterior foi construída uma arquitetura estruturada com:
 
 ```text
-receita de carbonara
-queria faltar Sistemas Digitais
+context_router.py
+intent_parser.py
+action_policy.py
+context_memory.py
+suggestion_engine.py
+Butler Library
 ```
 
-muda imediatamente para acadêmico. Contexto antigo nunca tem autoridade sobre uma mudança explícita de assunto.
-
-## 4. Memória pessoal — concluída nesta fase
-
-Memória determinística continua oficial e isolada por `user_id`.
-
-Entidades estruturadas: pets, familiares, amigos/colegas, relacionamentos, veículos e objetos. `personal_profile.py` acrescenta fatos explícitos de preferência: gostos, desgostos, preferências, time e cidade.
-
-`o que você sabe sobre mim?` reúne o mapa pessoal conhecido sem preencher lacunas por inferência.
-
-Regras:
-
-- salvar apenas relações/fatos explicitamente comunicados;
-- permitir correção/exclusão;
-- não misturar usuários;
-- memória pessoal não sequestra entidade cultural composta (`Jake` × `Jake Peralta`).
-
-## 5. Linguagem natural — concluída como camada estrutural
-
-`knowledge/portuguese_conversation.py` é background não respondente. `language_context.py` normaliza fala informal. `intent_parser.py` extrai intenção + domínio + alvo + tempo quando houver sinal suficiente.
-
-Famílias atuais cobrem acadêmico, tarefas/lembretes, mercado, agenda/compromissos, musculação, finanças, rotinas e consultas principais da Library.
-
-Exemplo de convergência:
+A intenção era:
 
 ```text
-segunda eu não vou pra Sistemas
-segunda quero faltar Sistemas
-vou matar Sistemas segunda
+Core
+> contexto explícito
+> memória
+> sugestões
+> Library
+> conversa genérica
 ```
 
-→ mesma família de ausência acadêmica. Validação e escrita continuam no módulo funcional correspondente.
+Essa direção continua conceitualmente útil e o código foi preservado, porém **o dispatcher operacional atual não usa essa pilha como roteador central**.
 
-## 6. Política conversa × ação × sugestão — concluída
+A produção passou a privilegiar:
 
-`action_policy.py` formaliza:
+- handlers explícitos e ordenados;
+- fast paths conservadores;
+- estados guiados;
+- módulos autoritativos por domínio;
+- fallback estreito.
+
+O `/health` atual registra NLU ampla, Library genérica, sugestões transversais genéricas e memória pessoal genérica como desabilitadas.
+
+### Regra de continuidade
+
+Nunca reative uma camada preservada apenas importando o módulo. Reativação precisa definir:
+
+- posição no dispatcher;
+- precedência contra o Core;
+- política de escrita;
+- isolamento por usuário;
+- testes do fluxo final;
+- flags coerentes no `/health`.
+
+## 4. Core operacional atual
+
+Continuam ativos ou preservados no Core de produção:
+
+- tarefas e pendências;
+- compromissos e agenda;
+- lembretes;
+- matérias, grade, provas, presença e faltas;
+- mercado/lista de itens faltando;
+- rotinas;
+- metas;
+- musculação;
+- Ler/Ver Depois;
+- finanças;
+- Day-off;
+- resumos e schedulers.
+
+A autoridade exata por domínio está mapeada em `cloudflare/src/README.md`.
+
+## 5. Política de conversa × ação
+
+A intenção histórica era distinguir:
 
 ```text
 comentário → conversa
-pedido explícito → ação pelo Core
-problema/necessidade → ajuda + possível sugestão
-ação implícita/derivada → confirmação antes de escrita
+pedido explícito → ação
+problema → ajuda/sugestão
+ambiguidade → confirmação
 ```
 
-Exemplo consolidado:
+No runtime atual essa política não é aplicada por `action_policy.py` globalmente. Ela é implementada de forma distribuída nos handlers ativos.
 
-- `comprar café` / `bota café na lista` → comando de mercado;
-- `acabou o café` / `tô sem café` → problema; Butler oferece salvar e espera confirmação;
-- `tô cansado` → conversa, não tarefa automática.
+### Exemplo importante: mercado
 
-`grocery_phrase_patch.py` foi ajustado para não gravar relatos de falta doméstica como se fossem comandos.
-
-## 7. Sugestões transversais — concluídas como mecanismo
-
-`suggestion_engine.py` centraliza sugestões genéricas e usa estado por usuário. Escritas confirmadas passam por `core_actions.py`.
-
-Fluxos atuais incluem:
-
-- item doméstico acabou → sugerir mercado;
-- pet conhecido sem ração → resolver pet pela memória e sugerir mercado;
-- ingrediente ausente → sugerir mercado;
-- série longa → sugerir rotina;
-- duas provas próximas/no mesmo dia → sugerir plano acadêmico.
-
-`study_plan_flow.py` tornou o fluxo de duas provas multiusuário: recebe data, identifica duas matérias do próprio usuário, apresenta proposta e, após confirmação, cadastra provas ausentes e distribui tarefas de teoria/resumo, exercícios e revisão.
-
-Nenhuma dessas sugestões deve gravar dados antes da confirmação quando nasceu de comentário/problema.
-
-## 8. Gateway do Core
-
-`core_actions.py` centraliza escritas disparadas por camadas auxiliares:
-
-- adicionar itens de mercado;
-- criar rotina;
-- criar tarefa.
-
-`butler_library.py`, contexto de pets e suggestion engine foram migrados para esse gateway. A regra `Library sugere, Core escreve` agora existe no código, não só na documentação.
-
-## 9. Butler Library — consolidada como acervo orientado a dados
-
-Library é conhecimento global compartilhado e opcional.
-
-`knowledge/library_manifest.py` documenta os acervos. `library_index.py` normaliza jogos, filmes/séries/personagens, livros e filosofia em records pesquisáveis por nome, aliases, tags, gênero, autor, resumo e metadados. `library_catalog_handler.py` oferece fallback genérico para variações que não justificam lógica própria.
-
-Acervos atuais:
-
-- culinária estruturada por áreas/livros, incluindo cozinha brasileira tradicional e cortes;
-- jogos + Pokémon FireRed;
-- filmes/séries/cultura pop;
-- livros/filosofia;
-- português informal como background não respondente.
-
-Culinária inclui massas, carnes, salgados, arroz/feijão, legumes, saladas, frango, doces, moquecas, vatapá, baião de dois, acarajé, bobó, feijão tropeiro, galinhada, barreado, cuscuz, caruru, vaca atolada e conhecimento de cortes/preparações bovinas.
-
-Direção: novos conhecimentos entram preferencialmente como dados, tags, aliases ou documentos pesquisáveis. O motor não deve crescer um `if` por exemplo.
-
-Direitos autorais: preferir domínio público, dados abertos/licenciados, documentos próprios e resumos/metadados; não armazenar indiscriminadamente obras comerciais completas.
-
-## 10. Core funcional preservado
-
-Continuam soberanos: tarefas, compromissos, agenda, pendências, matérias/grade, provas/faltas, lembretes, lista de itens faltando, metas/streaks, rotinas, finanças e musculação.
-
-Tarefa vencida não concluída = pendência. Agenda reutiliza fontes reais. Aulas são previstas, não presença presumida. Escritas ambíguas confirmam alvo.
-
-Acadêmico mantém matérias, horários/locais, grade textual, faltas e provas. Sem OCR/Tesseract; correção manual tem prioridade.
-
-Musculação pessoal mantém protocolo de 12 semanas iniciado por `🚀 Começar os trabalhos`, com exercício, substitutos, série/carga/repetições/faltas/evolução. Usuário genérico cadastra treino próprio.
-
-Finanças permanecem simples: entradas, saídas, categorias, relatório mensal, saldo, comparação e alertas básicos.
-
-## 11. Personalidade e cotidiano
-
-Butler aceita saudação, agradecimento, risada, cansaço, fome, desânimo e comentários sem tentar transformar tudo em tarefa. Tom: familiaridade/parceria, humor e gíria quando cabem.
-
-Sarcasmo comportamental só usa histórico real; primeira ocorrência não vira hábito inventado. Day-off reduz cobranças e é isolado por usuário.
-
-## 12. Regressão automática — concluída
-
-Arquivos principais:
+A arquitetura antiga documentava:
 
 ```text
-cloudflare/tests/test_context_router.py
-cloudflare/tests/test_library_index.py
-.github/workflows/butler-regression.yml
+acabou o café
+→ sugerir adicionar
+→ esperar confirmação
 ```
 
-`pyproject.toml` possui configuração de pytest. GitHub Actions compila `cloudflare/src` e executa a suíte a cada alteração relevante.
+O comportamento operacional atual é diferente: `grocery_phrase_patch.py` considera frases claras como `acabou`, `falta` e `tô sem` uma atualização explícita do estado doméstico e grava diretamente na lista.
 
-A suíte cobre dezenas de formulações de acadêmico, tarefas, mercado, agenda, musculação, finanças, rotina, culinária, jogos, livros, filmes/séries, cultura e conversa.
+Essa divergência foi mantida na auditoria porque mudar política de negócio silenciosamente seria arriscado. Se a intenção voltar a ser “sugerir e confirmar”, faça isso em uma mudança funcional separada com testes.
 
-O próprio CI já encontrou uma colisão real: busca de livros recebia resultados irrelevantes para `oi butler` porque o bônus de domínio era aplicado sem evidência semântica. `library_index.py` foi corrigido para exigir match antes de aplicar bônus.
+## 6. Contexto atual
 
-Testes futuros devem priorizar sequências completas e dois `chat_id` diferentes para validar isolamento.
+Há duas formas de contexto no repositório.
 
-## 13. Experimento LLM — decisão preservada
+### Contexto operacional ativo
 
-Workers AI foi testada como camada de linguagem/persona/memória/sugestão, mantendo Core determinístico, mas apresentou integração/fallback/latência inadequados. Foi removida da `main`.
+`conversation_layer.py` usa `natural_events` para referências recentes, como:
 
-Preservação:
+```text
+concluir essa
+adiar ela
+```
 
-- `archive/llm-experiment` — laboratório;
-- `backup/nlu-only` — referência pré-LLM.
+Estados de wizard ficam principalmente em `user_sessions`.
 
-Possibilidade futura: LLM local/privada em serviço/container, somente para linguagem/contexto. Core valida ações; memória oficial pertence ao Butler; nenhuma escrita direta pelo modelo.
+### Contexto estruturado preservado
 
-## 14. As sete prioridades de refinamento — estado final desta etapa
+`context_memory.py` e `context_sync.py` mantêm a arquitetura experimental de tópicos recentes por usuário. A migration `0004_conversation_context.sql` preserva o schema, mas essa camada não é hoje o roteador central do webhook.
 
-1. **estabilidade do Core** — tiers e gateway de escrita implementados;
-2. **roteamento/contexto** — router central, parser estrutural, memória curta e invalidação implementados;
-3. **memória pessoal** — entidades + perfil explícito + consulta agregada implementados;
-4. **linguagem natural** — normalização informal e famílias intenção/alvo/tempo implementadas;
-5. **sugestões inteligentes** — política problema×ação e engine confirmável implementadas;
-6. **Library** — manifesto, índice comum, fallback data-driven e ponte de contexto implementados;
-7. **qualidade antes de novas features** — regressão pytest + GitHub Actions implementados.
+## 7. Memória pessoal
 
-Essa fase está encerrada como arquitetura de refinamento. O próximo trabalho deve ser **testar conversa real, ampliar cobertura e corrigir arestas**, não criar outra camada paralela.
+A arquitetura de memória determinística com entidades e preferências continua preservada em módulos como:
 
-## 15. Regra de continuidade
+- `deterministic_memory.py`;
+- `personal_profile.py`;
+- `general_memory.py`;
+- família `companion_*`.
 
-Ao concluir etapas futuras: atualizar este arquivo e README quando a capacidade pública mudar; registrar decisões técnicas; não apagar decisões históricas sem substituição explícita; e manter claro que Library/background enriquecem, enquanto Core governa.
+O runtime operacional atual não habilita a memória pessoal genérica como camada global de resposta.
+
+Princípios que continuam obrigatórios se essa frente for retomada:
+
+- salvar somente fatos explícitos;
+- permitir correção;
+- não inferir relação pessoal;
+- isolar por usuário;
+- não confundir entidade pessoal com entidade cultural homônima.
+
+## 8. Butler Library
+
+Os acervos de culinária, jogos, cultura pop, literatura e filosofia continuam preservados em `cloudflare/src/knowledge/`.
+
+A Library foi desenhada para evitar um `if` por conhecimento. Esse princípio continua válido.
+
+Entretanto, o dispatcher genérico da Library está desabilitado atualmente. Veja `docs/BUTLER_LIBRARY.md` para o desenho preservado e `docs/ARCHITECTURE.md` para o estado ativo.
+
+Direitos autorais permanecem uma regra permanente: preferir dados abertos, domínio público, documentos próprios, metadados e resumos produzidos para o projeto.
+
+## 9. Patches e dívida arquitetural
+
+A produção atual acumulou módulos que substituem símbolos de outros módulos no import.
+
+Exemplos relevantes:
+
+- performance otimiza `app.ensure_user`;
+- políticas de lembrete antigas são neutralizadas pela política confiável;
+- envio de scheduler é envolvido por confirmação real de entrega;
+- menus-base são redefinidos por camadas operacionais.
+
+Essa estratégia permitiu evoluir sem reescrever o Core, mas agora é uma dívida técnica.
+
+### Regra daqui para frente
+
+Não criar `*_fix2.py`, `*_final.py` ou nova camada paralela sem necessidade real.
+
+Quando houver cobertura suficiente, consolidar a regra no módulo autoritativo e remover o patch antigo em PR específico.
+
+## 10. Scheduler
+
+A política atual de produção é documentada em `docs/ARCHITECTURE.md` e `cloudflare/README.md`.
+
+Princípios permanentes:
+
+- cron não deve mandar aviso obsoleto muito depois do horário;
+- entrega só deve ser registrada como concluída quando o Telegram confirmar quando isso for crítico;
+- `notification_log` protege idempotência;
+- falha de um subsistema não deve derrubar os demais;
+- Day-off deve ser respeitado conforme a categoria do aviso.
+
+## 11. Acadêmico e presença
+
+Aulas são previstas pelo horário cadastrado; presença não pode ser presumida.
+
+O sistema pode:
+
+- avisar sobre aula;
+- perguntar presença/falta;
+- registrar resposta explícita;
+- calcular limites conforme as regras cadastradas.
+
+Não registrar presença automaticamente só porque o horário passou.
+
+## 12. Musculação
+
+O perfil do proprietário preserva protocolo de 12 semanas e o perfil genérico pode trabalhar com ficha própria.
+
+Regras:
+
+- não aplicar protocolo pessoal a outro usuário;
+- registrar carga/repetição somente quando informadas;
+- substituição de exercício não deve apagar histórico;
+- evolução deve usar dados reais registrados.
+
+## 13. Perfil proprietário × usuários genéricos
+
+O projeto nasceu como assistente pessoal e depois ganhou isolamento multiusuário. Por isso ainda há configuração/seeds pessoais em código.
+
+A barreira `is_owner(chat_id)` não deve ser removida sem substituir o mecanismo.
+
+Antes de distribuir o Butler como produto genérico, mover perfil/seed pessoal para configuração privada é recomendado.
+
+## 14. Banco e migrations
+
+A fonte formal de evolução do D1 é `cloudflare/migrations/`.
+
+Não assumir que `runtime_schema.py` roda automaticamente; hoje ele é helper de compatibilidade.
+
+Mudança de schema deve incluir:
+
+1. migration numerada;
+2. backfill quando necessário;
+3. `ensure_schema()` somente quando houver motivo operacional;
+4. teste;
+5. documentação.
+
+## 15. Bootstrap e usuários existentes
+
+`performance_patch.py` evita repetir o bootstrap completo em cada mensagem de usuário já conhecido.
+
+Consequência: adicionar um novo default somente em `app.ensure_user()` afeta novas contas, não garante atualização das existentes.
+
+Para defaults retroativos, use migration/backfill explícito.
+
+## 16. Testes e regressão
+
+A suíte em `cloudflare/tests/` deve ser executável em CPython e proteger funções determinísticas.
+
+O runtime real usa Pyodide. `tests/conftest.py` existe apenas para permitir imports de `js`/`pyodide`; não é simulação de rede.
+
+Prioridade de novos testes:
+
+- dispatcher realmente ativo;
+- variações informais;
+- falsos positivos;
+- dois usuários distintos;
+- estados/cancelamento;
+- idempotência temporal;
+- regressões de casos reais.
+
+## 17. Documentos de referência
+
+Use cada arquivo para o propósito correto:
+
+- `README.md` — visão geral;
+- `docs/ARCHITECTURE.md` — runtime ativo;
+- `docs/MAINTAINER_GUIDE.md` — como editar;
+- `cloudflare/src/README.md` — mapa de módulos;
+- `docs/AUDIT_MAIN_2026-08.md` — achados da auditoria;
+- `docs/BUTLER_LIBRARY.md` — desenho preservado da Library;
+- este arquivo — decisões e direção histórica.
+
+## 18. Próxima direção recomendada
+
+A prioridade não é adicionar mais catálogo ou mais patches. É:
+
+```text
+1. testar o dispatcher de produção ponta a ponta com fakes
+2. consolidar menus duplicados
+3. consolidar política de lembretes
+4. remover patches obsoletos com segurança
+5. reduzir diferenças entre documentação e código
+6. decidir conscientemente quais camadas preservadas serão reativadas
+```
+
+Ao concluir uma etapa futura, atualize `docs/ARCHITECTURE.md` quando o comportamento ativo mudar e este arquivo quando uma decisão arquitetural de longo prazo mudar.
