@@ -15,6 +15,7 @@ from attendance_production_fix import dispatch_class_attendance_reliable, handle
 from companion_safe_fallback import handle_message as handle_fallback_message, is_priority_farewell
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from core_fast_path import handle_message as handle_core_fast_path
+from day_off_policy import expire_stale_day_offs
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery_phrase
@@ -204,6 +205,8 @@ class Default(WorkerEntrypoint):
                     "later_list": True,
                     "reminder_date_followup": True,
                     "day_off_bottom": True,
+                    "day_off_daily_scope": True,
+                    "weekend_is_not_automatic_day_off": True,
                 }),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             )
@@ -217,6 +220,17 @@ class Default(WorkerEntrypoint):
                 update = await request.json()
             except Exception:
                 return Response("invalid json", status=400)
+
+            # Day-off pertence somente ao dia em que foi ativado. Fazemos a
+            # expiração antes de qualquer handler para que a primeira mensagem
+            # após a meia-noite já encontre o Butler ativo novamente.
+            try:
+                await expire_stale_day_offs(self.env.DB)
+            except Exception as exc:
+                print(
+                    f"[day-off] expire-on-webhook-error type={type(exc).__name__} "
+                    f"message={str(exc)[:300]}"
+                )
 
             token = self.env.TELEGRAM_BOT_TOKEN
             callback = update.get("callback_query")
@@ -306,6 +320,10 @@ class Default(WorkerEntrypoint):
     async def scheduled(self, controller, env, ctx):
         token = self.env.TELEGRAM_BOT_TOKEN
         db = self.env.DB
+        # Expira a folga antes dos subsistemas que consultam assistant_state.
+        # Isso vale igualmente para segunda, sábado ou domingo: não existe
+        # Day-off automático por dia da semana.
+        await run_isolated("day_off", expire_stale_day_offs, db)
         # Aula é o único subsistema com dois eventos rígidos de tempo (T-10 e T0).
         # Ele roda primeiro para não esperar tarefas, rotinas, resumos ou legado.
         await run_isolated("attendance", _attendance_tick, db, token)
