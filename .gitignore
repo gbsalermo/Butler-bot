@@ -1,11 +1,28 @@
+# Secrets/config local do runtime legado
 .env
 .env.generic
+
+# Secrets locais usados pelo Wrangler/pywrangler. Nunca commitá-los.
+.dev.vars
+cloudflare/.dev.vars
+
+# Ambientes Python
 .venv/
 venv/
+
+# Cache/artefatos Python
 __pycache__/
 *.pyc
 *.pyo
-*.db
 .pytest_cache/
+
+# Bancos locais SQLite
+*.db
+
+# Estado local do Wrangler/D1 em desenvolvimento
+.wrangler/
+cloudflare/.wrangler/
+
+# IDEs
 .vscode/
 .idea/
