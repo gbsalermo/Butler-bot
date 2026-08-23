@@ -4,203 +4,224 @@
 
 # Butler Bot
 
-**Butler** é um assistente pessoal via Telegram voltado a organização cotidiana, memória contextual e companhia funcional. Ele combina tarefas, compromissos, estudos, casa, musculação, metas e finanças com linguagem determinística, memória pessoal e uma biblioteca opcional de conhecimento.
+**Butler** é um assistente pessoal via Telegram focado em organização cotidiana: tarefas, compromissos, estudos, mercado, rotinas, metas, musculação, presença acadêmica, lembretes e uma lista simples de coisas para ler/ver depois.
 
-A proposta não é ser um CRUD com personalidade nem uma IA geral. O objetivo é que as funções pareçam partes de **um único assistente pessoal**, mantendo o Core determinístico como autoridade.
+A produção atual é determinística e roda em **Cloudflare Python Worker + Telegram Webhook + D1**. O projeto também preserva código de experiências anteriores de conversa, memória e Library, mas essas camadas não devem ser confundidas com o dispatcher ativo.
 
-Bot pessoal: **Butler** — `@ButlerSal_BOT`.
+## Antes de alterar o projeto
 
-## Princípios
+Leia, nesta ordem:
 
-- Core funcional sempre vence Library, background e contexto antigo;
-- texto natural e botões convivem;
-- a mensagem atual define o assunto; contexto anterior só ajuda quando realmente existe continuidade;
-- comentário não vira ação automaticamente;
-- problema pode gerar ajuda + sugestão;
-- ação derivada/ambígua exige confirmação;
-- escrita sugerida passa pelo gateway do Core;
-- memória e contexto são isolados por `user_id`;
-- conhecimento cultural é global, opcional e separado da memória pessoal;
-- novos exemplos alimentam domínios reutilizáveis, não novos `if`s.
+1. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — fonte de verdade do runtime de produção;
+2. [`docs/MAINTAINER_GUIDE.md`](docs/MAINTAINER_GUIDE.md) — regras práticas para manutenção;
+3. [`cloudflare/src/README.md`](cloudflare/src/README.md) — mapa módulo por módulo;
+4. [`docs/AUDIT_MAIN_2026-08.md`](docs/AUDIT_MAIN_2026-08.md) — inconsistências encontradas na auditoria da `main`;
+5. `CONTINUIDADE.md` — decisões históricas e intenção arquitetural.
 
-## 🧠 Arquitetura de conversa
+> **Importante:** o diretório `src/` na raiz é o runtime antigo de polling/SQLite. A produção está em `cloudflare/`. Veja [`src/README.md`](src/README.md).
 
-A produção usa um dispatcher em tiers:
+## Runtime de produção
 
 ```text
-mensagem
+Telegram
+   ↓ webhook
+cloudflare/src/worker.py
    ↓
-Context Router + Intent Parser
+cloudflare/src/entry.py
    ↓
-1. Core funcional
+handlers operacionais
    ↓
-2. memória/contexto pessoal
-   ↓
-2.5 sugestões confirmáveis
-   ↓
-3. Butler Library opcional
-   ↓
-4. linguagem / conversa / fallback
+Cloudflare D1 / Durable Objects / Telegram Bot API
 ```
 
-`context_router.py` classifica domínio, tier, formato da fala, intenção, alvo e pista temporal. `intent_parser.py` reconhece famílias estruturais em vez de depender apenas de frases prontas.
+`cloudflare/wrangler.jsonc` aponta para `src/worker.py`. `worker.py` adiciona os alarmes persistentes e herda o dispatcher HTTP/scheduler de `entry.py`.
 
-Domínios protegidos incluem matérias/aulas/provas/faltas, tarefas, compromissos/agenda, mercado, musculação, finanças, metas e rotinas. Se a mensagem pertence ao Core, nenhum acervo pode disputá-la.
+### Dispatcher atual
 
-Exemplos que devem convergir para o mesmo domínio acadêmico:
+A produção não usa hoje `context_router.py` + `intent_parser.py` como roteador central. O fluxo real é uma cadeia ordenada de handlers em `entry.py`:
 
 ```text
-segunda eu não vou pra Sistemas
-quero faltar Sistemas segunda
-acho que vou matar Sistemas segunda
+/start/reset
+→ diagnóstico
+→ usabilidade/menu/navegação
+→ fast path operacional
+→ presença/provas/acadêmico
+→ lembretes/tarefas/mercado/treino/contexto operacional
+→ app.py somente para botão/estado guiado necessário
+→ fallback
 ```
 
-## 🗣️ Português informal e política de ação
+A ordem é relevante: um handler que retorna `True` consome a mensagem e impede os seguintes de rodar.
 
-`knowledge/portuguese_conversation.py` funciona como background linguístico, não como chatbot. Ele normaliza abreviações e fala coloquial (`oq`, `pq`, `vc`, `tbm`, `hj`, `dps`, `tô`, `facul`, `trampo` etc.) para ajudar NLU e roteamento.
+## Funcionalidades ativas
 
-`action_policy.py` formaliza:
+O Core operacional cobre:
+
+- tarefas e pendências;
+- compromissos e agenda;
+- lembretes simples;
+- matérias, grade, provas, presença e faltas;
+- lista persistente do que está faltando em casa;
+- rotinas e metas;
+- musculação, exercícios, séries, carga e progresso;
+- Ler/Ver Depois;
+- finanças preservadas no Core, embora não sejam destaque do menu operacional atual;
+- Day-off;
+- resumo matinal e fechamento semanal;
+- alarmes persistentes para eventos temporais críticos.
+
+O Butler mantém isolamento por usuário: operações pessoais devem sempre resolver `telegram_chat_id` → `user_id` e limitar SQL ao usuário correto.
+
+## Linguagem natural
+
+O runtime atual privilegia **fast paths conservadores** para pedidos claros, em vez de uma NLU ampla.
+
+Exemplos esperados:
 
 ```text
-comentário → conversa
-pedido explícito → ação pelo Core
-problema/necessidade → ajuda + possível sugestão
-ação derivada → confirmação antes de escrita
+me lembra de entregar o relatório amanhã às 18h
+amanhã tenho dentista às 15h
+preciso comprar café
+já comprei o café
+segunda eu não vou pra Sistemas Digitais
+hoje não vou conseguir treinar
+cria uma rotina de estudar inglês
 ```
 
-Por isso `comprar café` pode ser ação direta, enquanto `acabou o café` oferece colocar café na lista e espera confirmação. `tô cansado hoje` continua sendo conversa, não uma tarefa inventada.
+Princípio: uma ação explícita deve vencer palavras incidentais de outro domínio. Por exemplo, `me lembra de procurar jogos` é um lembrete, não uma consulta de jogos.
 
-## 🧩 Contexto recente
+## Lembretes e scheduler
 
-`context_memory.py` mantém até poucos tópicos recentes por usuário em D1. A tabela possui migration própria (`0004_conversation_context.sql`).
+O cron roda a cada minuto. A política operacional atual é:
 
-`context_sync.py` registra mudanças explícitas de domínio e invalida contextos opcionais legados. `library_context_bridge.py` faz os acervos alimentarem a mesma memória operacional central.
+- aula: eventos temporais próprios da camada de presença;
+- tarefa com horário: aviso no horário;
+- compromisso: aviso 5 minutos antes;
+- lembrete pessoal simples: aviso no horário, com tolerância curta para não enviar alerta obsoleto;
+- resumo da manhã: 07:00;
+- fechamento semanal: domingo 20:00.
 
-Isso permite continuidade como:
+`notification_log` protege contra duplicidade. Entregas críticas usam confirmação da resposta da API do Telegram antes de serem consideradas concluídas.
+
+## Patches e compatibilidade
+
+A `main` acumulou módulos `*_patch.py`, `*_fix.py` e `*_integration.py`. Alguns substituem funções de outros módulos no import.
+
+Exemplos importantes:
+
+- `performance_patch.py` otimiza o bootstrap de usuários conhecidos;
+- `reminder_policy.py` desliga o scheduler antigo de itens;
+- `reliable_reminders.py` é a autoridade atual de lembretes de tarefas/compromissos;
+- `scheduled_delivery_guard.py` exige confirmação real do Telegram;
+- `operational_menu.py` define os menus operacionais principais;
+- `production_usability_patch.py` adiciona Ler/Ver Depois e mantém fallbacks de interface.
+
+Não altere a ordem de `install_*()` em `entry.py` sem verificar quais símbolos são sobrescritos. O mapa completo está em `docs/ARCHITECTURE.md`.
+
+## Banco de dados
+
+A fonte formal da evolução do D1 são as migrations em `cloudflare/migrations/`:
 
 ```text
-receita de carbonara
-não tenho bacon
+0001_initial.sql
+0002_app_state.sql
+0003_attendance.sql
+0004_conversation_context.sql
+0005_goal_profiles.sql
 ```
 
-sem permitir que carbonara reapareça depois de:
+Alguns módulos mantêm `ensure_schema()` idempotente como proteção incremental, mas isso não substitui uma migration.
+
+`runtime_schema.py` é um helper preservado; ele não é o bootstrap automático do dispatcher atual.
+
+## Butler Library e arquitetura preservada
+
+O repositório contém acervos de culinária, jogos, cultura pop, livros e filosofia em `cloudflare/src/knowledge/`, além de módulos como:
 
 ```text
-queria faltar essa aula de Sistemas Digitais I
+context_router.py
+intent_parser.py
+action_policy.py
+context_memory.py
+suggestion_engine.py
+library_catalog_handler.py
+butler_library.py
 ```
 
-## 👤 Memória pessoal determinística
+Esses componentes preservam trabalho útil e continuam testáveis, porém **o dispatcher genérico da Library, a NLU ampla, sugestões transversais genéricas e memória pessoal genérica estão desabilitados no runtime operacional atual**.
 
-O Butler mantém um mapa pessoal isolado por usuário. Entidades atuais incluem pets, familiares, amigos/colegas, relacionamentos, veículos e objetos. `personal_profile.py` acrescenta preferências explícitas como gostos, desgostos, preferências, time e cidade, sem inferir fatos que o usuário não disse.
+Leia [`docs/BUTLER_LIBRARY.md`](docs/BUTLER_LIBRARY.md) como desenho preservado/evolução futura, não como garantia de que todo catálogo está ligado ao webhook de produção.
 
-Exemplos:
+## Runtime legado
+
+A raiz `src/` contém a versão anterior:
 
 ```text
-tenho um gato chamado Jake
-meu gato tá sem ração
-minha mãe se chama Ana
-meu carro é um Corsa 2008
-eu gosto de ficção científica
-o que você sabe sobre mim?
+python-telegram-bot
++ polling
++ SQLite
 ```
 
-A consulta do mapa pessoal reúne apenas fatos realmente estruturados daquele `user_id`.
+Ela continua disponível como referência/fallback, mas uma correção feita somente ali não altera o Worker em produção.
 
-## ⚙️ Core determinístico
+Dependências também são diferentes:
 
-O Core cobre tarefas, compromissos, agenda, pendências, matérias/grade, faltas, provas, lembretes, lista persistente de itens faltando, metas/streaks, rotinas, finanças simples e musculação.
+- `requirements.txt` → runtime legado;
+- `cloudflare/pyproject.toml` → Worker atual.
 
-`core_actions.py` é o gateway usado por camadas auxiliares quando uma sugestão foi confirmada. Library, memória e sugestões não mantêm mais uma segunda implementação de escrita para mercado/rotina/tarefa.
+## Testes
 
-## 💡 Sugestões transversais
+Na pasta `cloudflare/`:
 
-`suggestion_engine.py` transforma problemas em propostas, não em ações automáticas.
+```bash
+pytest -q
+```
 
-Exemplos:
+A suíte roda em CPython, enquanto a produção usa Pyodide. `cloudflare/tests/conftest.py` fornece stubs mínimos de `js`/`pyodide` apenas para permitir importar módulos em testes determinísticos; ele não simula integração real com Cloudflare/Telegram.
 
-- `acabou o café` → pergunta se deve colocar café na lista;
-- pet conhecido sem ração → resolve o pet pela memória e oferece salvar ração;
-- ingrediente ausente após receita → oferece mercado;
-- série que o usuário quer assistir inteira → oferece rotina;
-- duas provas no mesmo dia → oferece montar plano de estudo.
+O GitHub Actions compila `cloudflare/src` e roda a suíte em alterações relevantes.
 
-`study_plan_flow.py` completa o fluxo das duas provas para qualquer usuário: identifica matérias do próprio usuário, mostra a proposta e, após confirmação, cadastra provas ausentes e distribui blocos de teoria/resumo, exercícios e revisão.
+Testes novos devem priorizar:
 
-## 📚 Butler Library
+- caminho de produção realmente alcançado pelo `entry.py`;
+- variações de linguagem próximas;
+- falsos positivos;
+- isolamento entre dois usuários;
+- cancelamento de estados guiados;
+- idempotência de schedulers.
 
-A Library é **extra e opcional**. `knowledge/library_manifest.py` registra seus acervos e `library_index.py` fornece um índice comum orientado a dados.
+## Convenção de comentários
 
-Acervos atuais:
+Comentários devem explicar **por que**, prioridade, invariantes ou risco. Não repetir a linha seguinte.
 
-- 🍳 culinária: massas, carnes/cortes, salgados, arroz/feijão, legumes, saladas, frango, doces e cozinha brasileira tradicional;
-- 🎮 jogos e Pokémon FireRed;
-- 🎬 filmes, séries e cultura pop;
-- 📖 literatura e filosofia;
-- 🗣️ português informal como background não respondente.
+Todo módulo novo deve ter docstring dizendo:
 
-A culinária inclui pratos tradicionais como moquecas, vatapá, baião de dois, acarajé, bobó, feijão tropeiro, galinhada, barreado, cuscuz nordestino, caruru e vaca atolada, além de conhecimento de cortes e preparações bovinas.
+- responsabilidade;
+- quem o chama;
+- tabelas/estado que altera;
+- comportamento que não pode violar.
 
-`library_catalog_handler.py` é um fallback genérico sobre o índice comum: novas entradas podem herdar busca por nome, aliases, tags, gênero, autor, resumo e metadados sem ganhar um dispatcher exclusivo.
+A regra detalhada está em `docs/MAINTAINER_GUIDE.md`.
 
-A Library pode sugerir ações, mas escritas confirmadas passam pelo `core_actions.py`.
+## Direção de manutenção
 
-## 🕴️ Personalidade e cotidiano
-
-O Butler aceita saudação, agradecimento, risada, cansaço, fome, desânimo e comentários sem responder sempre com produtividade. Humor e gírias podem variar com contexto, horário e histórico real. Sarcasmo comportamental só usa evidência registrada; primeira ocorrência não vira hábito inventado.
-
-## 🌙 Day-off
-
-Day-off reduz/silencia cobranças compatíveis. Reativação pode ocorrer chamando novamente o Butler. O estado é isolado por usuário.
-
-## 🏋️ Musculação
-
-No perfil pessoal existe protocolo de 12 semanas iniciado por `🚀 Começar os trabalhos`, com exercício, substitutos, séries, carga, repetições, faltas e evolução. Usuários genéricos começam sem esse protocolo e cadastram a própria musculação.
-
-## 🧪 Regressão automática
-
-A arquitetura conversacional agora possui proteção automática:
+A prioridade agora é reduzir complexidade sem quebrar comportamento:
 
 ```text
-cloudflare/tests/test_context_router.py
-cloudflare/tests/test_library_index.py
-.github/workflows/butler-regression.yml
+1. testes do dispatcher real
+2. consolidar patches no módulo autoritativo
+3. reduzir fontes duplicadas de menu/política
+4. manter isolamento multiusuário
+5. manter documentação sincronizada
+6. só depois ampliar novas camadas
 ```
 
-A suíte cobre dezenas de formulações de acadêmico, tarefas, mercado, agenda, musculação, finanças, rotinas, culinária, jogos, livros, filmes/séries e conversa, além de colisões da Library.
+Antes de criar outro `*_fix.py`, pergunte se a mudança pode entrar diretamente no módulo que já é dono do domínio.
 
-Todo push relevante na `main` compila `cloudflare/src` e executa `pytest` no GitHub Actions. Uma regressão já foi encontrada pela própria suíte (`oi butler` recebia resultados irrelevantes do índice de livros) e corrigida exigindo evidência semântica antes do bônus por domínio.
+## Segurança e configuração
 
-Regressão obrigatória:
+Tokens nunca devem entrar no repositório. O Worker usa secret do Telegram e aceita secret de webhook quando configurado.
 
-```text
-receita de carbonara
-queria faltar essa aula de Sistemas Digitais I
-```
+O projeto ainda possui configuração pessoal do perfil proprietário versionada em código. Isso é compatível com o uso atual como bot pessoal, mas deve migrar para configuração/seed privado antes de uma distribuição mais ampla.
 
-A segunda mensagem é acadêmica, nunca culinária.
-
-## ☁️ Produção e LLM
-
-Produção usa Cloudflare Worker/Webhook/D1. A camada oficial permanece determinística.
-
-O laboratório Workers AI foi removido da `main` e preservado em `archive/llm-experiment`; `backup/nlu-only` mantém referência anterior. Uma LLM local/privada pode ser reconsiderada no futuro apenas como linguagem/contexto. Core, memória oficial e escrita continuam pertencendo ao Butler.
-
-## Regra para expansão
-
-Antes de adicionar funcionalidade, perguntar: isso melhora o trabalho de **assistente pessoal** ou só aumenta o catálogo?
-
-Prioridade atual:
-
-```text
-1. estabilidade do Core
-2. roteamento/contexto
-3. memória pessoal
-4. linguagem natural
-5. sugestões úteis
-6. Library
-7. novas funcionalidades
-```
-
-A fase atual concluiu a fundação e integração dessas sete frentes. A próxima evolução deve ser principalmente ampliar cobertura/testes e corrigir casos reais, não criar uma nova camada paralela.
-
-Materiais externos devem respeitar licenças e direitos autorais; preferir dados abertos, domínio público, documentos próprios e resumos/metadados produzidos para o projeto.
+Materiais externos devem respeitar licenças e direitos autorais; prefira dados abertos, domínio público, documentos próprios e resumos/metadados produzidos para o projeto.
