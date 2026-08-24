@@ -242,45 +242,160 @@ Regras:
 
 ## 13. Cursos e trilhas de estudo — direção futura
 
-O Butler deve evoluir para acompanhar **cursos livres, idiomas e outras trilhas estruturadas de estudo** com lógica semelhante à musculação: existe um plano, existe um ponto atual, existe histórico do que foi concluído e existe um próximo passo claro.
+O Butler deve evoluir para acompanhar **cursos livres, idiomas e outras trilhas estruturadas de estudo** combinando duas ideias já existentes no sistema:
 
-Exemplos de uso:
+- **matérias**, porque o estudo entra no cronograma/agenda;
+- **musculação**, porque existe uma sequência ordenada, um ponto atual, histórico de execução e progressão baseada no que realmente foi concluído.
+
+O domínio deve continuar genérico para inglês, francês, italiano, programação, certificações, cursos técnicos ou qualquer formação dividida em módulos e conteúdos.
+
+### Modelo conceitual
+
+A estrutura preferida é:
 
 ```text
-Curso de Inglês
-→ Unidade 1
-   → Simple Present
-   → Vocabulário de rotina
-   → Exercícios
-→ Unidade 2
-   → Past Simple
-   → Listening
+Curso
+→ módulo/etapa
+   → submódulo/aula/assunto
+      → materiais e atividades vinculadas
+      → status/progresso
 ```
 
-O mesmo modelo deve servir para francês, italiano, programação, certificações, cursos online ou qualquer curso dividido em módulos/unidades.
+O **módulo** funciona como uma etapa maior, semelhante a uma semana/bloco de treino. O **submódulo** é a unidade executável do dia, semelhante a um exercício: aula, assunto, lista, revisão ou outra atividade que faça sentido naquela trilha.
 
-### O Butler deve poder cadastrar ou importar
+Nem todo fornecedor usa os nomes "módulo" e "submódulo" do mesmo jeito. Na importação, o Butler deve preservar os títulos originais, mas normalizar internamente a hierarquia para evitar depender da nomenclatura da plataforma.
 
-- nome do curso;
-- instituição/plataforma, quando houver;
-- unidades, módulos ou capítulos;
-- assuntos de cada unidade;
-- ordem ou dependência entre conteúdos;
-- carga horária estimada ou duração, quando disponível;
-- material/referência opcional;
-- status de cada item.
+### Ritmo do curso
 
-### Estados mínimos previstos
+O curso precisa declarar um modo de ritmo:
 
-Cada unidade/assunto deve poder ficar como:
+```text
+autogerido / gravado
+ao vivo / calendário fixo
+```
+
+#### Curso autogerido ou gravado
+
+O aluno escolhe dias/horário de estudo como faria com uma rotina. O conteúdo do dia, porém, vem do **próximo submódulo pendente**, não de uma tarefa nova criada diariamente.
+
+Exemplo:
+
+```text
+segunda: concluiu 1.1
+terça: concluiu 1.2
+quarta: 1.3 apareceu e não foi concluído
+quinta: 1.3 aparece novamente
+```
+
+Regra central: **não concluir não avança o ponteiro**. O mesmo próximo conteúdo continua reaparecendo nas sessões seguintes até ser concluído, pulado explicitamente ou reordenado pelo usuário.
+
+Assim, o cronograma mostra o que o aluno realmente precisa continuar, em vez de fingir que houve progresso porque o dia passou.
+
+#### Curso ao vivo
+
+O aluno informa dias e horários fixos. Nesse modo o curso se comporta mais como matéria universitária: a aula acontece naquele horário mesmo que a anterior não tenha sido marcada como concluída.
+
+O Butler pode registrar presença/progresso e pendências, mas **não deve deslocar a grade ao vivo para outro dia**. Conteúdo perdido pode virar pendência/revisão separada.
+
+### Horários e agenda
+
+Para curso autogerido:
+
+```text
+curso + horário de estudo → comportamento semelhante a rotina
+```
+
+Para curso ao vivo:
+
+```text
+curso + horário fixo → comportamento semelhante a matéria/aula
+```
+
+Em ambos os casos o item precisa aparecer em `Hoje`, agenda diária e resumos quando aplicável, sem duplicar o conteúdo como tarefa independente a cada dia.
+
+### Estados e progressão
+
+Cada submódulo deve suportar no mínimo:
 
 ```text
 pendente
 em andamento
 concluído
+pulado
 ```
 
-Conclusão deve ser sempre explícita ou derivada de uma ação inequívoca do usuário; o Butler não deve assumir que uma aula/unidade foi concluída apenas porque uma data passou.
+Conclusão precisa ser explícita. O Butler não deve inferir conclusão apenas porque o horário passou.
+
+O sistema deve permitir concluir **um ou vários itens de uma vez**. Para Telegram, a UX preferida é seleção por botões inline/checkbox-like e uma confirmação final, em vez de obrigar o usuário a digitar nomes longos.
+
+Exemplos:
+
+```text
+☑ Alphabet
+☑ Lista de exercícios — Alphabet
+☐ Solução dos exercícios — Alphabet
+[✅ Concluir selecionados]
+```
+
+A operação em lote deve manter histórico individual por item e permitir desfazer/corrigir sem apagar a trilha anterior.
+
+### Leitura e normalização de grades importadas
+
+A importação de cursos deve ser mais inteligente do que simplesmente transformar cada linha do arquivo em uma aula. O Butler precisa classificar itens relacionados e apresentar uma **prévia agrupada** antes de salvar.
+
+Diretrizes iniciais:
+
+1. **mesmo nome repetido de forma idêntica** em arquivos diferentes normalmente representa o mesmo conteúdo/aula com mídias ou materiais diferentes, e não duas aulas novas;
+2. extensões diferentes do mesmo item, como vídeo + legenda (`.mp4` + `.srt`), devem virar **um único submódulo com múltiplos materiais**;
+3. arquivos auxiliares numerados (`1.1`, `3.1`, PDFs, slides etc.) devem ser anexados ao item principal quando o nome/numeração indicar relação;
+4. item contendo `Lista de Exercícios`, `Lista de Exercicio`, `Exercícios` ou equivalente deve ser classificado como **atividade/lista de exercícios**;
+5. item contendo `Solução`, `Resolução`, `Gabarito` ou equivalente deve ser classificado como **solução/revisão**, vinculado ao assunto/aula correspondente;
+6. item contendo `Revisão` deve ser auto declarado como revisão e vinculado ao assunto/bloco compatível quando houver evidência suficiente;
+7. nomes semelhantes não devem ser fundidos só por aproximação textual se isso puder apagar aulas distintas;
+8. em caso de baixa confiança, a prévia deve mostrar a dúvida e pedir confirmação em vez de decidir silenciosamente.
+
+### Exemplo concreto de importação
+
+A grade usada como referência possui blocos como `Introdução ao curso`, `Nível Básico`, `Nível Intermediário`, `Nível Avançado`, `Pílulas` e aula bônus. Dentro do nível básico, por exemplo, aparecem sequências do tipo:
+
+```text
+Alphabet.mp4
+Alphabet.srt
+B01-SpellAlphabet.pdf
+Alphabet - Lista de Exercícios.html
+B01-Alphabet.pdf
+Alphabet - Solução dos Exercícios.mp4
+Alphabet - Solução dos Exercícios.srt
+```
+
+Isso não deve virar sete aulas independentes. A interpretação desejada é algo próximo de:
+
+```text
+Módulo: Nível Básico
+→ Aula: Alphabet
+   → vídeo
+   → legenda
+   → material PDF
+   → lista de exercícios
+   → material da lista
+   → solução dos exercícios
+```
+
+O mesmo padrão se repete em conteúdos como `Cardinal Numbers`, `Ordinal Numbers`, `Simple Present`, `Comparative`, `Present Perfect` e outros. Essa estrutura deve orientar os testes do futuro importador, sem codificar regras exclusivas para esse curso específico.
+
+### O Butler deve poder cadastrar ou importar
+
+- nome do curso;
+- instituição/plataforma, quando houver;
+- tipo de ritmo (`autogerido` ou `ao vivo`);
+- dias/horários de estudo ou horários fixos;
+- módulos/etapas;
+- submódulos/aulas/assuntos;
+- atividades vinculadas;
+- ordem e dependências;
+- duração/carga horária estimada, quando disponível;
+- materiais/referências;
+- status e histórico de conclusão.
 
 ### Acompanhamento esperado
 
@@ -289,41 +404,60 @@ O Butler deve conseguir responder perguntas como:
 ```text
 Onde parei no inglês?
 O que falta no curso de francês?
-Qual é minha próxima unidade?
+Qual é minha próxima aula?
 O que já finalizei em italiano?
 Quanto do curso eu concluí?
 O que devo estudar hoje?
+Quantos módulos já terminei?
+Quais exercícios ainda faltam nessa aula?
 ```
 
-Também deve poder apresentar progresso por curso, por unidade e por assunto, preservando histórico em vez de simplesmente sobrescrever o estado atual.
+Também deve mostrar progresso por curso, módulo e submódulo e preservar histórico em vez de apenas sobrescrever o estado atual.
 
-### Importação futura
+### Relação com rotinas, matérias e agenda
 
-Além de grade universitária, a importação deve futuramente aceitar **grades/ementas/planos de cursos** em formatos estruturados ou documentos legíveis, identificando quando possível:
+O curso não deve ser reduzido a uma rotina nem duplicado como matéria comum.
 
 ```text
-curso → unidade/módulo → assunto → ordem → status
+Curso autogerido
+→ usa calendário/horário de rotina
+→ conteúdo vem do próximo item pendente
+
+Curso ao vivo
+→ usa calendário fixo de aula
+→ conteúdo acompanha a sequência real do curso
 ```
-
-A importação deve sempre gerar uma prévia antes de gravar dados, da mesma forma que outras importações estruturadas do Butler.
-
-### Relação com rotinas e agenda
-
-O curso não deve ser reduzido a uma rotina diária. A estrutura do curso é persistente; a rotina apenas agenda quando estudar.
 
 Exemplo:
 
 ```text
-Curso: Inglês B1
-Próximo passo: Unidade 4 — Present Perfect
-Rotina: estudar inglês seg/qua/sex às 19h
+Curso: Inglês
+Modo: autogerido
+Estudo: seg/qua/sex às 19h
+Próximo passo: Nível Básico → Alphabet
 ```
 
-Assim, o Butler pode futuramente sugerir ou montar sessões de estudo baseadas no próximo conteúdo pendente, registrar a conclusão e avançar para o próximo passo sem perder o histórico.
+O Butler usa a agenda para dizer **quando** estudar e o domínio de cursos para dizer **o quê** estudar e **onde o aluno parou**.
+
+### Importação segura
+
+A importação deve seguir sempre:
+
+```text
+arquivo
+→ extração
+→ normalização
+→ agrupamento
+→ classificação
+→ prévia editável/confirmável
+→ gravação
+```
+
+Nunca gravar automaticamente uma grade complexa sem prévia. O usuário deve conseguir corrigir módulo, vínculo, ordem ou classificação antes da confirmação final.
 
 ### Princípio arquitetural
 
-Evitar uma implementação exclusiva para idiomas. O domínio deve nascer genérico (`curso`, `unidade`, `conteúdo`, `progresso`) para atender inglês, francês, italiano, programação e outros cursos sem criar um módulo diferente para cada tema.
+Evitar implementação exclusiva para idiomas ou para a estrutura de uma plataforma. O domínio deve nascer genérico (`curso`, `módulo`, `conteúdo`, `atividade`, `material`, `progresso`, `agenda`) e possuir adaptadores/heurísticas de importação separados.
 
 Esta é uma **direção futura**, não uma funcionalidade que deve ser anunciada como ativa enquanto não estiver conectada ao runtime de produção e coberta por testes.
 
