@@ -240,7 +240,94 @@ Regras:
 - substituição de exercício não deve apagar histórico;
 - evolução deve usar dados reais registrados.
 
-## 13. Perfil proprietário × usuários genéricos
+## 13. Cursos e trilhas de estudo — direção futura
+
+O Butler deve evoluir para acompanhar **cursos livres, idiomas e outras trilhas estruturadas de estudo** com lógica semelhante à musculação: existe um plano, existe um ponto atual, existe histórico do que foi concluído e existe um próximo passo claro.
+
+Exemplos de uso:
+
+```text
+Curso de Inglês
+→ Unidade 1
+   → Simple Present
+   → Vocabulário de rotina
+   → Exercícios
+→ Unidade 2
+   → Past Simple
+   → Listening
+```
+
+O mesmo modelo deve servir para francês, italiano, programação, certificações, cursos online ou qualquer curso dividido em módulos/unidades.
+
+### O Butler deve poder cadastrar ou importar
+
+- nome do curso;
+- instituição/plataforma, quando houver;
+- unidades, módulos ou capítulos;
+- assuntos de cada unidade;
+- ordem ou dependência entre conteúdos;
+- carga horária estimada ou duração, quando disponível;
+- material/referência opcional;
+- status de cada item.
+
+### Estados mínimos previstos
+
+Cada unidade/assunto deve poder ficar como:
+
+```text
+pendente
+em andamento
+concluído
+```
+
+Conclusão deve ser sempre explícita ou derivada de uma ação inequívoca do usuário; o Butler não deve assumir que uma aula/unidade foi concluída apenas porque uma data passou.
+
+### Acompanhamento esperado
+
+O Butler deve conseguir responder perguntas como:
+
+```text
+Onde parei no inglês?
+O que falta no curso de francês?
+Qual é minha próxima unidade?
+O que já finalizei em italiano?
+Quanto do curso eu concluí?
+O que devo estudar hoje?
+```
+
+Também deve poder apresentar progresso por curso, por unidade e por assunto, preservando histórico em vez de simplesmente sobrescrever o estado atual.
+
+### Importação futura
+
+Além de grade universitária, a importação deve futuramente aceitar **grades/ementas/planos de cursos** em formatos estruturados ou documentos legíveis, identificando quando possível:
+
+```text
+curso → unidade/módulo → assunto → ordem → status
+```
+
+A importação deve sempre gerar uma prévia antes de gravar dados, da mesma forma que outras importações estruturadas do Butler.
+
+### Relação com rotinas e agenda
+
+O curso não deve ser reduzido a uma rotina diária. A estrutura do curso é persistente; a rotina apenas agenda quando estudar.
+
+Exemplo:
+
+```text
+Curso: Inglês B1
+Próximo passo: Unidade 4 — Present Perfect
+Rotina: estudar inglês seg/qua/sex às 19h
+```
+
+Assim, o Butler pode futuramente sugerir ou montar sessões de estudo baseadas no próximo conteúdo pendente, registrar a conclusão e avançar para o próximo passo sem perder o histórico.
+
+### Princípio arquitetural
+
+Evitar uma implementação exclusiva para idiomas. O domínio deve nascer genérico (`curso`, `unidade`, `conteúdo`, `progresso`) para atender inglês, francês, italiano, programação e outros cursos sem criar um módulo diferente para cada tema.
+
+Esta é uma **direção futura**, não uma funcionalidade que deve ser anunciada como ativa enquanto não estiver conectada ao runtime de produção e coberta por testes.
+
+## 14. Perfil proprietário × usuários genéricos
 
 O projeto nasceu como assistente pessoal e depois ganhou isolamento multiusuário. Por isso ainda há configuração/seeds pessoais em código.
 
@@ -248,7 +335,7 @@ A barreira `is_owner(chat_id)` não deve ser removida sem substituir o mecanismo
 
 Antes de distribuir o Butler como produto genérico, mover perfil/seed pessoal para configuração privada é recomendado.
 
-## 14. Banco e migrations
+## 15. Banco e migrations
 
 A fonte formal de evolução do D1 é `cloudflare/migrations/`.
 
@@ -262,7 +349,7 @@ Mudança de schema deve incluir:
 4. teste;
 5. documentação.
 
-## 15. Bootstrap e usuários existentes
+## 16. Bootstrap e usuários existentes
 
 `performance_patch.py` evita repetir o bootstrap completo em cada mensagem de usuário já conhecido.
 
@@ -270,7 +357,7 @@ Consequência: adicionar um novo default somente em `app.ensure_user()` afeta no
 
 Para defaults retroativos, use migration/backfill explícito.
 
-## 16. Testes e regressão
+## 17. Testes e regressão
 
 A suíte em `cloudflare/tests/` deve ser executável em CPython e proteger funções determinísticas.
 
@@ -286,7 +373,7 @@ Prioridade de novos testes:
 - idempotência temporal;
 - regressões de casos reais.
 
-## 17. Documentos de referência
+## 18. Documentos de referência
 
 Use cada arquivo para o propósito correto:
 
@@ -298,7 +385,7 @@ Use cada arquivo para o propósito correto:
 - `docs/BUTLER_LIBRARY.md` — desenho preservado da Library;
 - este arquivo — decisões e direção histórica.
 
-## 18. Próxima direção recomendada
+## 19. Próxima direção recomendada
 
 A prioridade não é adicionar mais catálogo ou mais patches. É:
 
