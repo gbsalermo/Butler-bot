@@ -72,6 +72,49 @@ O Core operacional cobre:
 
 O Butler mantém isolamento por usuário: operações pessoais devem sempre resolver `telegram_chat_id` → `user_id` e limitar SQL ao usuário correto.
 
+## Importação de grade do SIGAA
+
+No primeiro acesso, o Butler orienta o usuário sobre como importar a grade acadêmica. O formato recomendado é a **tabela do painel principal do SIGAA** que contém as colunas:
+
+```text
+Componente Curricular | Local | Horário
+```
+
+É a mesma visão em que aparecem códigos de horário como `35M45`, `24M23` ou `2T23`. Esses códigos são importantes porque o parser usa o padrão do SIGAA para reconstruir os dias e horários das aulas.
+
+### Formatos aceitos
+
+- **PDF com texto pesquisável/selecionável**;
+- arquivo **`.txt`** contendo a grade.
+
+### Formato recomendado
+
+1. Abra no SIGAA o painel principal onde aparecem as matérias, seus locais e horários;
+2. use a opção do navegador **Imprimir → Salvar como PDF**;
+3. confirme que o texto do PDF continua selecionável/pesquisável;
+4. no Butler, abra **📚 Matérias → 📥 Importar grade por PDF/texto**;
+5. envie o arquivo e confira a prévia antes de confirmar a importação.
+
+O arquivo precisa preservar, para cada matéria:
+
+```text
+nome da matéria
+local
+código de horário do SIGAA
+```
+
+Exemplo mínimo de informação útil:
+
+```text
+Física II
+PAV III, SALA 07
+24M45
+```
+
+> **Não envie print, foto, imagem ou PDF escaneado.** A produção não executa OCR. Se a única fonte disponível for uma imagem, ela deve ser convertida externamente para texto/PDF pesquisável antes da importação.
+
+O cadastro manual continua disponível em **⚙️ Gerenciar matérias** caso o usuário não queira ou não consiga importar a grade.
+
 ## Linguagem natural
 
 O runtime atual privilegia **fast paths conservadores** para pedidos claros, em vez de uma NLU ampla.
