@@ -16,6 +16,7 @@ from operational_informal_fastpath import handle_message as handle_informal_acti
 from routine_natural_fastpath import handle_message as handle_natural_routine
 from task_context_patch import handle_message as handle_task_context
 from ux_bugfixes import handle_global_navigation
+from weather_context import handle_message as handle_weather_context
 from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress
 
 install_workout_progress()
@@ -118,6 +119,11 @@ async def handle_message(db,token,message):
     n=_norm(text)
 
     if await handle_global_navigation(db,token,message):
+        return True
+
+    # Clima é contextual e também é dono dos atalhos de agenda Hoje/Amanhã,
+    # porque nesses dois casos precisa anexar a previsão sem duplicar mensagens.
+    if await handle_weather_context(db,token,message):
         return True
 
     if _looks_temporal_followup(n):
