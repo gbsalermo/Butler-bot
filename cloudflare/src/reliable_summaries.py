@@ -14,7 +14,8 @@ from settings import (
 from telegram_api import delivery_error, delivery_ok, send_message
 
 LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
-GRACE_MINUTES = 60
+MORNING_RECOVERY_MINUTES = 300
+WEEKLY_GRACE_MINUTES = 60
 
 
 def _row(row, key, default=None):
@@ -40,14 +41,14 @@ async def _rows(stmt):
         return data.to_py() if hasattr(data, "to_py") else []
 
 
-def _kb(rows):
-    return {"keyboard": rows, "resize_keyboard": True}
-
-
-def _within_window(now, hour, minute):
+def _within_window(now, hour, minute, grace_minutes):
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     delta = (now - target).total_seconds() / 60
-    return 0 <= delta <= GRACE_MINUTES
+    return 0 <= delta <= grace_minutes
+
+
+def _kb(rows):
+    return {"keyboard": rows, "resize_keyboard": True}
 
 
 async def _checked_send(token, chat, text):
@@ -137,14 +138,27 @@ async def dispatch_summaries(db, token):
         uid = int(_row(user, "id"))
         chat = int(_row(user, "telegram_chat_id"))
 
-        if _within_window(now, MORNING_SUMMARY_HOUR, MORNING_SUMMARY_MINUTE):
+        # O resumo é nominalmente das 07:00, mas se o cron/deploy/Telegram falhar
+        # nessa janela o Butler continua tentando ao longo da manhã. O log por
+        # chave diária impede duplicação assim que uma entrega é confirmada.
+        if _within_window(
+            now,
+            MORNING_SUMMARY_HOUR,
+            MORNING_SUMMARY_MINUTE,
+            MORNING_RECOVERY_MINUTES,
+        ):
             key = f"morning:{today.isoformat()}"
             text = await _morning_text(db, uid, today)
             await _send_once(db, token, uid, chat, key, text)
 
         if (
             today.weekday() == WEEKLY_SUMMARY_WEEKDAY
-            and _within_window(now, WEEKLY_SUMMARY_HOUR, WEEKLY_SUMMARY_MINUTE)
+            and _within_window(
+                now,
+                WEEKLY_SUMMARY_HOUR,
+                WEEKLY_SUMMARY_MINUTE,
+                WEEKLY_GRACE_MINUTES,
+            )
         ):
             key = f"weekly:{today.isoformat()}"
             text = await _weekly_text(db, uid, today)
