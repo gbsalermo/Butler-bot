@@ -22,6 +22,12 @@ OWNER_PREFERRED_NAME = "Gabriel"
 TIMEZONE_NAME = "America/Bahia"
 UTC_OFFSET_HOURS = -3
 
+# Local meteorológico padrão somente para o perfil proprietário. Outros usuários
+# precisam configurar explicitamente com `clima em <cidade>`.
+DEFAULT_WEATHER_CITY = "Cruz das Almas - BA"
+DEFAULT_WEATHER_LATITUDE = -12.667516
+DEFAULT_WEATHER_LONGITUDE = -39.100787
+
 # Resumo diário: 07:00 no horário local calculado pelo offset acima.
 MORNING_SUMMARY_HOUR = 7
 MORNING_SUMMARY_MINUTE = 0
