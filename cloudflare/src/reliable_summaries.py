@@ -12,6 +12,7 @@ from settings import (
     WEEKLY_SUMMARY_MINUTE,
 )
 from telegram_api import delivery_error, delivery_ok, send_message
+from weather_service import safe_forecast_text
 
 LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
 MORNING_RECOVERY_MINUTES = 300
@@ -58,14 +59,30 @@ async def _checked_send(token, chat, text):
     return result
 
 
+async def _already_sent(db, uid, key):
+    existing = await db.prepare(
+        "SELECT id FROM notification_log WHERE user_id=? AND notification_key=?"
+    ).bind(uid, key).first()
+    return bool(existing)
+
+
 async def _morning_text(db, uid, today):
     text = await app.agenda_text(db, uid, today, True)
+    weather = await safe_forecast_text(
+        db,
+        uid,
+        today,
+        heading="Tempo hoje",
+        morning_only=True,
+    )
     grocery = await _rows(
         db.prepare("SELECT name FROM grocery_items WHERE user_id=? AND missing=1 ORDER BY name LIMIT 5").bind(uid)
     )
     extra = ""
+    if weather:
+        extra += "\n\n" + weather
     if grocery:
-        extra = "\n\n🛒 Faltando em casa: " + ", ".join(_row(r, "name") for r in grocery)
+        extra += "\n\n🛒 Faltando em casa: " + ", ".join(_row(r, "name") for r in grocery)
 
     yesterday = today - timedelta(days=1)
     pending = await _rows(
@@ -109,10 +126,7 @@ async def _weekly_text(db, uid, today):
 
 
 async def _send_once(db, token, uid, chat, key, text):
-    existing = await db.prepare(
-        "SELECT id FROM notification_log WHERE user_id=? AND notification_key=?"
-    ).bind(uid, key).first()
-    if existing:
+    if await _already_sent(db, uid, key):
         return False
 
     await _checked_send(token, chat, text)
@@ -139,8 +153,9 @@ async def dispatch_summaries(db, token):
         chat = int(_row(user, "telegram_chat_id"))
 
         # O resumo é nominalmente das 07:00, mas se o cron/deploy/Telegram falhar
-        # nessa janela o Butler continua tentando ao longo da manhã. O log por
-        # chave diária impede duplicação assim que uma entrega é confirmada.
+        # nessa janela o Butler continua tentando ao longo da manhã. A checagem
+        # acontece ANTES de montar o texto para não consultar serviços externos
+        # todo minuto depois que a entrega daquele dia já foi confirmada.
         if _within_window(
             now,
             MORNING_SUMMARY_HOUR,
@@ -148,8 +163,9 @@ async def dispatch_summaries(db, token):
             MORNING_RECOVERY_MINUTES,
         ):
             key = f"morning:{today.isoformat()}"
-            text = await _morning_text(db, uid, today)
-            await _send_once(db, token, uid, chat, key, text)
+            if not await _already_sent(db, uid, key):
+                text = await _morning_text(db, uid, today)
+                await _send_once(db, token, uid, chat, key, text)
 
         if (
             today.weekday() == WEEKLY_SUMMARY_WEEKDAY
@@ -161,5 +177,6 @@ async def dispatch_summaries(db, token):
             )
         ):
             key = f"weekly:{today.isoformat()}"
-            text = await _weekly_text(db, uid, today)
-            await _send_once(db, token, uid, chat, key, text)
+            if not await _already_sent(db, uid, key):
+                text = await _weekly_text(db, uid, today)
+                await _send_once(db, token, uid, chat, key, text)
