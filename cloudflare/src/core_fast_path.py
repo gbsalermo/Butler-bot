@@ -20,8 +20,6 @@ from workout_progress_patch import handle_message as handle_workout_progress, in
 
 install_workout_progress()
 
-# Palavras/intenções que fazem uma mensagem entrar no caminho rápido. Isso NÃO é
-# usado para decidir se algo veio de um botão do Telegram.
 CORE_BUTTONS = {
     "adicionar","tarefa","tarefas","compromisso","compromissos","hoje","amanha",
     "outra data","proximos 7 dias","historico","item faltando","o que esta faltando",
@@ -31,8 +29,6 @@ CORE_BUTTONS = {
     "menu principal","cancelar acao","materias","minhas materias","rotinas","metas",
 }
 
-# Aqui sim ficam os textos reais dos botões. Uma mensagem digitada "Hoje" não é
-# igual a "🗓️ Hoje" e portanto pode continuar um lembrete em andamento.
 EXACT_BUTTONS = {
     "➕ Adicionar", "✅ Tarefa", "✅ Tarefas", "📅 Compromisso", "📅 Compromissos",
     "🗓️ Hoje", "⏭️ Amanhã", "📆 Outra data", "🗓️ Próximos 7 dias", "📚 Histórico",
@@ -45,9 +41,11 @@ EXACT_BUTTONS = {
 }
 
 CORE_HINTS = (
-    # lembretes / tarefas
-    "me lembra", "me avisa", "me da um toque", "não deixa eu esquecer", "nao deixa eu esquecer",
-    "recorda", "lembra eu", "cria um lembrete", "crie um lembrete", "faz um lembrete", "anota um lembrete",
+    # lembretes / tarefas — manter as conjugações aceitas pelo parser específico
+    # também no gate; caso contrário a frase morre antes de chegar ao parser.
+    "me lembra", "me lembre", "me avisa", "me avise", "me recorda", "me recorde",
+    "me da um toque", "não deixa eu esquecer", "nao deixa eu esquecer",
+    "recorda", "recorde", "lembra eu", "cria um lembrete", "crie um lembrete", "faz um lembrete", "anota um lembrete",
     "cria uma tarefa", "crie uma tarefa", "faz uma tarefa", "adiciona uma tarefa", "adicione uma tarefa",
     "anota uma tarefa", "bota como tarefa", "marca como tarefa", "tenho que", "tenho de", "preciso",
     # compromissos
@@ -83,7 +81,7 @@ def _norm(text):
 def _looks_compound(n):
     groups=0
     checks=(
-        ("tarefa","lembra","avisa","compromisso","agenda"),
+        ("tarefa","lembra","lembre","avisa","avise","recorda","recorde","compromisso","agenda"),
         ("rotina",),
         ("treino","musculacao","serie"),
         ("materia","aula","prova","faltar","faltas"),
@@ -119,18 +117,13 @@ async def handle_message(db,token,message):
     text=(message.get("text") or "").strip()
     n=_norm(text)
 
-    # Navegação primeiro.
     if await handle_global_navigation(db,token,message):
         return True
 
-    # Continuação temporal tem prioridade sobre classificação genérica. Isso é o
-    # que permite: "me lembra de X" -> "Hoje" -> "15h".
     if _looks_temporal_followup(n):
         if await handle_colloquial_reminder(db,token,message):
             return True
 
-    # Só textos reais de botões entram aqui. Nunca usamos a versão normalizada
-    # para decidir isso, senão "Hoje" digitado vira "🗓️ Hoje" por engano.
     if text in EXACT_BUTTONS:
         await app.handle_message(db,token,message)
         return True
