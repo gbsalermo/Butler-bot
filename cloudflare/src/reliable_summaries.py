@@ -12,6 +12,7 @@ from settings import (
     WEEKLY_SUMMARY_MINUTE,
 )
 from telegram_api import delivery_error, delivery_ok, send_message
+from weather_service import safe_forecast_text
 
 LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
 MORNING_RECOVERY_MINUTES = 300
@@ -60,12 +61,21 @@ async def _checked_send(token, chat, text):
 
 async def _morning_text(db, uid, today):
     text = await app.agenda_text(db, uid, today, True)
+    weather = await safe_forecast_text(
+        db,
+        uid,
+        today,
+        heading="Tempo hoje",
+        morning_only=True,
+    )
     grocery = await _rows(
         db.prepare("SELECT name FROM grocery_items WHERE user_id=? AND missing=1 ORDER BY name LIMIT 5").bind(uid)
     )
     extra = ""
+    if weather:
+        extra += "\n\n" + weather
     if grocery:
-        extra = "\n\n🛒 Faltando em casa: " + ", ".join(_row(r, "name") for r in grocery)
+        extra += "\n\n🛒 Faltando em casa: " + ", ".join(_row(r, "name") for r in grocery)
 
     yesterday = today - timedelta(days=1)
     pending = await _rows(
