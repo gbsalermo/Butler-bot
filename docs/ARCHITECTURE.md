@@ -76,6 +76,8 @@ A ordem atual em `entry.py` é, resumidamente:
 11. fallback "não entendi"
 ```
 
+`core_fast_path.py` também chama `weather_context.py` antes dos botões exatos de Hoje/Amanhã. Isso permite anexar clima à agenda sem gerar duas respostas para o mesmo pedido.
+
 Um handler retorna `True` quando consumiu a mensagem. Depois disso os handlers seguintes não rodam.
 
 ### Consequência para manutenção
@@ -136,7 +138,8 @@ Essas relações precisam permanecer documentadas. Se um patch novo sobrescrever
 | Metas | `goal_operational.py` + `goal_*` | instalados por `operational_menu.install()` |
 | Musculação | `workout_progress_patch.py`, `app.py`, `protocol_mass_data.py` | perfil proprietário e perfil genérico divergem |
 | Ler/Ver Depois | `production_usability_patch.py` | schema criado de forma idempotente pelo próprio módulo |
-| Resumos | `reliable_summaries.py` | manhã 07:00; semanal domingo 20:00 |
+| Clima | `weather_context.py`, `weather_service.py` | Open-Meteo; Hoje/Amanhã + configuração por usuário + resumo matinal |
+| Resumos | `reliable_summaries.py` | manhã 07:00, agora com clima quando habilitado; semanal domingo 20:00 |
 | Alarmes persistentes | `attendance_alarm.py`, `personal_alarm.py` | Durable Objects sincronizados por `worker.py` |
 
 ## 6. Scheduler real
@@ -161,8 +164,10 @@ attendance
 - tarefa com horário: no horário configurado;
 - compromisso: 5 minutos antes;
 - lembrete pessoal simples: no horário, com janela curta para evitar aviso obsoleto;
-- resumo da manhã: 07:00;
+- resumo da manhã: 07:00, incluindo previsão do tempo quando disponível/habilitada;
 - fechamento semanal: domingo 20:00.
+
+A falha da API meteorológica não deve derrubar o resumo: `weather_service.safe_forecast_text()` degrada silenciosamente para agenda sem clima e registra diagnóstico.
 
 `notification_log` é usado para idempotência.
 
@@ -176,9 +181,10 @@ As migrations em `cloudflare/migrations/` são o registro formal de evolução d
 - `0002_app_state.sql` — sessão/estado e treino incremental;
 - `0003_attendance.sql` — presença;
 - `0004_conversation_context.sql` — contexto experimental da arquitetura anterior;
-- `0005_goal_profiles.sql` — perfis/configuração de metas.
+- `0005_goal_profiles.sql` — perfis/configuração de metas;
+- `0006_weather_preferences.sql` — cidade/coordenadas e preferência do boletim meteorológico por usuário.
 
-Alguns módulos também possuem `ensure_schema()` idempotente para tolerar implantação incremental.
+Alguns módulos também possuem `ensure_schema()` idempotente para tolerar implantação incremental. `weather_service.py` faz isso para `weather_preferences`, permitindo testar a branch mesmo antes de aplicar formalmente a migration no D1.
 
 ### Atenção a `runtime_schema.py`
 
@@ -239,11 +245,13 @@ Veja `src/README.md`.
 
 ## 11. Configuração
 
-`cloudflare/src/settings.py` contém configuração versionada do deploy pessoal, incluindo perfil do proprietário e offset local.
+`cloudflare/src/settings.py` contém configuração versionada do deploy pessoal, incluindo perfil do proprietário, offset local e localização meteorológica padrão do proprietário.
 
 Observações:
 
-- `TIMEZONE_NAME` é hoje apenas descritivo; o runtime usa `UTC_OFFSET_HOURS`;
+- schedulers usam `UTC_OFFSET_HOURS`; a integração Open-Meteo usa `TIMEZONE_NAME` para alinhar a previsão ao calendário local;
+- `DEFAULT_WEATHER_CITY`, `DEFAULT_WEATHER_LATITUDE` e `DEFAULT_WEATHER_LONGITUDE` são fallback apenas para o proprietário;
+- outros usuários precisam configurar explicitamente a cidade, por exemplo `clima em Salvador`;
 - o perfil proprietário e a grade inicial ainda estão versionados em código;
 - `TELEGRAM_WEBHOOK_SECRET` é suportado pelo webhook, mas opcional no `wrangler.jsonc` atual;
 - mover dados pessoais/configuração para secrets ou seed privado é dívida técnica recomendada antes de tornar o repositório mais amplamente reutilizável.
