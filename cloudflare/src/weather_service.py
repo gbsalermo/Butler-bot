@@ -54,6 +54,13 @@ def _row(row, key, default=None):
             return default
 
 
+def _number(value, default=None):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 async def _get_json(url):
     response = await fetch(url)
     if not response.ok:
@@ -180,7 +187,8 @@ async def fetch_daily_forecast(location, target):
     params = (
         f"latitude={location['latitude']}&longitude={location['longitude']}"
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,"
-        "precipitation_probability_max,precipitation_sum,wind_speed_10m_max"
+        "precipitation_probability_max,precipitation_probability_mean,"
+        "precipitation_sum,precipitation_hours,cloud_cover_mean,wind_speed_10m_max"
         f"&timezone={quote_plus(TIMEZONE_NAME)}&start_date={day}&end_date={day}"
     )
     data = await _get_json(f"{FORECAST_URL}?{params}")
@@ -198,27 +206,82 @@ async def fetch_daily_forecast(location, target):
         "weather_code": int(first("weather_code", -1)),
         "temperature_max": first("temperature_2m_max"),
         "temperature_min": first("temperature_2m_min"),
-        "rain_probability": first("precipitation_probability_max"),
+        # max = maior probabilidade HORÁRIA do dia; não deve ser apresentada
+        # como se fosse a chance do dia inteiro.
+        "rain_probability_max": first("precipitation_probability_max"),
+        "rain_probability_mean": first("precipitation_probability_mean"),
         "rain_sum": first("precipitation_sum"),
+        "rain_hours": first("precipitation_hours"),
+        "cloud_cover_mean": first("cloud_cover_mean"),
         "wind_max": first("wind_speed_10m_max"),
     }
 
 
+def _day_condition(forecast):
+    """Resume o dia sem deixar o WMO 'mais severo do dia' dominar a mensagem."""
+    rain_sum = _number(forecast.get("rain_sum"))
+    rain_hours = _number(forecast.get("rain_hours"))
+    cloud = _number(forecast.get("cloud_cover_mean"))
+
+    if rain_sum is not None and rain_sum <= 0.1:
+        if cloud is None:
+            code = forecast.get("weather_code")
+            icon, condition = WEATHER_CODES.get(code, ("🌤️", "condição variável"))
+            if code in {51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99}:
+                return "🌤️", "sem chuva relevante prevista"
+            return icon, condition
+        if cloud <= 25:
+            return "☀️", "predomínio de sol"
+        if cloud <= 65:
+            return "🌤️", "sol entre nuvens"
+        return "☁️", "muitas nuvens"
+
+    if rain_sum is not None:
+        if rain_sum < 1.0 or (rain_hours is not None and rain_hours <= 2):
+            return "🌦️", "chuva passageira em algum período"
+        if rain_sum < 5.0:
+            return "🌦️", "chuva fraca em alguns períodos"
+        if rain_sum < 15.0:
+            return "🌧️", "chuva moderada em alguns períodos"
+        return "⛈️", "chuva forte em alguns períodos"
+
+    return WEATHER_CODES.get(forecast.get("weather_code"), ("🌤️", "condição variável"))
+
+
 def format_forecast(location, forecast, heading="Tempo"):
-    icon, condition = WEATHER_CODES.get(forecast.get("weather_code"), ("🌤️", "condição variável"))
-    tmin = forecast.get("temperature_min")
-    tmax = forecast.get("temperature_max")
-    rain = forecast.get("rain_probability")
-    rain_sum = forecast.get("rain_sum")
-    wind = forecast.get("wind_max")
+    icon, condition = _day_condition(forecast)
+    tmin = _number(forecast.get("temperature_min"))
+    tmax = _number(forecast.get("temperature_max"))
+    rain_max = _number(forecast.get("rain_probability_max"))
+    rain_mean = _number(forecast.get("rain_probability_mean"))
+    rain_sum = _number(forecast.get("rain_sum"))
+    rain_hours = _number(forecast.get("rain_hours"))
+    wind = _number(forecast.get("wind_max"))
 
     lines = [f"{icon} {heading} — {location['city']}"]
     if tmin is not None and tmax is not None:
-        lines.append(f"• {condition}; {round(float(tmin))}–{round(float(tmax))} °C")
-    if rain is not None:
-        lines.append(f"• Chuva: até {round(float(rain))}%" + (f" · {float(rain_sum):.1f} mm" if rain_sum is not None else ""))
+        lines.append(f"• {condition}; {round(tmin)}–{round(tmax)} °C")
+
+    if rain_sum is not None:
+        if rain_sum <= 0.1:
+            lines.append(f"• Chuva prevista: {rain_sum:.1f} mm")
+        else:
+            duration = ""
+            if rain_hours is not None:
+                duration = f" em ~{round(rain_hours)} h"
+            lines.append(f"• Chuva prevista: {rain_sum:.1f} mm{duration}")
+
+    if rain_mean is not None and rain_sum is not None and rain_sum > 0.1:
+        probability = f"• Chance média de chuva: {round(rain_mean)}%"
+        if rain_max is not None and rain_max > rain_mean:
+            probability += f" · pico horário: {round(rain_max)}%"
+        lines.append(probability)
+    elif rain_max is not None and rain_sum is None:
+        lines.append(f"• Maior chance em algum horário: {round(rain_max)}%")
+
     if wind is not None:
-        lines.append(f"• Vento: até {round(float(wind))} km/h")
+        lines.append(f"• Vento: até {round(wind)} km/h")
+    lines.append("• Fonte: Open-Meteo")
     return "\n".join(lines)
 
 
