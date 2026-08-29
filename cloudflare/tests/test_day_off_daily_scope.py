@@ -84,14 +84,15 @@ def test_expire_stale_day_offs_clears_previous_day_and_keeps_today():
     assert db.rows[2]["day_off"] == 0
 
 
-def test_entry_expires_day_off_before_dispatch_and_before_schedulers():
+def test_entry_expires_day_off_before_dispatch_and_cron_starts_with_day_off():
+    """Protege a política, não a implementação antiga de handlers inline."""
     source = Path("src/entry.py").read_text(encoding="utf-8")
 
     webhook_expire = source.index("await expire_stale_day_offs(self.env.DB)")
-    webhook_start = source.index("handle_start_reset(self.env.DB")
-    assert webhook_expire < webhook_start
+    webhook_dispatch = source.index("await dispatch_message(self.env.DB, token, message)")
+    assert webhook_expire < webhook_dispatch
 
-    cron_expire = source.index('run_isolated("day_off", expire_stale_day_offs, db)')
-    cron_attendance = source.index('run_isolated("attendance", _attendance_tick, db, token)')
+    cron_expire = source.index('await run_isolated("day_off", expire_stale_day_offs, db)')
+    cron_attendance = source.index('await run_isolated("attendance", _attendance_tick, db, token)')
     assert cron_expire < cron_attendance
     assert '"weekend_is_not_automatic_day_off": True' in source

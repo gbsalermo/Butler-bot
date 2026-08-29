@@ -1,13 +1,8 @@
 """Compatibilidade mínima para importar o Worker no pytest CPython.
 
-O código de produção roda em Pyodide e recebe os módulos ``js`` e
-``pyodide.ffi`` do runtime Cloudflare. A suíte determinística não faz chamadas
-HTTP reais; ela só precisa conseguir importar os módulos que contêm as funções
-puras testadas.
-
-Este arquivo NÃO simula a integração Cloudflare/Telegram. Se algum teste tentar
-usar ``fetch`` de verdade, o stub falha de propósito para não produzir um falso
-positivo de integração.
+A produção roda em Pyodide/Cloudflare. Estes stubs só permitem importar módulos
+para testes determinísticos de orquestração; rede e APIs reais continuam
+proibidas para não criar falsos positivos de integração.
 """
 from __future__ import annotations
 
@@ -48,3 +43,20 @@ if "pyodide" not in sys.modules:
     pyodide.ffi = ffi
     sys.modules["pyodide"] = pyodide
     sys.modules["pyodide.ffi"] = ffi
+
+
+if "workers" not in sys.modules:
+    workers = types.ModuleType("workers")
+
+    class _Response:
+        def __init__(self, body="", status=200, headers=None):
+            self.body = body
+            self.status = status
+            self.headers = headers or {}
+
+    class _WorkerEntrypoint:
+        pass
+
+    workers.Response = _Response
+    workers.WorkerEntrypoint = _WorkerEntrypoint
+    sys.modules["workers"] = workers

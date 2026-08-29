@@ -1,27 +1,36 @@
 # Continuidade do desenvolvimento — Butler
 
-> Documento de decisões duradouras e contexto histórico. Para saber **o que a produção executa hoje**, use `docs/ARCHITECTURE.md` como fonte de verdade e confirme o dispatcher em `cloudflare/src/entry.py`.
+> Este documento registra **decisões duradouras**. Ele não repete o estado técnico completo nem o roadmap detalhado.
+>
+> - runtime atual: `docs/ARCHITECTURE.md`;
+> - visão completa: `docs/BUTLER_DOSSIE_MESTRE.md`;
+> - ordem oficial de evolução: `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`;
+> - classificação estrutural: `docs/INVENTARIO_ETAPA_0.md`.
+
+---
 
 ## 1. Objetivo permanente
 
-Butler é um assistente pessoal via Telegram. Não deve virar apenas um CRUD com botões nem uma coleção de respostas soltas.
+Butler é um assistente pessoal via Telegram. A experiência desejada combina organização cotidiana, estudo, universidade, projetos, trabalho, hábitos e interesses sem virar apenas CRUD/menu nem uma IA que decide silenciosamente pelo usuário.
 
-Princípios que permanecem válidos independentemente da implementação:
+Princípios permanentes:
 
 1. operações críticas são determinísticas;
-2. ação explícita do usuário tem prioridade sobre contexto antigo;
-3. o sistema não inventa presença, conclusão, gasto, compromisso, treino ou memória;
+2. ação explícita vence contexto antigo;
+3. não inventar presença, conclusão, gasto, compromisso, treino, progresso ou memória;
 4. dados e estado são isolados por usuário;
-5. ambiguidade de escrita deve ser tratada conservadoramente;
-6. botões e texto natural podem coexistir;
-7. contexto ajuda, mas não deve sequestrar uma mudança explícita de assunto;
-8. comportamento novo precisa de regressão;
-9. não criar uma camada nova quando o módulo dono já pode resolver o problema;
-10. documentação deve distinguir código ativo de código preservado.
+5. escrita ambígua exige confirmação quando há risco;
+6. botões e linguagem natural coexistem;
+7. contexto auxilia, mas não sequestra mudança de assunto;
+8. comportamento novo exige regressão;
+9. nova funcionalidade deve entrar no módulo autoritativo sempre que possível;
+10. documentação deve separar claramente ativo, legado e preservado.
 
-## 2. Runtime oficial atual
+---
 
-A `main` usa:
+## 2. Runtime oficial
+
+Produção:
 
 ```text
 Telegram Webhook
@@ -30,23 +39,20 @@ Telegram Webhook
 → Telegram Bot API
 ```
 
-Entrypoint de deploy:
+Entrypoints:
 
 ```text
 cloudflare/src/worker.py
-```
-
-Dispatcher:
-
-```text
 cloudflare/src/entry.py
 ```
 
-O diretório `src/` na raiz é a implementação antiga de polling/SQLite e não governa a produção atual.
+A raiz `src/` continua preservada como runtime histórico polling/SQLite e não governa produção.
 
-## 3. Evolução arquitetural importante
+---
 
-Em uma fase anterior foi construída uma arquitetura estruturada com:
+## 3. Decisão arquitetural atual
+
+Uma geração anterior tentou centralizar linguagem/contexto em:
 
 ```text
 context_router.py
@@ -57,479 +63,286 @@ suggestion_engine.py
 Butler Library
 ```
 
-A intenção era:
+Esse trabalho foi preservado, mas **não é o roteador central do webhook atual**.
 
-```text
-Core
-> contexto explícito
-> memória
-> sugestões
-> Library
-> conversa genérica
-```
-
-Essa direção continua conceitualmente útil e o código foi preservado, porém **o dispatcher operacional atual não usa essa pilha como roteador central**.
-
-A produção passou a privilegiar:
+A produção privilegia:
 
 - handlers explícitos e ordenados;
 - fast paths conservadores;
 - estados guiados;
 - módulos autoritativos por domínio;
+- contexto operacional curto;
 - fallback estreito.
 
-O `/health` atual registra NLU ampla, Library genérica, sugestões transversais genéricas e memória pessoal genérica como desabilitadas.
-
-### Regra de continuidade
-
-Nunca reative uma camada preservada apenas importando o módulo. Reativação precisa definir:
+Reativação de qualquer camada preservada precisa definir antes:
 
 - posição no dispatcher;
 - precedência contra o Core;
 - política de escrita;
 - isolamento por usuário;
-- testes do fluxo final;
+- regressão de fluxo real;
 - flags coerentes no `/health`.
 
-## 4. Core operacional atual
+---
 
-Continuam ativos ou preservados no Core de produção:
+## 4. Resultado duradouro da Etapa 0
 
-- tarefas e pendências;
-- compromissos e agenda;
-- lembretes;
-- matérias, grade, provas, presença e faltas;
-- mercado/lista de itens faltando;
-- rotinas;
-- metas;
-- musculação;
-- Ler/Ver Depois;
-- finanças;
-- Day-off;
-- resumos e schedulers.
+A fase “arrumar a casa” estabelece as seguintes regras daqui para frente:
 
-A autoridade exata por domínio está mapeada em `cloudflare/src/README.md`.
+### Dispatcher
 
-## 5. Política de conversa × ação
+`entry.py` é a autoridade da precedência e expõe funções testáveis para mensagens, callbacks e cron.
 
-A intenção histórica era distinguir:
+### Menu
+
+`operational_menu.py` é a autoridade do menu principal. Outros módulos podem manter submenus próprios, mas não uma segunda definição concorrente do menu principal.
+
+### Lembretes
+
+`reliable_reminders.py` é a autoridade temporal para `daily_items`.
+
+A antiga cadeia duplicada em `quality_patch.py`/`conversation_layer.py` foi removida e `reminder_policy.py` deixou de existir.
+
+### Schema
+
+`cloudflare/migrations/` é a fonte formal de evolução D1. `ensure_schema()` é apenas tolerância operacional.
+
+Na Etapa 0, Ler/Ver Depois passou a possuir migration formal (`0008_later_items.sql`).
+
+### Exclusão de código
+
+Não apagar por nome, idade ou aparência. Antes de excluir, classificar e demonstrar que o runtime não depende do componente. A Etapa 0 removeu apenas código com desuso comprovado.
+
+---
+
+## 5. Contexto, linguagem e memória
+
+Contexto operacional ativo usa principalmente:
+
+```text
+natural_events
+user_sessions
+conversation_layer.py
+reference_patch.py
+task_context_patch.py
+```
+
+A NLU ampla, memória pessoal genérica, sugestões transversais e Library genérica continuam desabilitadas no roteamento principal.
+
+A próxima frente oficial é **Linguagem natural + estabilidade de conversa**. Ela deve melhorar português real — conjugações, conjunções, frases compostas, elipses, referências e correções — sem religar cegamente toda a arquitetura histórica.
+
+---
+
+## 6. Política conversa × ação
+
+A direção conceitual permanece:
 
 ```text
 comentário → conversa
-pedido explícito → ação
-problema → ajuda/sugestão
+pedido explícito → ação validada pelo Core
+problema → ajuda/sugestão quando apropriado
 ambiguidade → confirmação
 ```
 
-No runtime atual essa política não é aplicada por `action_policy.py` globalmente. Ela é implementada de forma distribuída nos handlers ativos.
+A implementação atual é distribuída por handlers, não por `action_policy.py` global.
 
-### Exemplo importante: mercado
+Exceção consciente: frases domésticas claras como `acabou o café` atualmente atualizam diretamente a lista de itens faltando. Mudar isso é decisão funcional separada e deve ter regressão própria.
 
-A arquitetura antiga documentava:
+---
 
-```text
-acabou o café
-→ sugerir adicionar
-→ esperar confirmação
-```
-
-O comportamento operacional atual é diferente: `grocery_phrase_patch.py` considera frases claras como `acabou`, `falta` e `tô sem` uma atualização explícita do estado doméstico e grava diretamente na lista.
-
-Essa divergência foi mantida na auditoria porque mudar política de negócio silenciosamente seria arriscado. Se a intenção voltar a ser “sugerir e confirmar”, faça isso em uma mudança funcional separada com testes.
-
-## 6. Contexto atual
-
-Há duas formas de contexto no repositório.
-
-### Contexto operacional ativo
-
-`conversation_layer.py` usa `natural_events` para referências recentes, como:
-
-```text
-concluir essa
-adiar ela
-```
-
-Estados de wizard ficam principalmente em `user_sessions`.
-
-### Contexto estruturado preservado
-
-`context_memory.py` e `context_sync.py` mantêm a arquitetura experimental de tópicos recentes por usuário. A migration `0004_conversation_context.sql` preserva o schema, mas essa camada não é hoje o roteador central do webhook.
-
-## 7. Memória pessoal
-
-A arquitetura de memória determinística com entidades e preferências continua preservada em módulos como:
-
-- `deterministic_memory.py`;
-- `personal_profile.py`;
-- `general_memory.py`;
-- família `companion_*`.
-
-O runtime operacional atual não habilita a memória pessoal genérica como camada global de resposta.
-
-Princípios que continuam obrigatórios se essa frente for retomada:
-
-- salvar somente fatos explícitos;
-- permitir correção;
-- não inferir relação pessoal;
-- isolar por usuário;
-- não confundir entidade pessoal com entidade cultural homônima.
-
-## 8. Butler Library
-
-Os acervos de culinária, jogos, cultura pop, literatura e filosofia continuam preservados em `cloudflare/src/knowledge/`.
-
-A Library foi desenhada para evitar um `if` por conhecimento. Esse princípio continua válido.
-
-Entretanto, o dispatcher genérico da Library está desabilitado atualmente. Veja `docs/BUTLER_LIBRARY.md` para o desenho preservado e `docs/ARCHITECTURE.md` para o estado ativo.
-
-Direitos autorais permanecem uma regra permanente: preferir dados abertos, domínio público, documentos próprios, metadados e resumos produzidos para o projeto.
-
-## 9. Patches e dívida arquitetural
-
-A produção atual acumulou módulos que substituem símbolos de outros módulos no import.
-
-Exemplos relevantes:
-
-- performance otimiza `app.ensure_user`;
-- políticas de lembrete antigas são neutralizadas pela política confiável;
-- envio de scheduler é envolvido por confirmação real de entrega;
-- menus-base são redefinidos por camadas operacionais.
-
-Essa estratégia permitiu evoluir sem reescrever o Core, mas agora é uma dívida técnica.
-
-### Regra daqui para frente
-
-Não criar `*_fix2.py`, `*_final.py` ou nova camada paralela sem necessidade real.
-
-Quando houver cobertura suficiente, consolidar a regra no módulo autoritativo e remover o patch antigo em PR específico.
-
-## 10. Scheduler
-
-A política atual de produção é documentada em `docs/ARCHITECTURE.md` e `cloudflare/README.md`.
+## 7. Scheduler e entrega
 
 Princípios permanentes:
 
-- cron não deve mandar aviso obsoleto muito depois do horário;
-- entrega só deve ser registrada como concluída quando o Telegram confirmar quando isso for crítico;
+- não enviar aviso obsoleto muito depois do horário;
+- registrar envio crítico como concluído somente quando a entrega tiver confirmação adequada;
 - `notification_log` protege idempotência;
-- falha de um subsistema não deve derrubar os demais;
-- Day-off deve ser respeitado conforme a categoria do aviso.
+- falha de um subsistema não derruba os demais;
+- callbacks repetidos não podem repetir efeito crítico;
+- Day-off deve ser respeitado conforme a política de cada categoria.
 
-## 11. Acadêmico e presença
+Cron operacional:
 
-Aulas são previstas pelo horário cadastrado; presença não pode ser presumida.
+```text
+day_off
+→ attendance
+→ daily_items
+→ routines
+→ summaries
+→ legado/compatibilidade
+```
 
-O sistema pode:
+---
 
-- avisar sobre aula;
-- perguntar presença/falta;
-- registrar resposta explícita;
-- calcular limites conforme as regras cadastradas.
+## 8. Acadêmico
 
-Não registrar presença automaticamente só porque o horário passou.
+Aulas são previstas; presença nunca é presumida.
 
-## 12. Musculação
+O sistema pode avisar, perguntar e registrar resposta explícita, além de calcular limites de faltas conforme configuração.
 
-O perfil do proprietário preserva protocolo de 12 semanas e o perfil genérico pode trabalhar com ficha própria.
+A Etapa 2 do roadmap deve:
 
-Regras:
+- consolidar a família acadêmica/presença;
+- concluir edição completa de matérias;
+- suportar múltiplos horários/localizações;
+- transformar importação SIGAA em um adaptador sobre modelo acadêmico normalizado;
+- preparar reaproveitamento do motor de importação para cursos.
+
+---
+
+## 9. Musculação
+
+O perfil proprietário preserva o Protocol Mass de 12 semanas; usuários genéricos podem possuir ficha própria.
+
+Regras permanentes:
 
 - não aplicar protocolo pessoal a outro usuário;
 - registrar carga/repetição somente quando informadas;
-- substituição de exercício não deve apagar histórico;
-- evolução deve usar dados reais registrados.
+- substituição não apaga histórico;
+- evolução usa dados realmente registrados.
 
-## 13. Cursos e trilhas de estudo — direção futura
+---
 
-O Butler deve evoluir para acompanhar **cursos livres, idiomas e outras trilhas estruturadas de estudo** combinando duas ideias já existentes no sistema:
+## 10. Cursos e trilhas
 
-- **matérias**, porque o estudo entra no cronograma/agenda;
-- **musculação**, porque existe uma sequência ordenada, um ponto atual, histórico de execução e progressão baseada no que realmente foi concluído.
+Cursos são parte oficial do roadmap, não funcionalidade ativa ainda.
 
-O domínio deve continuar genérico para inglês, francês, italiano, programação, certificações, cursos técnicos ou qualquer formação dividida em módulos e conteúdos.
-
-### Modelo conceitual
-
-A estrutura preferida é:
+Modelo conceitual:
 
 ```text
 Curso
-→ módulo/etapa
-   → submódulo/aula/assunto
-      → materiais e atividades vinculadas
-      → status/progresso
+→ módulo
+   → conteúdo/submódulo
+      → materiais/atividades
+      → progresso
 ```
 
-O **módulo** funciona como uma etapa maior, semelhante a uma semana/bloco de treino. O **submódulo** é a unidade executável do dia, semelhante a um exercício: aula, assunto, lista, revisão ou outra atividade que faça sentido naquela trilha.
+Decisões já tomadas:
 
-Nem todo fornecedor usa os nomes "módulo" e "submódulo" do mesmo jeito. Na importação, o Butler deve preservar os títulos originais, mas normalizar internamente a hierarquia para evitar depender da nomenclatura da plataforma.
+- curso autogerido mantém o próximo conteúdo pendente até conclusão/pulo explícito;
+- curso ao vivo segue calendário fixo e não desloca aula automaticamente;
+- conclusão é explícita;
+- importador deve agrupar mídias, listas, soluções, revisões e materiais relacionados antes de salvar;
+- baixa confiança exige prévia/confirmação.
 
-### Ritmo do curso
+Detalhes completos estão na Trilha Definitiva.
 
-O curso precisa declarar um modo de ritmo:
+---
+
+## 11. Projetos, Inbox e priorização
+
+Também são compromissos do roadmap oficial:
+
+- Caixa de entrada para captura rápida sem classificação imediata;
+- Projetos/Trabalho com estado, próximos passos, bloqueios e “onde parei?”;
+- Priorização do dia/semana baseada em regras explicáveis e dados reais;
+- integração posterior com cursos, agenda, clima, rotinas e pendências.
+
+Não implementar essas frentes antes dos gates definidos na Trilha.
+
+---
+
+## 12. Library e conhecimento
+
+Os acervos de culinária, jogos, cultura pop, livros e filosofia continuam preservados.
+
+Direção permanente:
+
+- preferir dados, aliases, tags e índice, não um `if` por exemplo;
+- Library pode sugerir, mas ação persistente pertence ao Core;
+- direitos autorais: preferir dados abertos, domínio público, documentos próprios e resumos/metadados.
+
+Reativação seletiva pertence à Etapa 7.
+
+---
+
+## 13. Multiusuário e proprietário
+
+Toda persistência pessoal é isolada por usuário.
+
+A barreira `is_owner(chat_id)` não deve ser removida sem mecanismo equivalente.
+
+Recursos administrativos permanecem exclusivos do proprietário. Seeds/configurações pessoais devem migrar para configuração privada antes de distribuição mais ampla.
+
+---
+
+## 14. Banco e migrations
+
+Disciplina obrigatória:
+
+1. migration versionada;
+2. backfill explícito quando necessário;
+3. índice quando a consulta justificar;
+4. `ensure_schema()` apenas quando houver motivo operacional;
+5. teste;
+6. documentação.
+
+Migration destrutiva exige snapshot/export D1 e plano de rollback.
+
+Defaults retroativos não devem depender apenas de `app.ensure_user()` porque usuários existentes podem não passar pelo bootstrap completo.
+
+---
+
+## 15. Patches e dívida técnica
+
+A estratégia de patches permitiu evoluir sem reescrever o Core, mas não deve continuar crescendo indefinidamente.
+
+Regra:
 
 ```text
-autogerido / gravado
-ao vivo / calendário fixo
+não criar *_fix2.py, *_final.py ou nova camada paralela
+sem justificar por que o módulo autoritativo não pode receber a mudança
 ```
 
-#### Curso autogerido ou gravado
+Quando um domínio for trabalhado e houver cobertura suficiente, consolidar a regra no módulo dono e remover compatibilidade antiga em PR próprio ou na etapa funcional correspondente.
 
-O aluno escolhe dias/horário de estudo como faria com uma rotina. O conteúdo do dia, porém, vem do **próximo submódulo pendente**, não de uma tarefa nova criada diariamente.
+---
 
-Exemplo:
+## 16. Testes
 
-```text
-segunda: concluiu 1.1
-terça: concluiu 1.2
-quarta: 1.3 apareceu e não foi concluído
-quinta: 1.3 aparece novamente
-```
+A suíte em `cloudflare/tests/` deve proteger funções determinísticas e o caminho realmente alcançado pelo dispatcher.
 
-Regra central: **não concluir não avança o ponteiro**. O mesmo próximo conteúdo continua reaparecendo nas sessões seguintes até ser concluído, pulado explicitamente ou reordenado pelo usuário.
+Prioridades:
 
-Assim, o cronograma mostra o que o aluno realmente precisa continuar, em vez de fingir que houve progresso porque o dia passou.
-
-#### Curso ao vivo
-
-O aluno informa dias e horários fixos. Nesse modo o curso se comporta mais como matéria universitária: a aula acontece naquele horário mesmo que a anterior não tenha sido marcada como concluída.
-
-O Butler pode registrar presença/progresso e pendências, mas **não deve deslocar a grade ao vivo para outro dia**. Conteúdo perdido pode virar pendência/revisão separada.
-
-### Horários e agenda
-
-Para curso autogerido:
-
-```text
-curso + horário de estudo → comportamento semelhante a rotina
-```
-
-Para curso ao vivo:
-
-```text
-curso + horário fixo → comportamento semelhante a matéria/aula
-```
-
-Em ambos os casos o item precisa aparecer em `Hoje`, agenda diária e resumos quando aplicável, sem duplicar o conteúdo como tarefa independente a cada dia.
-
-### Estados e progressão
-
-Cada submódulo deve suportar no mínimo:
-
-```text
-pendente
-em andamento
-concluído
-pulado
-```
-
-Conclusão precisa ser explícita. O Butler não deve inferir conclusão apenas porque o horário passou.
-
-O sistema deve permitir concluir **um ou vários itens de uma vez**. Para Telegram, a UX preferida é seleção por botões inline/checkbox-like e uma confirmação final, em vez de obrigar o usuário a digitar nomes longos.
-
-Exemplos:
-
-```text
-☑ Alphabet
-☑ Lista de exercícios — Alphabet
-☐ Solução dos exercícios — Alphabet
-[✅ Concluir selecionados]
-```
-
-A operação em lote deve manter histórico individual por item e permitir desfazer/corrigir sem apagar a trilha anterior.
-
-### Leitura e normalização de grades importadas
-
-A importação de cursos deve ser mais inteligente do que simplesmente transformar cada linha do arquivo em uma aula. O Butler precisa classificar itens relacionados e apresentar uma **prévia agrupada** antes de salvar.
-
-Diretrizes iniciais:
-
-1. **mesmo nome repetido de forma idêntica** em arquivos diferentes normalmente representa o mesmo conteúdo/aula com mídias ou materiais diferentes, e não duas aulas novas;
-2. extensões diferentes do mesmo item, como vídeo + legenda (`.mp4` + `.srt`), devem virar **um único submódulo com múltiplos materiais**;
-3. arquivos auxiliares numerados (`1.1`, `3.1`, PDFs, slides etc.) devem ser anexados ao item principal quando o nome/numeração indicar relação;
-4. item contendo `Lista de Exercícios`, `Lista de Exercicio`, `Exercícios` ou equivalente deve ser classificado como **atividade/lista de exercícios**;
-5. item contendo `Solução`, `Resolução`, `Gabarito` ou equivalente deve ser classificado como **solução/revisão**, vinculado ao assunto/aula correspondente;
-6. item contendo `Revisão` deve ser auto declarado como revisão e vinculado ao assunto/bloco compatível quando houver evidência suficiente;
-7. nomes semelhantes não devem ser fundidos só por aproximação textual se isso puder apagar aulas distintas;
-8. em caso de baixa confiança, a prévia deve mostrar a dúvida e pedir confirmação em vez de decidir silenciosamente.
-
-### Exemplo concreto de importação
-
-A grade usada como referência possui blocos como `Introdução ao curso`, `Nível Básico`, `Nível Intermediário`, `Nível Avançado`, `Pílulas` e aula bônus. Dentro do nível básico, por exemplo, aparecem sequências do tipo:
-
-```text
-Alphabet.mp4
-Alphabet.srt
-B01-SpellAlphabet.pdf
-Alphabet - Lista de Exercícios.html
-B01-Alphabet.pdf
-Alphabet - Solução dos Exercícios.mp4
-Alphabet - Solução dos Exercícios.srt
-```
-
-Isso não deve virar sete aulas independentes. A interpretação desejada é algo próximo de:
-
-```text
-Módulo: Nível Básico
-→ Aula: Alphabet
-   → vídeo
-   → legenda
-   → material PDF
-   → lista de exercícios
-   → material da lista
-   → solução dos exercícios
-```
-
-O mesmo padrão se repete em conteúdos como `Cardinal Numbers`, `Ordinal Numbers`, `Simple Present`, `Comparative`, `Present Perfect` e outros. Essa estrutura deve orientar os testes do futuro importador, sem codificar regras exclusivas para esse curso específico.
-
-### O Butler deve poder cadastrar ou importar
-
-- nome do curso;
-- instituição/plataforma, quando houver;
-- tipo de ritmo (`autogerido` ou `ao vivo`);
-- dias/horários de estudo ou horários fixos;
-- módulos/etapas;
-- submódulos/aulas/assuntos;
-- atividades vinculadas;
-- ordem e dependências;
-- duração/carga horária estimada, quando disponível;
-- materiais/referências;
-- status e histórico de conclusão.
-
-### Acompanhamento esperado
-
-O Butler deve conseguir responder perguntas como:
-
-```text
-Onde parei no inglês?
-O que falta no curso de francês?
-Qual é minha próxima aula?
-O que já finalizei em italiano?
-Quanto do curso eu concluí?
-O que devo estudar hoje?
-Quantos módulos já terminei?
-Quais exercícios ainda faltam nessa aula?
-```
-
-Também deve mostrar progresso por curso, módulo e submódulo e preservar histórico em vez de apenas sobrescrever o estado atual.
-
-### Relação com rotinas, matérias e agenda
-
-O curso não deve ser reduzido a uma rotina nem duplicado como matéria comum.
-
-```text
-Curso autogerido
-→ usa calendário/horário de rotina
-→ conteúdo vem do próximo item pendente
-
-Curso ao vivo
-→ usa calendário fixo de aula
-→ conteúdo acompanha a sequência real do curso
-```
-
-Exemplo:
-
-```text
-Curso: Inglês
-Modo: autogerido
-Estudo: seg/qua/sex às 19h
-Próximo passo: Nível Básico → Alphabet
-```
-
-O Butler usa a agenda para dizer **quando** estudar e o domínio de cursos para dizer **o quê** estudar e **onde o aluno parou**.
-
-### Importação segura
-
-A importação deve seguir sempre:
-
-```text
-arquivo
-→ extração
-→ normalização
-→ agrupamento
-→ classificação
-→ prévia editável/confirmável
-→ gravação
-```
-
-Nunca gravar automaticamente uma grade complexa sem prévia. O usuário deve conseguir corrigir módulo, vínculo, ordem ou classificação antes da confirmação final.
-
-### Princípio arquitetural
-
-Evitar implementação exclusiva para idiomas ou para a estrutura de uma plataforma. O domínio deve nascer genérico (`curso`, `módulo`, `conteúdo`, `atividade`, `material`, `progresso`, `agenda`) e possuir adaptadores/heurísticas de importação separados.
-
-Esta é uma **direção futura**, não uma funcionalidade que deve ser anunciada como ativa enquanto não estiver conectada ao runtime de produção e coberta por testes.
-
-## 14. Perfil proprietário × usuários genéricos
-
-O projeto nasceu como assistente pessoal e depois ganhou isolamento multiusuário. Por isso ainda há configuração/seeds pessoais em código.
-
-A barreira `is_owner(chat_id)` não deve ser removida sem substituir o mecanismo.
-
-Antes de distribuir o Butler como produto genérico, mover perfil/seed pessoal para configuração privada é recomendado.
-
-## 15. Banco e migrations
-
-A fonte formal de evolução do D1 é `cloudflare/migrations/`.
-
-Não assumir que `runtime_schema.py` roda automaticamente; hoje ele é helper de compatibilidade.
-
-Mudança de schema deve incluir:
-
-1. migration numerada;
-2. backfill quando necessário;
-3. `ensure_schema()` somente quando houver motivo operacional;
-4. teste;
-5. documentação.
-
-## 16. Bootstrap e usuários existentes
-
-`performance_patch.py` evita repetir o bootstrap completo em cada mensagem de usuário já conhecido.
-
-Consequência: adicionar um novo default somente em `app.ensure_user()` afeta novas contas, não garante atualização das existentes.
-
-Para defaults retroativos, use migration/backfill explícito.
-
-## 17. Testes e regressão
-
-A suíte em `cloudflare/tests/` deve ser executável em CPython e proteger funções determinísticas.
-
-O runtime real usa Pyodide. `tests/conftest.py` existe apenas para permitir imports de `js`/`pyodide`; não é simulação de rede.
-
-Prioridade de novos testes:
-
-- dispatcher realmente ativo;
-- variações informais;
+- sequências completas de conversa;
 - falsos positivos;
-- dois usuários distintos;
-- estados/cancelamento;
-- idempotência temporal;
-- regressões de casos reais.
+- dois usuários;
+- callbacks repetidos;
+- scheduler/idempotência;
+- cancelamento/voltar;
+- precedência de handlers.
 
-## 18. Documentos de referência
+CI verde é condição necessária para merge, mas não prova deploy Cloudflare.
 
-Use cada arquivo para o propósito correto:
+---
 
-- `README.md` — visão geral;
-- `docs/ARCHITECTURE.md` — runtime ativo;
-- `docs/MAINTAINER_GUIDE.md` — como editar;
-- `cloudflare/src/README.md` — mapa de módulos;
-- `docs/AUDIT_MAIN_2026-08.md` — achados da auditoria;
-- `docs/BUTLER_LIBRARY.md` — desenho preservado da Library;
-- este arquivo — decisões e direção histórica.
+## 17. Ordem oficial de evolução
 
-## 19. Próxima direção recomendada
-
-A prioridade não é adicionar mais catálogo ou mais patches. É:
+A partir da Etapa 0 concluída:
 
 ```text
-1. testar o dispatcher de produção ponta a ponta com fakes
-2. consolidar menus duplicados
-3. consolidar política de lembretes
-4. remover patches obsoletos com segurança
-5. reduzir diferenças entre documentação e código
-6. decidir conscientemente quais camadas preservadas serão reativadas
+1. 🗣️ Linguagem natural + conversa real
+2. 🎓 Acadêmico + importação
+3. 📚 Cursos e trilhas
+4. 📥 Caixa de entrada
+5. 🗂️ Projetos e trabalho
+6. 🧭 Resumo e priorização
+7. 🧠 Memória + Library seletiva
+8. 🔒 Hardening
 ```
 
-Ao concluir uma etapa futura, atualize `docs/ARCHITECTURE.md` quando o comportamento ativo mudar e este arquivo quando uma decisão arquitetural de longo prazo mudar.
+A fonte detalhada e os critérios de saída de cada fase estão em `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
+
+---
+
+## 18. Regra de atualização documental
+
+Ao mudar:
+
+- **runtime/autoridade:** atualizar `docs/ARCHITECTURE.md` e o Dossiê quando material;
+- **roadmap/ordem futura:** atualizar a Trilha Definitiva;
+- **decisão duradoura:** atualizar este arquivo;
+- **classificação estrutural:** atualizar Inventário;
+- **capacidade pública/uso:** atualizar README.
+
+Não duplicar detalhes por conveniência. Cada documento tem uma função clara.
