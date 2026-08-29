@@ -2,12 +2,20 @@
 
 Este diretório contém o **runtime de produção** do Butler: Telegram Webhook + Cloudflare Python Worker + D1 + Durable Objects.
 
-Para entender o projeto antes de editar código, leia também:
+## Antes de editar código
 
-- `../docs/ARCHITECTURE.md` — arquitetura real;
-- `../docs/MAINTAINER_GUIDE.md` — regras de manutenção;
-- `src/README.md` — mapa de módulos;
-- `../docs/AUDIT_MAIN_2026-08.md` — inconsistências encontradas na auditoria.
+Leia nesta ordem:
+
+1. `../docs/BUTLER_DOSSIE_MESTRE.md` — visão completa do produto e manutenção;
+2. `../docs/ARCHITECTURE.md` — fonte de verdade do runtime;
+3. `../docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` — roadmap oficial;
+4. `../docs/INVENTARIO_ETAPA_0.md` — classificação estrutural após a limpeza;
+5. `../docs/MAINTAINER_GUIDE.md` — regras práticas;
+6. `src/README.md` — mapa módulo por módulo.
+
+`../docs/AUDIT_MAIN_2026-08.md` permanece como histórico da auditoria anterior.
+
+---
 
 ## Estrutura de produção
 
@@ -22,8 +30,9 @@ src/worker.py
 src/entry.py
   → GET /health
   → POST /telegram/webhook
-  → dispatcher de mensagens
-  → scheduled()
+  → dispatch_callback()
+  → dispatch_message()
+  → dispatch_scheduled()
 
 src/app.py
   → núcleo-base/fallback, D1, estados e operações herdadas
@@ -31,30 +40,155 @@ src/app.py
 
 Branch de produção: `main`.
 
-## O que é fonte de verdade
+A ordem de handlers e de instalações em `entry.py` é parte do comportamento. A Etapa 0 tornou a orquestração explícita/testável para reduzir dependência de inspeção textual e monkeypatches implícitos.
 
-A ordem de handlers e de `install_*()` em `src/entry.py` é parte do comportamento. Muitos módulos fazem monkeypatch sobre `app.py`, `conversation_layer.py`, `routine_integration.py` e outros.
-
-Não altere uma função em `app.py` supondo automaticamente que ela é a versão executada. Primeiro confira se algum patch posterior a substitui.
-
-Veja `src/README.md` para a classificação de cada módulo como ativo, transitivo, base ou preservado.
+---
 
 ## Dispatcher operacional
 
-A produção usa fast paths e handlers explícitos. Resumo da prioridade:
+A produção usa fast paths e handlers explícitos. Resumo da precedência:
 
 ```text
 /start/reset
-→ diagnóstico
-→ usabilidade/menu/navegação
-→ Core fast path
-→ presença/provas/acadêmico
-→ lembretes/referências/tarefas/mercado/treino/contexto
+→ aviso administrativo / diagnósticos
+→ despedida prioritária
+→ usabilidade / Ler-Ver Depois
+→ menu / rotinas / presença / navegação
+→ core_fast_path
+→ presença / provas / acadêmico
+→ lembrete / referência / tarefa / runtime_guard
+→ mercado / quality / treino / conversation_layer
 → app.py somente quando botão/estado guiado exigir
 → fallback
 ```
 
-O antigo desenho de `context_router.py` + `intent_parser.py` continua no repositório, mas não governa atualmente o webhook principal.
+Callbacks:
+
+```text
+admin announcement
+→ attendance
+→ context/item
+```
+
+O antigo desenho `context_router.py + intent_parser.py` continua preservado, mas não governa o webhook principal.
+
+---
+
+## Funcionalidades operacionais
+
+### Interface e identidade
+
+- `/start`;
+- menu principal e Cotidiano;
+- identificação por `telegram_chat_id`;
+- isolamento por `user_id`;
+- perfil especial do proprietário por `is_owner(chat_id)`;
+- usuário genérico sem grade/protocolo pessoal automático.
+
+### Day-off
+
+Day-off vale para o dia local em que foi ativado e não é automático em sábado/domingo. A expiração acontece antes do dispatcher e antes dos demais subsistemas do cron.
+
+### Tarefas e compromissos
+
+- criação por botão e linguagem natural conservadora;
+- conclusão, cancelamento e adiamento;
+- agenda de hoje/amanhã/períodos;
+- pendências;
+- referências curtas;
+- compromissos resolvidos saem da tela operacional após janela de UX, sem apagar histórico.
+
+### Lembretes simples
+
+Pedidos explícitos como `me lembra...` usam fast paths conservadores. A entrega temporal é responsabilidade de `reliable_reminders.py`.
+
+### Acadêmico e presença
+
+- matérias, horários e locais;
+- importação textual/PDF pesquisável, sem OCR;
+- provas e lembretes;
+- faltas/presença e limites;
+- edição/exclusão controladas;
+- alertas de aula prioritários;
+- Durable Object para eventos rígidos de presença.
+
+### Mercado
+
+- adicionar/listar itens faltando;
+- marcar compra concluída;
+- formas claras como `acabou café`/`tô sem detergente` atualizam diretamente a lista segundo a política atual.
+
+### Rotinas e metas
+
+- recorrência e múltiplos checkpoints;
+- integração com agenda;
+- conclusão pode alimentar meta;
+- edição/remoção;
+- família `goal_*` instalada pelo menu operacional.
+
+### Musculação
+
+- protocolo pessoal preservado;
+- perfil genérico com treino próprio;
+- exercício, substituição, séries, cargas, repetições e progresso.
+
+### Ler/Ver Depois
+
+Lista simples por usuário com livro, filme ou categoria customizada. O schema agora possui migration formal `0008_later_items.sql`.
+
+### Clima
+
+- Open-Meteo;
+- localização por usuário;
+- agenda Hoje/Amanhã + previsão quando aplicável;
+- resumo matinal com fallback seguro se a API falhar.
+
+### Administração
+
+Somente proprietário:
+
+- status/listagem de usuários;
+- `/aviso` com prévia;
+- confirmação/cancelamento por botão;
+- envio geral ou direcionado a ID interno;
+- estado pendente idempotente no D1.
+
+---
+
+## Scheduler consolidado
+
+O cron configurado em `wrangler.jsonc` roda a cada minuto.
+
+`worker.py` sincroniza primeiro:
+
+- alarmes de presença;
+- alarmes pessoais.
+
+Depois `entry.dispatch_scheduled()` executa isoladamente:
+
+```text
+day_off
+→ attendance
+→ daily_items / reliable_reminders
+→ routines
+→ reliable_summaries
+→ app.scheduled_tick (compatibilidade/legado)
+```
+
+### Política temporal de `daily_items`
+
+Após a Etapa 0, **`reliable_reminders.py` é a autoridade única**:
+
+- tarefa com horário: no horário;
+- compromisso: 5 minutos antes;
+- lembrete pessoal: no horário, com tolerância curta;
+- `notification_log`: idempotência;
+- supressão das chaves equivalentes do scheduler legado;
+- confirmação de entrega em canais críticos quando aplicável.
+
+Foram eliminados o scheduler temporal duplicado de `conversation_layer.py`, a política duplicada de `quality_patch.py` e o arquivo `reminder_policy.py`, que existia apenas para neutralizar a duplicidade.
+
+---
 
 ## D1 e migrations
 
@@ -66,140 +200,32 @@ A evolução formal do banco está em `migrations/`:
 0003_attendance.sql
 0004_conversation_context.sql
 0005_goal_profiles.sql
+0006_weather_preferences.sql
+0007_admin_pending_announcements.sql
+0008_later_items.sql
 ```
 
-Alguns módulos também executam `CREATE TABLE/INDEX IF NOT EXISTS` defensivamente. Isso é proteção de implantação incremental, não substituto de migration.
+Alguns módulos executam `CREATE TABLE/INDEX IF NOT EXISTS` defensivamente para implantação incremental. Isso não substitui migration.
 
-`src/runtime_schema.py` é um helper preservado e **não é chamado como bootstrap geral pelo dispatcher atual**.
+`src/runtime_schema.py` é helper preservado e **não é o bootstrap geral do runtime**.
 
 ### Aplicar migrations
 
-Produção/remoto, somente quando a mudança tiver sido preparada para isso:
+Produção/remoto, somente depois de validação:
 
 ```bash
 npx wrangler d1 migrations apply butler-db --remote
 ```
 
-Ambiente local:
+Local:
 
 ```bash
 npx wrangler d1 migrations apply butler-db --local
 ```
 
-Nunca use `--remote` só para testar uma migration ainda não validada.
+Migration destrutiva exige snapshot/export e plano de rollback. Nunca usar `--remote` apenas para testar uma migration não validada.
 
-## Funcionalidades operacionais
-
-### Interface e identidade
-
-- `/start`;
-- menu principal e Cotidiano;
-- identificação por `telegram_chat_id`;
-- isolamento por `user_id`;
-- perfil especial do proprietário separado por `is_owner(chat_id)`;
-- usuário genérico começa sem grade/protocolo pessoal.
-
-### Day-off
-
-Day-off reduz/silencia os avisos compatíveis daquele usuário. O estado fica em `assistant_state`.
-
-### Tarefas e compromissos
-
-- criação por botão e linguagem natural conservadora;
-- conclusão, cancelamento e adiamento;
-- agenda de hoje, amanhã e períodos;
-- pendências;
-- referências curtas como “essa tarefa”;
-- compromissos resolvidos saem da tela operacional após uma janela, sem apagar histórico.
-
-### Lembretes simples
-
-Pedidos claros como `me lembra...` seguem fast path próprio e usam `reliable_reminders.py` para entrega temporal.
-
-### Acadêmico e presença
-
-- matérias, horários e locais;
-- importação textual/PDF sem OCR;
-- provas e lembretes de prova;
-- faltas/presença;
-- limites por matéria;
-- edição/exclusão controladas;
-- alertas de aula em subsistema prioritário;
-- Durable Object para eventos rígidos de presença.
-
-### Mercado
-
-- adicionar/listar itens faltando;
-- marcar compra concluída por texto;
-- formas claras como `acabou café`, `falta açúcar`, `tô sem detergente` atualizam diretamente a lista no comportamento atual.
-
-Essa última regra difere de um desenho antigo de “sugerir antes de salvar”. Se a política for alterada no futuro, deve ser uma mudança funcional com regressão própria.
-
-### Rotinas e metas
-
-- cadastro de rotina;
-- recorrência e múltiplos checkpoints;
-- rotina aparece na agenda quando aplicável;
-- conclusão pode alimentar meta compatível;
-- edição e remoção;
-- metas possuem família própria `goal_*`, instalada pelo menu operacional.
-
-### Musculação
-
-- perfil pessoal com protocolo preservado;
-- perfil genérico com treino próprio;
-- exercício, substituição, séries, carga, repetições e progresso;
-- histórico/referências de carga.
-
-### Ler/Ver Depois
-
-`production_usability_patch.py` mantém uma lista simples por usuário com:
-
-- livro;
-- filme;
-- outra categoria informada pelo usuário;
-- adicionar;
-- listar;
-- editar;
-- remover.
-
-### Finanças
-
-O Core de finanças permanece no projeto. A interface operacional atual prioriza outras áreas e não apresenta Finanças como item principal em todos os caminhos de menu; ao alterar menus, confira `operational_menu.py` e os fallbacks em `app.py`.
-
-## Scheduler
-
-O cron configurado em `wrangler.jsonc` roda a cada minuto.
-
-`worker.py` sincroniza primeiro:
-
-- alarmes de presença;
-- alarmes pessoais.
-
-Depois `entry.py` executa isoladamente:
-
-```text
-attendance
-→ reliable_reminders
-→ routines
-→ reliable_summaries
-→ app.scheduled_tick (compatibilidade/legado)
-```
-
-A falha de um subsistema não deve impedir os demais.
-
-### Política temporal atual
-
-- tarefa com horário: aviso no horário;
-- compromisso: 5 minutos antes;
-- lembrete pessoal: no horário, sem aceitar atraso grande;
-- resumo matinal: 07:00;
-- fechamento semanal: domingo 20:00;
-- presença/aulas: política própria do subsistema acadêmico.
-
-`notification_log` fornece idempotência.
-
-`scheduled_delivery_guard.py` exige confirmação real da API do Telegram em entregas críticas antes de aceitá-las como sucesso.
+---
 
 ## `/health`
 
@@ -207,23 +233,26 @@ A falha de um subsistema não deve impedir os demais.
 GET /health
 ```
 
-O endpoint é também um manifesto operacional. O dispatcher atual se identifica como:
+O manifesto operacional após a Etapa 0 se identifica como:
 
 ```json
-"dispatcher": "butler-operational-core-v3"
+"dispatcher": "butler-operational-core-v4",
+"stage_zero_consolidation": true
 ```
 
-Ele também registra flags importantes como NLU ampla, Library genérica, sugestões transversais e memória genérica desabilitadas.
+Também mantém flags explícitas para NLU ampla, Library genérica, sugestões transversais e memória pessoal genérica desabilitadas.
 
-Se uma feature dessas for reativada, o `/health` e a documentação devem mudar junto com o código.
+---
 
-## Butler Library / arquitetura preservada
+## Arquitetura preservada
 
-`src/knowledge/` e vários módulos de Library/contexto continuam no repositório para preservar dados, testes e evolução futura.
+`src/knowledge/` e módulos de Library/contexto/memória continuam preservados para as Etapas 1 e 7.
 
-Hoje, porém, o dispatcher genérico da Library não está habilitado no webhook de produção.
+Não implementar correção de produção apenas em `context_router.py`, `intent_parser.py`, `suggestion_engine.py`, `library_catalog_handler.py` etc. sem primeiro conectar/testar o caminho real no dispatcher.
 
-Não implemente uma correção de produção apenas em `library_catalog_handler.py`, `context_router.py`, `intent_parser.py` ou `suggestion_engine.py` sem primeiro conectar/testar o caminho no dispatcher.
+A raiz `../src/` também permanece como runtime histórico polling/SQLite e não deve receber correções de produção por padrão.
+
+---
 
 ## Testes
 
@@ -231,30 +260,37 @@ Não implemente uma correção de produção apenas em `library_catalog_handler.
 pytest -q
 ```
 
-A suíte roda em CPython 3.13. O runtime de produção usa Pyodide e disponibiliza `js`/`pyodide.ffi`.
-
-`tests/conftest.py` fornece stubs mínimos somente para permitir importação em testes determinísticos; integração real de rede continua fora desses stubs.
-
-O GitHub Actions também executa:
+GitHub Actions executa:
 
 ```bash
 python -m compileall -q src
 pytest -q
 ```
 
-## Desenvolvimento local
+A suíte CPython usa stubs mínimos de `js`, `pyodide` e `workers`. Esses stubs permitem testar funções determinísticas/orquestração; não simulam integração real de rede.
 
-O Worker pode ser executado localmente com D1 local. Ao testar com Telegram, use um bot separado e um túnel/webhook temporário; nunca substitua o token do bot oficial só para validar uma branch.
+A Etapa 0 acrescentou regressões para:
 
-Estado local do Wrangler e secrets locais não devem ser commitados.
+- ordem de callbacks;
+- precedência administrativa;
+- ordem do cron;
+- Day-off antes do restante;
+- autoridade única de menu principal;
+- ausência das antigas políticas concorrentes de lembretes.
 
-## Segurança
+---
 
-- `TELEGRAM_BOT_TOKEN` deve permanecer secret;
-- o webhook aceita `TELEGRAM_WEBHOOK_SECRET` quando configurado;
-- hoje o webhook secret não é obrigatório no `wrangler.jsonc`, portanto endurecê-lo deve ser feito em uma mudança preparada de segurança;
-- não registrar tokens em logs;
-- queries pessoais devem sempre limitar por usuário.
+## Desenvolvimento local e segurança
+
+Ao testar Telegram, use bot separado e túnel/webhook temporário. Não substitua o token oficial só para validar branch.
+
+- `TELEGRAM_BOT_TOKEN` permanece secret;
+- webhook aceita `TELEGRAM_WEBHOOK_SECRET` quando configurado;
+- queries pessoais devem limitar por usuário;
+- tokens não entram em logs/repositório;
+- callbacks administrativos revalidam autorização/estado no servidor.
+
+---
 
 ## Regra para expansão
 
@@ -263,8 +299,9 @@ Antes de criar outro módulo/patch, responda:
 1. qual módulo já é dono desse domínio?
 2. por que a mudança não cabe nele?
 3. quem importa/chama o novo código?
-4. qual é a posição no dispatcher?
-5. qual símbolo será sobrescrito, se houver monkeypatch?
-6. qual teste demonstra o comportamento final de produção?
+4. qual posição precisa no dispatcher?
+5. qual símbolo será sobrescrito?
+6. como a camada será removida depois?
+7. qual teste demonstra o comportamento final de produção?
 
-O objetivo de manutenção agora é consolidar camadas, não criar uma nova camada para cada exceção.
+O objetivo após a Etapa 0 é **crescer em capacidade sem voltar a crescer em desordem arquitetural**.
