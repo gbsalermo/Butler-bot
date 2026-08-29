@@ -31,7 +31,29 @@ def test_format_forecast_does_not_turn_peak_hour_into_whole_day_rain():
     assert "Fonte: Open-Meteo" in text
 
 
-def test_format_forecast_with_relevant_rain_separates_mean_and_peak():
+def test_format_forecast_with_weak_rain_uses_low_possibility_and_range():
+    location = {"city": "Cruz das Almas - Bahia"}
+    forecast = {
+        "weather_code": 51,
+        "temperature_min": 20.0,
+        "temperature_max": 29.0,
+        "rain_probability_max": 25,
+        "rain_probability_mean": 6,
+        "rain_sum": 0.4,
+        "rain_hours": 4,
+        "cloud_cover_mean": 52,
+        "wind_max": 20.0,
+    }
+
+    text = format_forecast(location, forecast, heading="Tempo amanhã")
+
+    assert "baixa possibilidade de chuva passageira; 20–29 °C" in text
+    assert "Chuva prevista: 0.4 mm em ~4 h" in text
+    assert "Chance de chuva: de 6% até 25%" in text
+    assert "pico horário" not in text
+
+
+def test_format_forecast_with_relevant_rain_uses_probability_range():
     location = {"city": "Cruz das Almas - Bahia"}
     forecast = {
         "weather_code": 63,
@@ -50,5 +72,6 @@ def test_format_forecast_with_relevant_rain_separates_mean_and_peak():
     assert "Tempo amanhã — Cruz das Almas - Bahia" in text
     assert "21–28 °C" in text
     assert "Chuva prevista: 7.3 mm em ~4 h" in text
-    assert "Chance média de chuva: 42% · pico horário: 80%" in text
+    assert "Chance de chuva: de 42% até 80%" in text
+    assert "pico horário" not in text
     assert "Vento: até 20 km/h" in text
