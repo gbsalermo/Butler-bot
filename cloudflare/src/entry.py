@@ -1,3 +1,10 @@
+"""Dispatcher operacional do Butler em produção.
+
+A ordem dos handlers é parte do contrato do produto. As funções
+``dispatch_callback``, ``dispatch_message`` e ``dispatch_scheduled`` existem para
+que essa ordem possa ser testada em CPython sem duplicar o fluxo do webhook.
+"""
+
 import json
 from urllib.parse import urlparse
 
@@ -30,7 +37,6 @@ from quality_patch import handle_message as handle_quality_message, install as i
 from reference_patch import handle_reference
 from reliable_reminders import dispatch_due_reminders
 from reliable_summaries import dispatch_summaries
-from reminder_policy import install as install_reminder_policy
 from routine_editing import handle_message as handle_routine_editing
 from routine_integration import install_routine_integration, _routine_reminders
 from routine_ui_patch import handle_message as handle_routine_ui, install as install_routine_ui
@@ -57,7 +63,6 @@ install_academic_intelligence()
 install_academic_polish()
 install_exam_cancel()
 install_personality_variants()
-install_reminder_policy()
 install_ux_bugfixes()
 install_task_context()
 install_attendance()
@@ -122,6 +127,127 @@ async def _use_base_only_when_needed(db, message):
         return False
 
 
+async def _run_message_handlers(handlers, db, token, message):
+    """Executa um grupo na ordem declarada e interrompe no primeiro consumo."""
+    for handler in handlers:
+        if await handler(db, token, message):
+            return True
+    return False
+
+
+async def dispatch_callback(db, token, callback):
+    """Dispatcher autoritativo de callbacks, em ordem de precedência."""
+    return await _run_message_handlers(
+        (
+            handle_admin_announcement_callback,
+            handle_attendance_callback,
+            handle_context_callback,
+        ),
+        db,
+        token,
+        callback,
+    )
+
+
+async def dispatch_message(db, token, message):
+    """Percorre exatamente a cadeia operacional usada pelo webhook."""
+    text = (message.get("text") or "")
+
+    if await _run_message_handlers(
+        (
+            handle_start_reset,
+            handle_admin_announcement_preview,
+            handle_admin_diagnostics,
+            handle_alert_diagnostics,
+        ),
+        db,
+        token,
+        message,
+    ):
+        return True
+
+    if is_priority_farewell(text):
+        if await handle_fallback_message(db, token, message):
+            return True
+
+    if await handle_production_usability(db, token, message):
+        return True
+
+    if await _run_message_handlers(
+        (
+            handle_operational_menu,
+            handle_routine_ui,
+            handle_routine_editing,
+            handle_attendance_production_ui,
+            handle_global_navigation,
+        ),
+        db,
+        token,
+        message,
+    ):
+        return True
+
+    if await handle_core_fast_path(db, token, message):
+        return True
+
+    await ensure_attendance_schema(db)
+    if await _run_message_handlers(
+        (
+            handle_attendance_management,
+            handle_attendance_message,
+            handle_exam_cancel,
+            handle_exam_phrase,
+            handle_academic_message,
+        ),
+        db,
+        token,
+        message,
+    ):
+        return True
+
+    if await _run_message_handlers(
+        (
+            handle_explicit_simple_reminder,
+            handle_reference,
+            handle_task_context,
+            runtime_guard.handle_pre_dispatch,
+            handle_grocery_phrase,
+            handle_quality_message,
+            handle_workout_progress,
+            handle_context_message,
+        ),
+        db,
+        token,
+        message,
+    ):
+        return True
+
+    if await _use_base_only_when_needed(db, message):
+        await app.handle_message(db, token, message)
+        await remember_after_message(db, message)
+        return True
+
+    chat_id = (message.get("chat") or {}).get("id")
+    if chat_id is not None:
+        await send_message(
+            token,
+            int(chat_id),
+            "🕴️ Não entendi o que você quer fazer. Tenta dizer de outro jeito ou usa os botões.",
+            reply_markup={"keyboard": app.MAIN_KB, "resize_keyboard": True},
+        )
+    return True
+
+
+async def dispatch_scheduled(db, token):
+    """Orquestra o cron operacional; a ordem é protegida por regressão."""
+    await run_isolated("day_off", expire_stale_day_offs, db)
+    await run_isolated("attendance", _attendance_tick, db, token)
+    await run_isolated("daily_items", dispatch_due_reminders, db, token)
+    await run_isolated("routines", _routine_reminders, db, token)
+    await run_isolated("summaries", dispatch_summaries, db, token)
+    await run_isolated("legacy", app.scheduled_tick, db, token)
+
+
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
         parsed = urlparse(request.url)
@@ -135,7 +261,8 @@ class Default(WorkerEntrypoint):
                     "runtime": "cloudflare-python-worker",
                     "d1": True,
                     "owner_chat_id_configured": OWNER_CHAT_ID is not None,
-                    "dispatcher": "butler-operational-core-v3",
+                    "dispatcher": "butler-operational-core-v4",
+                    "stage_zero_consolidation": True,
                     "operational_focus": True,
                     "operational_menu": True,
                     "finance_hidden_from_primary_menu": True,
@@ -225,9 +352,6 @@ class Default(WorkerEntrypoint):
             except Exception:
                 return Response("invalid json", status=400)
 
-            # Day-off pertence somente ao dia em que foi ativado. Fazemos a
-            # expiração antes de qualquer handler para que a primeira mensagem
-            # após a meia-noite já encontre o Butler ativo novamente.
             try:
                 await expire_stale_day_offs(self.env.DB)
             except Exception as exc:
@@ -239,109 +363,15 @@ class Default(WorkerEntrypoint):
             token = self.env.TELEGRAM_BOT_TOKEN
             callback = update.get("callback_query")
             if callback:
-                handled = await handle_admin_announcement_callback(self.env.DB, token, callback)
-                if not handled:
-                    handled = await handle_attendance_callback(self.env.DB, token, callback)
-                if not handled:
-                    await handle_context_callback(self.env.DB, token, callback)
+                await dispatch_callback(self.env.DB, token, callback)
                 return Response("ok")
 
             message = update.get("message") or update.get("edited_message")
             if message:
-                text = (message.get("text") or "")
-
-                handled = await handle_start_reset(self.env.DB, token, message)
-                if handled:
-                    return Response("ok")
-
-                handled = await handle_admin_announcement_preview(self.env.DB, token, message)
-                if handled:
-                    return Response("ok")
-
-                handled = await handle_admin_diagnostics(self.env.DB, token, message)
-                if handled:
-                    return Response("ok")
-
-                handled = await handle_alert_diagnostics(self.env.DB, token, message)
-                if handled:
-                    return Response("ok")
-
-                if is_priority_farewell(text):
-                    handled = await handle_fallback_message(self.env.DB, token, message)
-                    if handled:
-                        return Response("ok")
-
-                handled = await handle_production_usability(self.env.DB, token, message)
-                if handled:
-                    return Response("ok")
-
-                for handler in (
-                    handle_operational_menu,
-                    handle_routine_ui,
-                    handle_routine_editing,
-                    handle_attendance_production_ui,
-                    handle_global_navigation,
-                ):
-                    handled = await handler(self.env.DB, token, message)
-                    if handled:
-                        return Response("ok")
-
-                handled = await handle_core_fast_path(self.env.DB, token, message)
-                if handled:
-                    return Response("ok")
-
-                await ensure_attendance_schema(self.env.DB)
-                for handler in (
-                    handle_attendance_management,
-                    handle_attendance_message,
-                    handle_exam_cancel,
-                    handle_exam_phrase,
-                    handle_academic_message,
-                ):
-                    handled = await handler(self.env.DB, token, message)
-                    if handled:
-                        return Response("ok")
-
-                for handler in (
-                    handle_explicit_simple_reminder,
-                    handle_reference,
-                    handle_task_context,
-                    runtime_guard.handle_pre_dispatch,
-                    handle_grocery_phrase,
-                    handle_quality_message,
-                    handle_workout_progress,
-                    handle_context_message,
-                ):
-                    handled = await handler(self.env.DB, token, message)
-                    if handled:
-                        return Response("ok")
-
-                if await _use_base_only_when_needed(self.env.DB, message):
-                    await app.handle_message(self.env.DB, token, message)
-                    await remember_after_message(self.env.DB, message)
-                else:
-                    await send_message(
-                        token,
-                        int((message.get("chat") or {}).get("id")),
-                        "🕴️ Não entendi o que você quer fazer. Tenta dizer de outro jeito ou usa os botões.",
-                        reply_markup={"keyboard": app.MAIN_KB, "resize_keyboard": True},
-                    )
-
+                await dispatch_message(self.env.DB, token, message)
             return Response("ok")
 
         return Response("Not found", status=404)
 
     async def scheduled(self, controller, env, ctx):
-        token = self.env.TELEGRAM_BOT_TOKEN
-        db = self.env.DB
-        # Expira a folga antes dos subsistemas que consultam assistant_state.
-        # Isso vale igualmente para segunda, sábado ou domingo: não existe
-        # Day-off automático por dia da semana.
-        await run_isolated("day_off", expire_stale_day_offs, db)
-        # Aula é o único subsistema com dois eventos rígidos de tempo (T-10 e T0).
-        # Ele roda primeiro para não esperar tarefas, rotinas, resumos ou legado.
-        await run_isolated("attendance", _attendance_tick, db, token)
-        await run_isolated("daily_items", dispatch_due_reminders, db, token)
-        await run_isolated("routines", _routine_reminders, db, token)
-        await run_isolated("summaries", dispatch_summaries, db, token)
-        await run_isolated("legacy", app.scheduled_tick, db, token)
+        await dispatch_scheduled(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
