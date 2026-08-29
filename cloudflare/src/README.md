@@ -1,98 +1,113 @@
 # Mapa de módulos — `cloudflare/src`
 
-Este diretório contém o runtime de produção do Butler e também algumas camadas preservadas de experimentos anteriores.
+Este diretório contém o runtime de produção do Butler e componentes preservados de arquiteturas anteriores.
 
 Legenda:
 
 - **ATIVO/DIRETO** — importado por `entry.py` ou `worker.py`;
-- **ATIVO/TRANSITIVO** — chamado por um módulo ativo;
-- **BASE** — núcleo legado do Worker ainda usado como fallback/fonte de funções;
-- **PRESERVADO** — existe para testes, referência ou evolução futura, mas não é parte central do dispatcher atual.
+- **ATIVO/TRANSITIVO** — alcançado por módulo ativo;
+- **BASE/COMPAT** — núcleo herdado ainda necessário;
+- **PRESERVADO** — referência/evolução futura, fora do dispatcher principal.
 
-> Em dúvida, confira `entry.py`. Presença no repositório não significa presença no fluxo de produção.
+> Em dúvida, confira `entry.py` e `docs/ARCHITECTURE.md`. Existir no diretório não significa estar ativo.
 
 ## Entrypoint e infraestrutura
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
-| `worker.py` | ATIVO/DIRETO | entrypoint do Wrangler; sincroniza Durable Objects e delega ao dispatcher |
-| `entry.py` | ATIVO/DIRETO | HTTP, `/health`, webhook, ordem de handlers e cron |
-| `app.py` | BASE | núcleo-base: D1, estados, menus-base, operações e scheduler legado |
-| `settings.py` | ATIVO/TRANSITIVO | constantes do deploy pessoal, timezone e horários de resumos |
-| `telegram_api.py` | ATIVO/TRANSITIVO | Bot API, callback, arquivo e verificação de entrega |
-| `scheduler_runtime.py` | ATIVO/DIRETO | isola subsistemas agendados para um erro não bloquear os demais |
-| `runtime_schema.py` | PRESERVADO/HELPER | helper de schema; não é bootstrap automático atual |
-| `maintenance.py` | ATIVO/TRANSITIVO | manutenção acionada pelo scheduler de lembretes |
-| `performance_patch.py` | ATIVO/DIRETO | otimiza `app.ensure_user` para usuário já conhecido |
+| `worker.py` | ATIVO/DIRETO | entrypoint Wrangler; sincroniza Durable Objects e delega ao dispatcher |
+| `entry.py` | ATIVO/DIRETO / AUTORIDADE | HTTP, `/health`, `dispatch_message`, `dispatch_callback` e `dispatch_scheduled` |
+| `app.py` | BASE/COMPAT | D1, estados guiados, operações-base e scheduler herdado |
+| `settings.py` | ATIVO/TRANSITIVO | timezone, proprietário e defaults do deploy |
+| `telegram_api.py` | ATIVO/TRANSITIVO | Telegram Bot API e validação de entrega |
+| `scheduler_runtime.py` | ATIVO/DIRETO | isolamento dos subsistemas do cron |
+| `runtime_schema.py` | PRESERVADO/HELPER | helper histórico; migrations são a fonte formal |
+| `maintenance.py` | ATIVO/TRANSITIVO | manutenção usada por schedulers |
+| `performance_patch.py` | ATIVO/DIRETO | otimiza bootstrap de usuários conhecidos |
 
-## Dispatcher operacional e navegação
+## Dispatcher, navegação e contexto operacional
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
-| `core_fast_path.py` | ATIVO/DIRETO | detecta ações operacionais claras antes de fallbacks amplos |
-| `operational_informal_fastpath.py` | ATIVO/TRANSITIVO | tarefas/compromissos informais conservadores |
-| `colloquial_reminder_fastpath.py` | ATIVO/TRANSITIVO | linguagem coloquial de lembrete e follow-up de data/hora |
-| `operational_menu.py` | ATIVO/DIRETO | menus autoritativos e atalho para metas/tarefas/compromissos |
-| `runtime_guard.py` | ATIVO/DIRETO | operações seguras de tarefa/rotina e perfil genérico |
-| `ux_bugfixes.py` | ATIVO/DIRETO | navegação global/cancelamento e correções de UX |
-| `production_usability_patch.py` | ATIVO/DIRETO | Ler/Ver Depois, follow-ups e ajustes de menus-base |
+| `core_fast_path.py` | ATIVO/DIRETO | gate conservador para ações claras |
+| `operational_informal_fastpath.py` | ATIVO/TRANSITIVO | tarefas/compromissos informais |
+| `colloquial_reminder_fastpath.py` | ATIVO/TRANSITIVO | formulações coloquiais de lembrete |
+| `routine_natural_fastpath.py` | ATIVO/TRANSITIVO | criação natural explícita de rotina |
+| `operational_menu.py` | ATIVO/DIRETO / AUTORIDADE | `MAIN_KB`, `COTIDIANO_KB`, `ADD_KB` e instalação das metas |
+| `runtime_guard.py` | ATIVO/DIRETO | estados guiados e operações seguras |
+| `ux_bugfixes.py` | ATIVO/DIRETO | navegação global/cancelamento |
+| `production_usability_patch.py` | ATIVO/DIRETO | Ler/Ver Depois e sincronização dos menus-base |
 | `start_reset.py` | ATIVO/DIRETO | reset seguro no `/start` |
-| `reference_patch.py` | ATIVO/DIRETO | referências curtas a entidades/ações recentes |
-| `conversation_layer.py` | ATIVO/DIRETO | contexto operacional em `natural_events`, agenda inteligente e callbacks |
-| `quality_patch.py` | ATIVO/DIRETO | melhorias de rotina/mercado e patches históricos de scheduler |
-| `companion_safe_fallback.py` | ATIVO/DIRETO | fallback social estreito, especialmente despedidas |
+| `reference_patch.py` | ATIVO/DIRETO | referências curtas a entidades recentes |
+| `conversation_layer.py` | ATIVO/DIRETO | contexto operacional, agenda enriquecida e callbacks de itens; **não dispara lembretes de daily_items** |
+| `quality_patch.py` | ATIVO/DIRETO | checkpoint inteligente de rotina e formulações específicas de mercado |
+| `companion_safe_fallback.py` | ATIVO/DIRETO | despedidas/fallback social estreito |
+
+### Decisão da Etapa 0
+
+`conversation_layer.py` deixou de manter uma cópia do menu principal. Respostas gerais reutilizam `app.MAIN_KB`, sincronizado por `operational_menu.py`.
 
 ## Tarefas, compromissos e lembretes
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
 | `task_context_patch.py` | ATIVO/DIRETO | listagem, conclusão, adiamento e contexto de tarefas |
-| `task_emoji_patch.py` | ATIVO/DIRETO | padronização visual de tarefas |
-| `natural_behavior_patch.py` | ATIVO/DIRETO | lembrete simples explícito, recorrência e memória pós-mensagem |
-| `reliable_reminders.py` | ATIVO/DIRETO | autoridade temporal de tarefas, compromissos e lembretes simples |
-| `reminder_policy.py` | ATIVO/DIRETO | desliga item scheduler antigo da `conversation_layer` |
-| `scheduled_delivery_guard.py` | ATIVO/DIRETO | exige confirmação real do Telegram antes de aceitar entrega |
+| `task_emoji_patch.py` | ATIVO/DIRETO | apresentação visual de tarefas |
+| `natural_behavior_patch.py` | ATIVO/DIRETO | criação de lembrete explícito, recorrência e pós-mensagem |
+| `reliable_reminders.py` | ATIVO/DIRETO / AUTORIDADE | política temporal única para tarefas, compromissos e lembretes simples |
+| `scheduled_delivery_guard.py` | ATIVO/DIRETO | exige confirmação de entrega em canais críticos |
 | `alert_diagnostics.py` | ATIVO/DIRETO | diagnóstico operacional de alertas |
-| `scheduler_patch.py` | ATIVO/DIRETO/COMPAT | patch do resumo legado de `app`; scheduler confiável é separado |
-| `reliable_summaries.py` | ATIVO/DIRETO | resumo da manhã e fechamento semanal com idempotência |
+| `scheduler_patch.py` | ATIVO/DIRETO/COMPAT | compatibilidade com scheduler/resumo herdado de `app.py` |
+| `reliable_summaries.py` | ATIVO/DIRETO | resumo matinal e fechamento semanal |
+
+### Consolidação da Etapa 0
+
+Foram removidos:
+
+- `reminder_policy.py` — era apenas um `noop` para neutralizar um scheduler duplicado;
+- a política temporal de itens em `quality_patch.py`;
+- `_pre_send_item_reminders` em `conversation_layer.py`.
+
+`reliable_reminders.py` passou a ser explicitamente a única autoridade temporal de `daily_items`.
 
 ## Mercado
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
-| `grocery_phrase_patch.py` | ATIVO/DIRETO | frases informais de falta/compra e atualização da lista |
-| `core_actions.py` | ATIVO/TRANSITIVO | gateway reutilizável para gravações simples do Core |
+| `grocery_phrase_patch.py` | ATIVO/DIRETO/TRANSITIVO | frases informais e atualização da lista |
+| `core_actions.py` | ATIVO/TRANSITIVO/PRESERVADO | gateway reutilizável de gravações simples do Core |
 
-Observação: no comportamento atual, frases claras como `acabou café`, `falta açúcar` e `tô sem detergente` são tratadas como atualização direta da lista. A arquitetura antiga de “sugerir e confirmar” está preservada em outros módulos, mas não governa este fast path.
+A política atual trata frases claras como `acabou café`/`tô sem detergente` como atualização direta da lista.
 
 ## Acadêmico, provas e presença
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
-| `academic_intelligence.py` | ATIVO/DIRETO | matérias, consultas acadêmicas, provas e regras auxiliares |
-| `academic_polish.py` | ATIVO/DIRETO | refinamentos do comportamento acadêmico |
-| `exam_phrase_patch.py` | ATIVO/DIRETO | formas naturais de registrar/consultar provas |
-| `exam_cancel_patch.py` | ATIVO/DIRETO | cancelamento seguro dos fluxos de prova |
-| `reliable_exam_reminders.py` | ATIVO/TRANSITIVO | política confiável de lembretes de prova |
-| `attendance_patch.py` | ATIVO/DIRETO | presença/faltas e integração base |
-| `attendance_enhancement.py` | ATIVO/DIRETO | schema/callbacks e extensões de presença |
-| `attendance_management.py` | ATIVO/DIRETO | edição/gestão de faltas e limites |
-| `attendance_production_fix.py` | ATIVO/DIRETO | UI/dispatch autoritativos e scheduler confiável de aula |
-| `attendance_alarm.py` | ATIVO/DIRETO via `worker.py` | Durable Object de eventos rígidos de presença |
+| `academic_intelligence.py` | ATIVO/DIRETO | matérias, provas e consultas acadêmicas |
+| `academic_polish.py` | ATIVO/DIRETO | refinamentos acadêmicos |
+| `exam_phrase_patch.py` | ATIVO/DIRETO/TRANSITIVO | formas naturais de prova |
+| `exam_cancel_patch.py` | ATIVO/DIRETO | cancelamento seguro |
+| `reliable_exam_reminders.py` | ATIVO/TRANSITIVO | lembretes de prova |
+| `attendance_patch.py` | ATIVO/DIRETO | presença/faltas base |
+| `attendance_enhancement.py` | ATIVO/DIRETO | schema/callbacks e extensões |
+| `attendance_management.py` | ATIVO/DIRETO | gestão de faltas e limites |
+| `attendance_production_fix.py` | ATIVO/DIRETO | UI e scheduler confiável de aula |
+| `attendance_alarm.py` | ATIVO via `worker.py` | Durable Object de presença |
+
+A família continua funcional, porém fragmentada; a consolidação pertence à Etapa 2.
 
 ## Rotinas e metas
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
-| `routine_integration.py` | ATIVO/DIRETO | rotinas na agenda, checkpoints e lembretes |
-| `routine_editing.py` | ATIVO/DIRETO | edição por linguagem/estado |
-| `routine_ui_patch.py` | ATIVO/DIRETO | interface especializada de rotina |
-| `routine_natural_fastpath.py` | ATIVO/TRANSITIVO | criação explícita de rotina por texto |
-| `goal_operational.py` | ATIVO/TRANSITIVO | núcleo operacional de metas |
-| `goal_polish.py` | ATIVO/TRANSITIVO | UX/regras complementares de metas |
-| `goal_deadline_patch.py` | ATIVO/TRANSITIVO | prazos/metas temporais |
-| `goal_routine_bridge.py` | ATIVO/TRANSITIVO | integração rotina ↔ meta |
-| `goal_natural_patch.py` | ATIVO/TRANSITIVO | frases naturais de meta |
+| `routine_integration.py` | ATIVO/DIRETO | agenda, checkpoints e lembretes de rotina |
+| `routine_editing.py` | ATIVO/DIRETO | edição |
+| `routine_ui_patch.py` | ATIVO/DIRETO | UI especializada |
+| `goal_operational.py` | ATIVO/TRANSITIVO / AUTORIDADE | núcleo de metas |
+| `goal_polish.py` | ATIVO/TRANSITIVO | UX de metas |
+| `goal_deadline_patch.py` | ATIVO/TRANSITIVO | prazos |
+| `goal_routine_bridge.py` | ATIVO/TRANSITIVO | rotina ↔ meta |
+| `goal_natural_patch.py` | ATIVO/TRANSITIVO | linguagem natural delimitada de metas |
 
 A família `goal_*` é instalada por `operational_menu.install()`.
 
@@ -100,111 +115,120 @@ A família `goal_*` é instalada por `operational_menu.install()`.
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
-| `workout_progress_patch.py` | ATIVO/DIRETO | progresso, carga anterior, conclusão e atualização do treino |
-| `protocol_mass_data.py` | ATIVO/TRANSITIVO | plano pessoal estático de 12 semanas e substituições |
+| `workout_progress_patch.py` | ATIVO/DIRETO | exercícios, cargas, séries, conclusão e evolução |
+| `protocol_mass_data.py` | ATIVO/TRANSITIVO | protocolo pessoal de 12 semanas e substituições |
 
-Parte do fluxo genérico também permanece em `app.py`/`runtime_guard.py`.
+Parte do fluxo genérico permanece em `app.py`/`runtime_guard.py`.
 
-## Alarmes pessoais
-
-| Arquivo | Status | Responsabilidade |
-|---|---|---|
-| `personal_alarm.py` | ATIVO/DIRETO via `worker.py` | Durable Object para alarmes pessoais pontuais |
-
-## Personalidade
+## Clima
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
-| `personality_variants.py` | ATIVO/DIRETO | variações controladas de tom/sarcasmo com base em contexto real |
+| `weather_context.py` | ATIVO/TRANSITIVO | comandos, Hoje/Amanhã e integração com agenda |
+| `weather_service.py` | ATIVO/TRANSITIVO | Open-Meteo, preferências, formatação e fallback seguro |
 
-## NLU-base usada por operações
+## Administração
 
 | Arquivo | Status | Responsabilidade |
 |---|---|---|
-| `nlu.py` | ATIVO/TRANSITIVO | parse de datas/horas e interpretação determinística herdada |
+| `admin_diagnostics.py` | ATIVO/DIRETO | status/listagem de usuários para proprietário |
+| `admin_announcement_flow.py` | ATIVO/DIRETO | prévia, persistência e callback de confirmação/cancelamento de avisos |
 
-A “NLU ampla” está bloqueada no dispatcher atual; funções utilitárias de `nlu.py` continuam sendo usadas.
+## Alarmes pessoais e Day-off
 
-## Arquitetura preservada de roteamento/contexto
+| Arquivo | Status | Responsabilidade |
+|---|---|---|
+| `personal_alarm.py` | ATIVO via `worker.py` | Durable Object para alarmes pessoais |
+| `day_off_policy.py` | ATIVO/DIRETO | validade diária/expiração de Day-off |
 
-Os arquivos abaixo representam uma arquitetura estruturada que foi desenvolvida/testada, mas hoje não é o centro do dispatcher de produção:
+## Personalidade e NLU utilitária
+
+| Arquivo | Status | Responsabilidade |
+|---|---|---|
+| `personality_variants.py` | ATIVO/DIRETO | variação controlada de tom |
+| `nlu.py` | ATIVO/TRANSITIVO | datas/horas e parsing determinístico herdado |
+
+A NLU ampla não é o roteador central; utilitários de `nlu.py` seguem ativos.
+
+## Arquitetura preservada de linguagem/contexto
 
 | Arquivo | Status | Papel preservado |
 |---|---|---|
-| `context_router.py` | PRESERVADO | classificação domínio/tier |
-| `intent_parser.py` | PRESERVADO | intenção/alvo/pista temporal |
+| `context_router.py` | PRESERVADO | domínio/tier |
+| `intent_parser.py` | PRESERVADO | intenção/alvo/tempo |
 | `action_policy.py` | PRESERVADO | conversa × ação × sugestão |
-| `context_memory.py` | PRESERVADO | memória curta por usuário |
-| `context_sync.py` | PRESERVADO | sincronização/invalidação de contexto |
-| `compound_router.py` | PRESERVADO | divisão/roteamento de mensagens compostas |
-| `add_intent_patch.py` | PRESERVADO | experimento de intenção de adição |
-| `suggestion_engine.py` | PRESERVADO | sugestões confirmáveis transversais |
-| `study_plan_flow.py` | PRESERVADO/TRANSITIVO DA SUGESTÃO | plano de estudo derivado de provas |
+| `context_memory.py` | PRESERVADO | memória curta estruturada |
+| `context_sync.py` | PRESERVADO | sincronização/invalidação |
+| `compound_router.py` | PRESERVADO | mensagens compostas |
+| `language_context.py` | PRESERVADO | normalização da arquitetura antiga |
+| `suggestion_engine.py` | PRESERVADO | sugestões transversais confirmáveis |
+| `study_plan_flow.py` | PRESERVADO | plano derivado de provas |
 
-Testes desses módulos continuam úteis para não perder o trabalho, mas não substituem testes do dispatcher de `entry.py`.
+### Removido na Etapa 0
+
+`add_intent_patch.py` foi apagado após confirmação de que não estava conectado ao runtime.
 
 ## Memória/companion preservados
 
-| Arquivo | Status | Papel preservado |
-|---|---|---|
-| `deterministic_memory.py` | PRESERVADO | entidades/fatos pessoais estruturados |
-| `personal_profile.py` | PRESERVADO | preferências/fatos explícitos |
-| `general_memory.py` | PRESERVADO | memória genérica experimental |
-| `companion_life_context.py` | PRESERVADO | contexto de vida/sugestões |
-| `companion_nlu_v2.py` | PRESERVADO | NLU de companion |
-| `companion_language_patch.py` | PRESERVADO | linguagem do companion |
-| `conversational_background.py` | PRESERVADO | background conversacional |
-| `conversational_companion.py` | PRESERVADO | companion genérico |
-| `cultural_background.py` | PRESERVADO | conhecimento cultural/background |
-| `language_context.py` | PRESERVADO | normalização usada pela arquitetura antiga |
+```text
+deterministic_memory.py
+personal_profile.py
+general_memory.py
+companion_life_context.py
+companion_nlu_v2.py
+companion_language_patch.py
+conversational_background.py
+conversational_companion.py
+cultural_background.py
+```
+
+Todos classificados como **PRESERVADO** até decisão explícita da Etapa 7.
 
 ## Butler Library preservada
 
-| Arquivo | Status | Papel preservado |
-|---|---|---|
-| `butler_library.py` | PRESERVADO | dispatcher/integração antiga da Library |
-| `cooking_library.py` | PRESERVADO | respostas culinárias estruturadas |
-| `library_catalog_handler.py` | PRESERVADO | fallback de catálogo |
-| `library_context_bridge.py` | PRESERVADO | contexto curto de consultas da Library |
-| `library_index.py` | PRESERVADO/TESTADO | índice comum de registros |
-| `library_recipe_queries.py` | PRESERVADO | consultas de receita |
+```text
+butler_library.py
+cooking_library.py
+library_catalog_handler.py
+library_context_bridge.py
+library_index.py
+library_recipe_queries.py
+knowledge/
+```
 
-### `knowledge/`
+O `/health` declara o dispatcher genérico da Library como desabilitado.
 
-Acervo de dados/metadata preservado:
+## Banco
 
-- `books.py` — livros/literatura;
-- `brazilian_traditional_foods.py` — cozinha brasileira;
-- `cooking.py` — culinária geral;
-- `cooking_books.py` — catálogo culinário estruturado;
-- `cooking_pasta.py` — massas;
-- `games.py` — jogos;
-- `library_manifest.py` — manifesto dos acervos;
-- `meat_cuts.py` — cortes/preparo de carnes;
-- `philosophy.py` — filosofia;
-- `pop_culture.py` — filmes/séries/personagens;
-- `portuguese_conversation.py` — português informal;
-- `__init__.py` — pacote.
+Migrations formais atuais:
 
-O `/health` atual declara o dispatcher genérico da Library como desabilitado.
+```text
+0001_initial.sql
+0002_app_state.sql
+0003_attendance.sql
+0004_conversation_context.sql
+0005_goal_profiles.sql
+0006_weather_preferences.sql
+0007_admin_pending_announcements.sql
+0008_later_items.sql
+```
 
-## Arquivos que parecem duplicados mas têm papéis distintos
+`0008` foi adicionada na Etapa 0 para formalizar o schema que Ler/Ver Depois já criava defensivamente em runtime.
 
-- `runtime_schema.py` × `runtime_guard.ensure_runtime_schema`: o primeiro é helper; o segundo é `noop` de compatibilidade;
-- `quality_patch` × `reliable_reminders`: a política final de lembretes é `reliable_reminders`;
-- `app.MAIN_KB` × `operational_menu.MAIN_KB`: o menu operacional é a referência principal;
-- `conversation_layer` × `context_memory`: o primeiro é contexto operacional ativo; o segundo pertence à arquitetura preservada;
-- `nlu.py` × `intent_parser.py`: utilitários de data/hora do primeiro seguem ativos; o parser estrutural do segundo não governa o dispatcher atual.
+## Código legado fora deste diretório
+
+A raiz `src/` é runtime antigo polling/SQLite. Está preservada e isolada; correções de produção não devem ser aplicadas ali por padrão.
 
 ## Regra para novos módulos
 
-Antes de criar outro arquivo, responda:
+Antes de criar outro arquivo:
 
-1. qual módulo é dono desse domínio?
+1. qual módulo é dono do domínio?
 2. por que a mudança não cabe nele?
-3. quem vai importar o novo módulo?
-4. qual posição ele precisa no dispatcher?
-5. qual símbolo ele substitui, se for patch?
-6. qual teste demonstra que o caminho de produção o alcança?
+3. quem importa o novo módulo?
+4. qual posição no dispatcher?
+5. qual símbolo será substituído, se houver monkeypatch?
+6. como esse patch será removido depois?
+7. qual teste comprova o caminho real de produção?
 
-Se essas respostas não estiverem claras, provavelmente o projeto não precisa de mais uma camada.
+Sem respostas claras, não criar outra camada.
