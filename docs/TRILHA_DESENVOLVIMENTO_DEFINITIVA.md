@@ -1,7 +1,7 @@
 # Butler — Trilha Definitiva de Desenvolvimento
 
 **Roadmap mestre de evolução do produto e da arquitetura**  
-**Versão:** 1.0  
+**Versão:** 1.1  
 **Data-base:** 29/08/2026  
 **Status:** oficial para as próximas fases de desenvolvimento
 
@@ -26,6 +26,8 @@ O Butler ideal deve conseguir responder perguntas como:
 - “Não vou conseguir treinar hoje porque vou viajar.”
 - “Amanhã tenho aula, mas depois quero trabalhar no Aconchega Aí e à noite estudar inglês.”
 - “Anota isso para eu organizar depois.”
+- “Quero estudar Cálculo agora: limites, derivadas e integrais.”
+- “Em que tópico da sessão de estudo eu estou?”
 
 A experiência desejada é a de um **assistente confiável, familiar e útil**, não de um chatbot que tenta transformar toda frase em tarefa.
 
@@ -82,7 +84,7 @@ O Core atual já possui, em diferentes níveis de maturidade:
 - diagnósticos administrativos e avisos do proprietário;
 - código preservado de contexto, memória, sugestões e Butler Library que não deve ser reativado indiscriminadamente.
 
-A arquitetura atual acumulou handlers, integrações e patches ao longo da evolução. Por isso, a primeira etapa deste roadmap é deliberadamente uma fase de **arrumação estrutural**.
+A arquitetura atual acumulou handlers, integrações e patches ao longo da evolução. Por isso, a primeira etapa deste roadmap foi deliberadamente uma fase de **arrumação estrutural**.
 
 ---
 
@@ -96,18 +98,22 @@ ETAPA 1  🗣️ Linguagem natural + estabilidade de conversa
              ↓
 ETAPA 2  🎓 Acadêmico completo + importação robusta
              ↓
-ETAPA 3  📚 Cursos e trilhas de estudo
+ETAPA 3  ⏱️ Auxiliar de Estudos / Modo Estudo
              ↓
-ETAPA 4  📥 Caixa de entrada / captura rápida
+ETAPA 4  📚 Cursos e trilhas de estudo
              ↓
-ETAPA 5  🗂️ Projetos e trabalho
+ETAPA 5  📥 Caixa de entrada / captura rápida
              ↓
-ETAPA 6  🧭 Resumo, contexto operacional e priorização
+ETAPA 6  🗂️ Projetos e trabalho
              ↓
-ETAPA 7  🧠 Reativação seletiva de memória, sugestões e Library
+ETAPA 7  🧭 Resumo, contexto operacional e priorização
              ↓
-ETAPA 8  🔒 Hardening e consolidação de longo prazo
+ETAPA 8  🧠 Reativação seletiva de memória, sugestões e Library
+             ↓
+ETAPA 9  🔒 Hardening e consolidação de longo prazo
 ```
+
+**Status atual:** Etapa 0 concluída. Próxima fase oficial: **Etapa 1 — Linguagem natural + estabilidade de conversa real**.
 
 ### Regra de avanço
 
@@ -318,14 +324,16 @@ Criar `docs/BUTLER_DOSSIE_MESTRE.md` contendo:
 
 A etapa só encerra quando:
 
-- [ ] todo arquivo relevante possui papel conhecido;
-- [ ] não há dúvida sobre a autoridade dos principais domínios;
-- [ ] código removido foi protegido por regressão;
-- [ ] menus e lembretes possuem política documentada;
-- [ ] migrations representam o schema formal;
-- [ ] fluxo de webhook e cron possui teste de integração mínimo;
-- [ ] Dossiê Mestre existe e reflete a `main`;
-- [ ] nenhuma regressão funcional conhecida foi introduzida.
+- [x] todo arquivo relevante possui papel conhecido;
+- [x] não há dúvida sobre a autoridade dos principais domínios;
+- [x] código removido foi protegido por regressão;
+- [x] menus e lembretes possuem política documentada;
+- [x] migrations representam o schema formal conhecido;
+- [x] fluxo de webhook e cron possui teste de integração mínimo;
+- [x] Dossiê Mestre existe e reflete a `main`;
+- [x] nenhuma regressão funcional conhecida foi introduzida.
+
+**Encerrada em 29/08/2026**, após merge da PR #9 e regressão pós-merge verde na `main`.
 
 ---
 
@@ -540,7 +548,7 @@ O corpus deve crescer com erros reais encontrados em produção.
 
 ## 2.1 Objetivo
 
-Transformar o domínio acadêmico em uma base sólida, editável e reutilizável para futuras importações de grades e para a Etapa 3 de cursos.
+Transformar o domínio acadêmico em uma base sólida, editável e reutilizável para futuras importações de grades, para alimentar o Auxiliar de Estudos e, depois, a Etapa 4 de cursos.
 
 ## 2.2 Edição completa de matérias
 
@@ -664,15 +672,412 @@ No primeiro acesso:
 
 ---
 
-# ETAPA 3 — 📚 Cursos e trilhas de estudo
+# ETAPA 3 — ⏱️ Auxiliar de Estudos / Modo Estudo
 
 ## 3.1 Objetivo
+
+Criar um **modo ativo de estudo acompanhado pelo Butler**, no qual o usuário informa os tópicos/conteúdos que pretende estudar e o Butler conduz a sessão em ciclos de foco e descanso, acompanha o tópico atual e registra o progresso real.
+
+A ideia central é combinar a disciplina de um Pomodoro com o contexto do Butler, sem transformar tempo decorrido em progresso fictício.
+
+O Butler deve ser capaz de acompanhar uma sessão como:
+
+```text
+Matéria: Cálculo I
+Tópicos:
+1. Limites
+2. Derivadas
+3. Integrais
+
+Modo: 25 min foco / 5 min pausa
+```
+
+E manter **Limites** como tópico atual por quantos ciclos forem necessários, até o usuário declarar explicitamente que concluiu.
+
+## 3.2 Diferença entre Auxiliar de Estudos e Cursos
+
+Esses domínios são relacionados, mas diferentes:
+
+```text
+Auxiliar de Estudos
+= controla a sessão ativa de foco, pausa, tópico atual e check-ins
+
+Cursos e Trilhas
+= controla a estrutura de longo prazo, módulos, conteúdos e progresso do curso
+```
+
+A Etapa 3 deve funcionar **sozinha**, com tópicos digitados manualmente.
+
+Depois, na Etapa 4, cursos poderão alimentar automaticamente a fila do Modo Estudo. O domínio acadêmico também poderá sugerir tópicos associados a uma matéria, prova ou trabalho, mas a sessão continua sob controle explícito do usuário.
+
+## 3.3 Criação da sessão
+
+Fluxos desejados:
+
+```text
+modo estudo
+quero estudar agora
+começar estudo
+vou estudar Cálculo
+```
+
+O Butler pede ou interpreta:
+
+1. assunto/matéria opcional;
+2. lista ordenada de tópicos;
+3. duração do foco;
+4. duração da pausa;
+5. regra de pausa longa, se habilitada.
+
+Exemplo de entrada natural:
+
+> “Vou estudar cálculo agora: limites, derivadas e integrais. Faz 25 de estudo e 5 de pausa.”
+
+Prévia:
+
+```text
+📚 Sessão de estudo
+
+1. Limites
+2. Derivadas
+3. Integrais
+
+⏱️ Foco: 25 min
+☕ Pausa: 5 min
+
+[▶️ Começar]
+[✏️ Ajustar]
+[❌ Cancelar]
+```
+
+O padrão inicial pode ser 25/5, mas o usuário deve poder escolher tempos como 50/10, 40/5 ou outros valores razoáveis.
+
+## 3.4 Estrutura conceitual
+
+Modelo mínimo desejado:
+
+```text
+StudySession
+- user_id
+- título/contexto opcional
+- source_type/source_id opcional
+- status
+- focus_minutes
+- break_minutes
+- long_break_minutes opcional
+- cycles_before_long_break opcional
+- current_topic_id
+- started_at
+- paused_at
+- finished_at
+
+StudyTopic
+- session_id
+- position
+- title
+- status
+- started_at
+- completed_at
+
+StudyCycle
+- session_id
+- topic_id
+- cycle_type: focus | break | long_break
+- planned_minutes
+- started_at
+- ended_at
+- status
+```
+
+O schema real pode variar, mas precisa preservar histórico suficiente para responder quanto tempo foi estudado, em qual tópico e quantos ciclos foram realizados.
+
+## 3.5 Ciclo de foco e descanso
+
+O funcionamento esperado é:
+
+```text
+▶️ iniciar sessão
+↓
+📚 foco no tópico atual
+↓
+⏰ fim do bloco de foco
+↓
+☕ iniciar/avisar pausa
+↓
+⏰ fim da pausa
+↓
+📚 voltar ao estudo
+```
+
+O Butler envia alertas claros nas transições.
+
+Exemplo ao iniciar:
+
+```text
+📚 Foco: Limites
+⏱️ 25 minutos.
+
+Agora é Limites. Te chamo quando for hora de parar um pouco.
+```
+
+Fim do foco:
+
+```text
+⏰ Bloco concluído.
+☕ Hora de descansar por 5 minutos.
+
+Como foi com “Limites”?
+
+[✅ Terminei o tópico]
+[➡️ Ainda estou nele]
+[⏸️ Pausar sessão]
+```
+
+Fim da pausa, se o tópico não foi concluído:
+
+```text
+📚 Voltando.
+Continuamos em “Limites”.
+⏱️ Próximo bloco: 25 min.
+```
+
+## 3.6 Regra central: tempo não conclui tópico
+
+Esta é uma **invariante do domínio**:
+
+> **O Butler só avança para o próximo tópico quando o usuário disser explicitamente que concluiu o tópico atual.**
+
+Portanto:
+
+```text
+25 min em Limites
+→ usuário não concluiu
+→ pausa
+→ próximo bloco continua em Limites
+```
+
+Mesmo que sejam necessários três, quatro ou dez ciclos, o ponteiro não avança sozinho.
+
+Formas de conclusão aceitas futuramente:
+
+```text
+terminei
+terminei limites
+concluí esse tópico
+esse já foi
+pode passar pro próximo
+```
+
+ou botão:
+
+```text
+[✅ Terminei o tópico]
+```
+
+A linguagem natural da Etapa 1 deve ajudar a reconhecer essas variações sem tornar a conclusão ambígua.
+
+## 3.7 Avanço e tópico seguinte
+
+Ao concluir explicitamente:
+
+```text
+✅ Limites concluído.
+
+Próximo: Derivadas.
+
+[▶️ Começar agora]
+[☕ Fazer uma pausa]
+[⏸️ Pausar sessão]
+```
+
+O Butler pode sugerir o próximo tópico, mas não deve marcar que ele foi iniciado até o novo bloco realmente começar.
+
+Quando o último tópico for concluído:
+
+```text
+🎉 Sessão concluída.
+
+✅ Limites
+✅ Derivadas
+✅ Integrais
+
+Foco total: 1h40
+Pausas: 20 min
+Ciclos de foco: 4
+```
+
+## 3.8 Check-ins e acompanhamento
+
+O Butler deve perguntar “como está?” principalmente em **pontos naturais da sessão**, não no meio de um bloco sem motivo.
+
+Check-ins prioritários:
+
+- ao fim de cada bloco de foco;
+- após pausa longa;
+- quando a sessão fica pausada por muito tempo e o usuário retorna;
+- ao encerrar a sessão;
+- opcionalmente após vários ciclos no mesmo tópico.
+
+Respostas possíveis:
+
+```text
+✅ terminei
+➡️ continuo nele
+😵 não estou rendendo
+⏸️ quero pausar
+🛑 encerrar por hoje
+```
+
+“Não estou rendendo” não deve marcar fracasso nem conclusão. Pode oferecer aumentar a pausa, encerrar ou continuar com outro bloco, sempre com decisão do usuário.
+
+## 3.9 Pausar, retomar e encerrar
+
+A sessão deve sobreviver a interrupções.
+
+Comandos naturais:
+
+```text
+pausa o estudo
+vou parar um pouco
+voltar a estudar
+continuar estudo
+encerrar por hoje
+```
+
+Ao retomar:
+
+```text
+📚 Sessão retomada.
+Tópico atual: Limites
+Ciclos concluídos nesse tópico: 2
+
+[▶️ Continuar]
+```
+
+Encerrar a sessão antes de concluir todos os tópicos **não deve descartá-los**. O resumo deve separar:
+
+```text
+concluídos
+pendentes
+parcialmente estudados
+```
+
+Uma sessão futura pode reutilizar os tópicos pendentes mediante confirmação.
+
+## 3.10 Temporização confiável
+
+O timer não pode depender de um `sleep()` mantido em memória.
+
+O mecanismo deve:
+
+- sobreviver a reinício do Worker;
+- persistir estado;
+- evitar alerta duplicado;
+- tolerar retry;
+- confirmar entrega pelo Telegram quando relevante;
+- manter isolamento por usuário;
+- permitir cancelamento/pausa do próximo alarme.
+
+A implementação deve reutilizar a infraestrutura temporal já existente quando adequado, como Durable Objects/alarmes persistentes, ou criar um componente autoritativo específico para estudo se isso reduzir acoplamento.
+
+## 3.11 Pausa longa
+
+Opcionalmente suportar estilo Pomodoro clássico:
+
+```text
+4 ciclos de foco
+→ pausa longa de 15–30 min
+```
+
+Isso deve ser configurável. O Butler não precisa obrigar pausa longa para quem prefere apenas ciclos simples.
+
+## 3.12 Integrações futuras
+
+### Acadêmico
+
+Uma matéria/prova pode originar uma sessão:
+
+```text
+estudar para prova de Física
+→ selecionar/definir tópicos
+→ abrir Modo Estudo
+```
+
+### Cursos e trilhas
+
+Na Etapa 4:
+
+```text
+Curso de Inglês
+Próximo conteúdo: Simple Past
+→ Estudar agora
+→ Modo Estudo recebe o conteúdo
+```
+
+Concluir o tópico durante o Modo Estudo só deverá atualizar o progresso do curso quando a integração possuir vínculo explícito e regra testada.
+
+### Resumo diário/semanal
+
+Futuramente os resumos podem mostrar dados reais como:
+
+```text
+📚 Estudo hoje: 1h50
+• Cálculo — Limites concluído
+• Derivadas — 2 ciclos, ainda pendente
+```
+
+## 3.13 UX mínima
+
+Menu sugerido:
+
+```text
+📚 Modo Estudo
+
+[▶️ Começar estudo]
+[⏸️ Sessão ativa]
+[📋 Tópicos]
+[📊 Histórico]
+[⚙️ Temporizador]
+[🏠 Menu principal]
+```
+
+Durante sessão ativa, priorizar botões contextuais:
+
+```text
+[✅ Terminei o tópico]
+[➡️ Continuar nele]
+[⏸️ Pausar]
+[🛑 Encerrar]
+```
+
+Evitar exigir que o usuário redigite tópico, duração ou contexto já conhecidos.
+
+## Gate de saída da Etapa 3
+
+- [ ] criar sessão com múltiplos tópicos;
+- [ ] iniciar, pausar, retomar e encerrar sessão;
+- [ ] foco e pausa possuem alertas persistentes e idempotentes;
+- [ ] duração de foco/pausa é configurável;
+- [ ] Butler pergunta como foi nos pontos de transição;
+- [ ] tópico atual não avança pelo simples fim do timer;
+- [ ] avanço exige conclusão explícita;
+- [ ] múltiplos ciclos podem ocorrer no mesmo tópico;
+- [ ] histórico registra tempo e ciclos por tópico;
+- [ ] interrupção/reinício não perde a sessão ativa;
+- [ ] dois usuários podem estudar simultaneamente sem interferência;
+- [ ] integração futura com acadêmico/cursos possui contrato claro, sem acoplamento prematuro.
+
+---
+
+# ETAPA 4 — 📚 Cursos e trilhas de estudo
+
+## 4.1 Objetivo
 
 Criar um domínio genérico para cursos de idiomas, programação, certificações e outras formações estruturadas.
 
 Não criar uma feature exclusiva para inglês.
 
-## 3.2 Estrutura
+## 4.2 Estrutura
 
 ```text
 Curso
@@ -685,7 +1090,7 @@ Curso
 
 Os nomes exibidos podem preservar a nomenclatura original da plataforma, mas o modelo interno deve permanecer genérico.
 
-## 3.3 Tipos de curso
+## 4.3 Tipos de curso
 
 ### Autogerido / gravado
 
@@ -706,7 +1111,7 @@ O curso possui aulas que acontecem independentemente do progresso anterior.
 
 Conteúdo perdido pode gerar pendência/revisão, mas a grade ao vivo não deve ser deslocada automaticamente.
 
-## 3.4 Estados de conteúdo
+## 4.4 Estados de conteúdo
 
 Mínimo:
 
@@ -724,7 +1129,7 @@ revisar
 bloqueado por pré-requisito
 ```
 
-## 3.5 Conclusão em lote
+## 4.5 Conclusão em lote
 
 Telegram deve permitir marcar vários itens e concluir juntos:
 
@@ -738,7 +1143,7 @@ Telegram deve permitir marcar vários itens e concluir juntos:
 
 Cada item mantém histórico individual.
 
-## 3.6 Importador de cursos
+## 4.6 Importador de cursos
 
 O importador deve reconhecer relações entre arquivos/conteúdos:
 
@@ -751,7 +1156,7 @@ O importador deve reconhecer relações entre arquivos/conteúdos:
 
 Ambiguidade deve aparecer na prévia.
 
-## 3.7 Integração com agenda
+## 4.7 Integração com agenda
 
 Autogerido:
 
@@ -769,7 +1174,32 @@ horário fixo
 
 Não criar uma tarefa nova para cada sessão se o curso já possui progresso próprio.
 
-## Gate de saída da Etapa 3
+## 4.8 Integração com o Modo Estudo
+
+Cursos autogeridos devem poder abrir o Auxiliar de Estudos com o próximo conteúdo real já selecionado.
+
+Exemplo:
+
+```text
+📚 Inglês
+Próximo: Simple Past
+
+[⏱️ Estudar agora]
+```
+
+Ao iniciar:
+
+```text
+Modo Estudo
+→ tópico vinculado: Simple Past
+→ ciclos de foco/pausa
+→ usuário marca explicitamente que concluiu
+→ progresso do curso pode ser atualizado pelo vínculo explícito
+```
+
+O fim de um Pomodoro nunca conclui conteúdo de curso por si só.
+
+## Gate de saída da Etapa 4
 
 - [ ] criar curso manualmente;
 - [ ] módulos e conteúdos ordenados;
@@ -778,17 +1208,18 @@ Não criar uma tarefa nova para cada sessão se o curso já possui progresso pr�
 - [ ] curso ao vivo respeita calendário;
 - [ ] integração com Hoje/resumos;
 - [ ] conclusão em lote;
-- [ ] importação com prévia e heurísticas testadas.
+- [ ] importação com prévia e heurísticas testadas;
+- [ ] conteúdo de curso pode alimentar Modo Estudo sem duplicar progresso.
 
 ---
 
-# ETAPA 4 — 📥 Caixa de entrada / captura rápida
+# ETAPA 5 — 📥 Caixa de entrada / captura rápida
 
-## 4.1 Objetivo
+## 5.1 Objetivo
 
 Permitir capturar rapidamente algo sem obrigar o usuário a decidir imediatamente a categoria correta.
 
-## 4.2 Princípio
+## 5.2 Princípio
 
 Capturar agora, organizar depois.
 
@@ -800,7 +1231,7 @@ salva isso pra depois: pesquisar deploy do AkosMed
 /inbox comprar cabo para o robô
 ```
 
-## 4.3 Estrutura mínima
+## 5.3 Estrutura mínima
 
 ```text
 InboxItem
@@ -811,7 +1242,7 @@ InboxItem
 - categoria final opcional
 ```
 
-## 4.4 Triagem
+## 5.4 Triagem
 
 Ações possíveis:
 
@@ -825,7 +1256,7 @@ Ações possíveis:
 
 Sugestão automática de categoria pode existir, mas nunca é obrigatória.
 
-## 4.5 UX
+## 5.5 UX
 
 ```text
 📥 Caixa de entrada
@@ -839,7 +1270,7 @@ Sugestão automática de categoria pode existir, mas nunca é obrigatória.
 [🗑 Descartar]
 ```
 
-## Gate de saída da Etapa 4
+## Gate de saída da Etapa 5
 
 - [ ] captura em uma mensagem;
 - [ ] nada é classificado silenciosamente de forma irreversível;
@@ -849,9 +1280,9 @@ Sugestão automática de categoria pode existir, mas nunca é obrigatória.
 
 ---
 
-# ETAPA 5 — 🗂️ Projetos e trabalho
+# ETAPA 6 — 🗂️ Projetos e trabalho
 
-## 5.1 Objetivo
+## 6.1 Objetivo
 
 Dar ao Butler memória operacional estruturada sobre projetos e sessões de trabalho.
 
@@ -859,7 +1290,7 @@ A pergunta central é:
 
 > “Onde eu parei?”
 
-## 5.2 Modelo de projeto
+## 6.2 Modelo de projeto
 
 ```text
 Projeto
@@ -876,7 +1307,7 @@ Projeto
 - última atualização
 ```
 
-## 5.3 Estado operacional
+## 6.3 Estado operacional
 
 O projeto deve conseguir responder:
 
@@ -896,7 +1327,7 @@ Bloqueios:
 Nenhum
 ```
 
-## 5.4 Sessões de trabalho
+## 6.4 Sessões de trabalho
 
 Fluxo desejado:
 
@@ -911,7 +1342,7 @@ encerrar
 → atualiza próximo passo/bloqueio
 ```
 
-## 5.5 Integração com tarefas
+## 6.5 Integração com tarefas
 
 Projeto não substitui tarefa.
 
@@ -922,7 +1353,7 @@ Tarefa = ação executável
 
 Uma tarefa pode pertencer a um projeto.
 
-## 5.6 Perguntas naturais
+## 6.6 Perguntas naturais
 
 - onde parei no SGL?
 - o que falta no Aconchega Aí?
@@ -930,7 +1361,7 @@ Uma tarefa pode pertencer a um projeto.
 - tenho projeto parado?
 - qual o próximo passo do AkosMed?
 
-## Gate de saída da Etapa 5
+## Gate de saída da Etapa 6
 
 - [ ] projeto possui estado real persistente;
 - [ ] tarefas podem ser vinculadas;
@@ -941,21 +1372,22 @@ Uma tarefa pode pertencer a um projeto.
 
 ---
 
-# ETAPA 6 — 🧭 Resumo, contexto operacional e priorização
+# ETAPA 7 — 🧭 Resumo, contexto operacional e priorização
 
-## 6.1 Objetivo
+## 7.1 Objetivo
 
 Fazer o Butler cruzar os domínios já confiáveis para ajudar o usuário a entender o dia e a semana.
 
 Não é um “modelo decidindo a vida”. É uma camada de **priorização explicável**.
 
-## 6.2 Fontes
+## 7.2 Fontes
 
 - compromissos;
 - tarefas;
 - pendências;
 - matérias/aulas;
 - avaliações;
+- sessões de estudo;
 - cursos;
 - rotinas;
 - treino;
@@ -964,7 +1396,7 @@ Não é um “modelo decidindo a vida”. É uma camada de **priorização expli
 - inbox;
 - itens vencidos.
 
-## 6.3 Perguntas-alvo
+## 7.3 Perguntas-alvo
 
 - como tá meu dia?
 - o que tenho amanhã?
@@ -973,8 +1405,9 @@ Não é um “modelo decidindo a vida”. É uma camada de **priorização expli
 - o que tenho essa semana?
 - tenho conflito de horários?
 - tem alguma coisa atrasada?
+- quanto eu estudei hoje?
 
-## 6.4 Política inicial de prioridade
+## 7.4 Política inicial de prioridade
 
 A prioridade deve ser derivada de fatores explícitos:
 
@@ -991,7 +1424,7 @@ prazo imediato
 
 A política deve ser configurável no futuro e nunca esconder itens menos prioritários.
 
-## 6.5 Conflitos
+## 7.5 Conflitos
 
 Detectar:
 
@@ -1002,7 +1435,7 @@ Detectar:
 
 O Butler sugere ajuste; não move automaticamente sem pedido.
 
-## 6.6 Exemplo de resumo
+## 7.6 Exemplo de resumo
 
 ```text
 🕴️ Hoje está moderado.
@@ -1014,6 +1447,11 @@ O Butler sugere ajuste; não move automaticamente sem pedido.
 • SGL — finalizar relatório de resíduos
 • Inglês — próximo conteúdo: Simple Past
 
+📚 Estudo
+• Cálculo — 1h15
+• Limites concluído
+• Derivadas ainda em andamento
+
 🟢 Rotinas
 • Água: 2/4
 • Treino: peito
@@ -1024,19 +1462,19 @@ Ficou de ontem:
 • revisar endpoint X
 ```
 
-## Gate de saída da Etapa 6
+## Gate de saída da Etapa 7
 
 - [ ] resumo usa apenas fontes reais;
 - [ ] prioridade tem justificativa reproduzível;
 - [ ] conflitos detectados sem escrita automática;
 - [ ] itens atrasados aparecem claramente;
-- [ ] agenda, projetos e cursos não são duplicados artificialmente.
+- [ ] agenda, estudo, projetos e cursos não são duplicados artificialmente.
 
 ---
 
-# ETAPA 7 — 🧠 Reativação seletiva de memória, sugestões e Library
+# ETAPA 8 — 🧠 Reativação seletiva de memória, sugestões e Library
 
-## 7.1 Objetivo
+## 8.1 Objetivo
 
 Recuperar partes úteis da arquitetura preservada somente depois que o Core e a conversa estiverem estáveis.
 
@@ -1044,7 +1482,7 @@ A pergunta não é “como ligar tudo?”. É:
 
 > “Qual capacidade melhora o Butler sem diminuir a previsibilidade?”
 
-## 7.2 Memória pessoal
+## 8.2 Memória pessoal
 
 Pode guardar fatos explícitos como:
 
@@ -1062,7 +1500,7 @@ Regras:
 - isolado por usuário;
 - não vira ação automaticamente.
 
-## 7.3 Sugestões
+## 8.3 Sugestões
 
 Exemplo:
 
@@ -1074,7 +1512,7 @@ Butler pode perguntar:
 
 Mas não adiciona sem confirmação.
 
-## 7.4 Library
+## 8.4 Library
 
 Reativar, de forma data-driven, domínios como:
 
@@ -1092,7 +1530,7 @@ Library informa/sugere
 Core persiste/executa
 ```
 
-## 7.5 Critério para reativar um módulo preservado
+## 8.5 Critério para reativar um módulo preservado
 
 Antes de ligar qualquer componente:
 
@@ -1104,7 +1542,7 @@ Antes de ligar qualquer componente:
 - atualizar `/health`;
 - atualizar arquitetura.
 
-## Gate de saída da Etapa 7
+## Gate de saída da Etapa 8
 
 - [ ] memória genérica não interfere em ações críticas;
 - [ ] Library tem dispatcher controlado;
@@ -1114,13 +1552,13 @@ Antes de ligar qualquer componente:
 
 ---
 
-# ETAPA 8 — 🔒 Hardening e consolidação de longo prazo
+# ETAPA 9 — 🔒 Hardening e consolidação de longo prazo
 
-## 8.1 Objetivo
+## 9.1 Objetivo
 
 Transformar o conjunto desenvolvido em uma base resistente a falhas, manutenção e crescimento futuro.
 
-## 8.2 Idempotência
+## 9.2 Idempotência
 
 Testar:
 
@@ -1129,9 +1567,10 @@ Testar:
 - cron repetido;
 - retry após timeout;
 - confirmação de envio incompleta;
-- migrations reaplicadas onde aplicável.
+- migrations reaplicadas onde aplicável;
+- timer de estudo disparado/reprocessado duas vezes.
 
-## 8.3 Falhas externas
+## 9.3 Falhas externas
 
 O Butler deve degradar de forma segura quando:
 
@@ -1142,7 +1581,7 @@ O Butler deve degradar de forma segura quando:
 - usuário bloqueia o bot;
 - um scheduler falha mas os outros precisam continuar.
 
-## 8.4 Dados e recuperação
+## 9.4 Dados e recuperação
 
 Definir:
 
@@ -1153,7 +1592,7 @@ Definir:
 - validação de integridade;
 - política para dados órfãos.
 
-## 8.5 Segurança
+## 9.5 Segurança
 
 - secrets fora do repositório;
 - webhook secret recomendado;
@@ -1162,7 +1601,7 @@ Definir:
 - nenhuma exposição acidental de chat IDs/dados pessoais;
 - configuração pessoal migrável para seed privado quando necessário.
 
-## 8.6 Observabilidade
+## 9.6 Observabilidade
 
 Padronizar logs por domínio:
 
@@ -1170,6 +1609,7 @@ Padronizar logs por domínio:
 [weather]
 [attendance]
 [reminder]
+[study]
 [admin]
 [project]
 [course]
@@ -1177,13 +1617,14 @@ Padronizar logs por domínio:
 
 Registrar o suficiente para diagnosticar sem armazenar conteúdo pessoal desnecessário.
 
-## 8.7 Teste de regressão final
+## 9.7 Teste de regressão final
 
 Cobrir jornadas completas:
 
 - onboarding → grade → aula → falta;
 - tarefa → lembrete → conclusão;
-- curso → sessão → conclusão → próximo conteúdo;
+- Modo Estudo → foco → pausa → continuar mesmo tópico → conclusão explícita → próximo tópico;
+- curso → Modo Estudo → conclusão → próximo conteúdo;
 - inbox → triagem → tarefa;
 - projeto → sessão → onde parei;
 - resumo diário com conflito;
@@ -1191,11 +1632,11 @@ Cobrir jornadas completas:
 - dois usuários;
 - proprietário × usuário comum.
 
-## Gate de saída da Etapa 8
+## Gate de saída da Etapa 9
 
 - [ ] principais jornadas ponta a ponta cobertas;
 - [ ] política de backup definida;
-- [ ] callbacks e schedulers idempotentes;
+- [ ] callbacks, timers e schedulers idempotentes;
 - [ ] falhas externas degradam com segurança;
 - [ ] documentação final sincronizada;
 - [ ] dívida técnica residual registrada e priorizada.
@@ -1213,7 +1654,7 @@ Toda feature nova deve responder:
 - qual `user_id` é autoridade?
 - SQL está filtrado pelo usuário?
 - callback contém informação suficiente para validar o dono?
-- scheduler pode misturar usuários?
+- scheduler/timer pode misturar usuários?
 - teste com dois usuários existe?
 
 ## 5.2 UX Telegram
@@ -1226,7 +1667,8 @@ Padrões desejados:
 - evitar pedir que o usuário redigite informação já fornecida;
 - prévia antes de importações e ações em lote;
 - mensagens curtas para operação diária;
-- detalhes sob demanda.
+- detalhes sob demanda;
+- em sessões temporizadas, botões contextuais devem refletir exatamente o estado atual.
 
 ## 5.3 Banco
 
@@ -1358,11 +1800,12 @@ O Butler estará evoluindo na direção certa se, ao longo das etapas:
 2. aumentar a cobertura de sequências reais de conversa;
 3. reduzir falsos positivos de intenção;
 4. permitir mais operações sem redigitação;
-5. responder “onde parei?” com informação real;
-6. montar resumos usando fontes confiáveis;
-7. manter zero vazamento entre usuários;
-8. sobreviver melhor a falhas externas;
-9. ter documentação suficiente para retomar o desenvolvimento sem reconstruir contexto do zero.
+5. acompanhar sessões de estudo sem confundir tempo com conclusão;
+6. responder “onde parei?” com informação real;
+7. montar resumos usando fontes confiáveis;
+8. manter zero vazamento entre usuários;
+9. sobreviver melhor a falhas externas;
+10. ter documentação suficiente para retomar o desenvolvimento sem reconstruir contexto do zero.
 
 ---
 
@@ -1390,6 +1833,17 @@ REVISÃO
 “O que ficou, mudou ou merece atenção?”
 ```
 
+No domínio de estudos isso também significa:
+
+```text
+PLANEJAR TÓPICOS
+→ FOCAR
+→ DESCANSAR
+→ CHECAR COMO FOI
+→ CONTINUAR O MESMO TÓPICO OU CONCLUIR
+→ SÓ ENTÃO AVANÇAR
+```
+
 A inteligência do Butler não será medida pela quantidade de respostas que consegue improvisar, mas pela capacidade de **manter uma representação confiável daquilo que o usuário realmente precisa acompanhar**.
 
 ---
@@ -1398,13 +1852,13 @@ A inteligência do Butler não será medida pela quantidade de respostas que con
 
 A próxima fase é:
 
-## **ETAPA 0 — Arrumar a casa**
+## **ETAPA 1 — Linguagem natural + estabilidade de conversa real**
 
 Primeira entrega concreta:
 
-> **Auditoria completa da `main` + inventário estrutural + esqueleto do Dossiê Mestre.**
+> **Mapear o repertório atual de linguagem do runtime, criar o corpus-base de português brasileiro e definir a camada estrutural para conjunções, referências, correções e múltiplas intenções sem reativar uma NLU ampla.**
 
-Nenhuma grande feature nova deve anteceder essa entrega, salvo correção urgente de produção.
+A Etapa 3 — Auxiliar de Estudos — permanece oficialmente posicionada **depois do Acadêmico + Importação e antes de Cursos e Trilhas**.
 
 ---
 
@@ -1412,10 +1866,12 @@ Nenhuma grande feature nova deve anteceder essa entrega, salvo correção urgent
 
 - **Documento:** Trilha Definitiva de Desenvolvimento do Butler
 - **Versão inicial:** 1.0
+- **Versão atual:** 1.1
 - **Data-base:** 29/08/2026
+- **Mudança 1.1:** inclusão da Etapa 3 — Auxiliar de Estudos / Modo Estudo e renumeração das etapas seguintes
 - **Responsabilidade:** orientar ordem e critérios das próximas fases
 - **Fonte de verdade do runtime:** `docs/ARCHITECTURE.md`
 - **Fonte de decisões históricas:** `CONTINUIDADE.md`
-- **Futuro Dossiê Mestre:** `docs/BUTLER_DOSSIE_MESTRE.md`
+- **Dossiê Mestre:** `docs/BUTLER_DOSSIE_MESTRE.md`
 
 > Alterações neste roadmap devem representar mudança real de estratégia. Pequenos ajustes de implementação pertencem à documentação da etapa ou à arquitetura, não a este documento.
