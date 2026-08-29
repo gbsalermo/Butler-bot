@@ -7,6 +7,7 @@ import app
 import runtime_guard
 from academic_intelligence import handle_message as handle_academic_message, install as install_academic_intelligence
 from academic_polish import install as install_academic_polish
+from admin_diagnostics import handle_message as handle_admin_diagnostics
 from alert_diagnostics import handle_message as handle_alert_diagnostics
 from attendance_patch import handle_message as handle_attendance_message, install as install_attendance
 from attendance_enhancement import ensure_schema as ensure_attendance_schema, handle_callback as handle_attendance_callback, install as install_attendance_enhancement
@@ -173,6 +174,7 @@ class Default(WorkerEntrypoint):
                     "scheduler_signature_fixed": True,
                     "telegram_delivery_confirmation": True,
                     "alert_diagnostics": True,
+                    "admin_user_diagnostics": True,
                     "routine_scheduler_direct": True,
                     "reminder_grace_minutes": 10,
                     "single_reminder_policy": True,
@@ -245,6 +247,10 @@ class Default(WorkerEntrypoint):
                 text = (message.get("text") or "")
 
                 handled = await handle_start_reset(self.env.DB, token, message)
+                if handled:
+                    return Response("ok")
+
+                handled = await handle_admin_diagnostics(self.env.DB, token, message)
                 if handled:
                     return Response("ok")
 
