@@ -7,6 +7,7 @@ import app
 import runtime_guard
 from academic_intelligence import handle_message as handle_academic_message, install as install_academic_intelligence
 from academic_polish import install as install_academic_polish
+from admin_announcement_flow import handle_callback as handle_admin_announcement_callback, handle_message as handle_admin_announcement_preview
 from admin_diagnostics import handle_message as handle_admin_diagnostics
 from alert_diagnostics import handle_message as handle_alert_diagnostics
 from attendance_patch import handle_message as handle_attendance_message, install as install_attendance
@@ -175,6 +176,7 @@ class Default(WorkerEntrypoint):
                     "telegram_delivery_confirmation": True,
                     "alert_diagnostics": True,
                     "admin_user_diagnostics": True,
+                    "admin_announcement_buttons": True,
                     "routine_scheduler_direct": True,
                     "reminder_grace_minutes": 10,
                     "single_reminder_policy": True,
@@ -237,7 +239,9 @@ class Default(WorkerEntrypoint):
             token = self.env.TELEGRAM_BOT_TOKEN
             callback = update.get("callback_query")
             if callback:
-                handled = await handle_attendance_callback(self.env.DB, token, callback)
+                handled = await handle_admin_announcement_callback(self.env.DB, token, callback)
+                if not handled:
+                    handled = await handle_attendance_callback(self.env.DB, token, callback)
                 if not handled:
                     await handle_context_callback(self.env.DB, token, callback)
                 return Response("ok")
@@ -247,6 +251,10 @@ class Default(WorkerEntrypoint):
                 text = (message.get("text") or "")
 
                 handled = await handle_start_reset(self.env.DB, token, message)
+                if handled:
+                    return Response("ok")
+
+                handled = await handle_admin_announcement_preview(self.env.DB, token, message)
                 if handled:
                     return Response("ok")
 
