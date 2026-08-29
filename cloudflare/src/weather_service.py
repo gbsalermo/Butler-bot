@@ -207,7 +207,7 @@ async def fetch_daily_forecast(location, target):
         "temperature_max": first("temperature_2m_max"),
         "temperature_min": first("temperature_2m_min"),
         # max = maior probabilidade HORÁRIA do dia; não deve ser apresentada
-        # como se fosse a chance do dia inteiro.
+        # isoladamente como se fosse a chance do dia inteiro.
         "rain_probability_max": first("precipitation_probability_max"),
         "rain_probability_mean": first("precipitation_probability_mean"),
         "rain_sum": first("precipitation_sum"),
@@ -237,7 +237,9 @@ def _day_condition(forecast):
         return "☁️", "muitas nuvens"
 
     if rain_sum is not None:
-        if rain_sum < 1.0 or (rain_hours is not None and rain_hours <= 2):
+        if rain_sum < 1.0:
+            return "🌦️", "baixa possibilidade de chuva passageira"
+        if rain_hours is not None and rain_hours <= 2:
             return "🌦️", "chuva passageira em algum período"
         if rain_sum < 5.0:
             return "🌦️", "chuva fraca em alguns períodos"
@@ -272,12 +274,21 @@ def format_forecast(location, forecast, heading="Tempo"):
             lines.append(f"• Chuva prevista: {rain_sum:.1f} mm{duration}")
 
     if rain_mean is not None and rain_sum is not None and rain_sum > 0.1:
-        probability = f"• Chance média de chuva: {round(rain_mean)}%"
         if rain_max is not None and rain_max > rain_mean:
-            probability += f" · pico horário: {round(rain_max)}%"
-        lines.append(probability)
+            lines.append(
+                f"• Chance de chuva: de {round(rain_mean)}% até {round(rain_max)}%"
+            )
+        else:
+            lines.append(f"• Chance de chuva: {round(rain_mean)}%")
+    elif rain_mean is not None and rain_sum is None:
+        if rain_max is not None and rain_max > rain_mean:
+            lines.append(
+                f"• Chance de chuva: de {round(rain_mean)}% até {round(rain_max)}%"
+            )
+        else:
+            lines.append(f"• Chance de chuva: {round(rain_mean)}%")
     elif rain_max is not None and rain_sum is None:
-        lines.append(f"• Maior chance em algum horário: {round(rain_max)}%")
+        lines.append(f"• Chance de chuva: até {round(rain_max)}%")
 
     if wind is not None:
         lines.append(f"• Vento: até {round(wind)} km/h")
