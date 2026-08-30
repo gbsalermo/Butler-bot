@@ -1,7 +1,7 @@
 # Butler — Etapa 1: Auditoria de Linguagem Natural
 
 **Data-base:** 30/08/2026  
-**Status:** Etapa 1.1 — inventário e contrato inicial  
+**Status:** Etapa 1.1 concluída — próxima subetapa: 1.2  
 **Roadmap:** `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`
 
 > Este documento descreve **como a linguagem natural chega ao runtime hoje** e quais responsabilidades precisam ser consolidadas antes de ampliar o repertório. Ele não altera a autoridade do dispatcher definida em `docs/ARCHITECTURE.md`.
@@ -284,16 +284,16 @@ Meta final do gate da Etapa 1:
 - sequências de 3–8 turnos;
 - cenários com dois usuários.
 
-A Etapa 1.1 não precisa atingir toda a meta imediatamente; precisa estabelecer o **formato, a fonte de verdade e a primeira bateria executável**.
+A Etapa 1.1 estabeleceu o formato com **mais de 100 casos iniciais executáveis**. A meta final continua maior e será preenchida nas subetapas seguintes com casos de produção.
 
 ---
 
 ## 9. Ordem de implementação validada pela auditoria
 
 ```text
-1.1 auditoria + corpus inicial
+1.1 auditoria + corpus inicial                ✅
 ↓
-1.2 language_primitives comum
+1.2 language_primitives comum                 ⏭️
 ↓
 1.3 referências + contexto curto com expiração/barreira de assunto
 ↓
@@ -310,12 +310,14 @@ A migração será incremental. Em cada subetapa, o módulo de domínio continua
 
 ## 10. Gate da Etapa 1.1
 
-A subetapa 1.1 pode ser fechada quando:
+A subetapa 1.1 foi fechada quando:
 
 - [x] cadeia ativa de linguagem foi mapeada;
 - [x] duplicações principais foram identificadas;
 - [x] lacunas de correção, elipse, negação e composto foram registradas;
 - [x] código preservado foi separado do runtime ativo;
-- [ ] `language_primitives.py` existe sem efeitos colaterais;
-- [ ] corpus inicial executável existe e passa no CI;
-- [ ] nenhum comportamento de produção foi alterado apenas para “passar no corpus”.
+- [x] `language_primitives.py` existe sem efeitos colaterais;
+- [x] corpus inicial executável existe e passa no CI;
+- [x] nenhum comportamento de produção foi alterado apenas para “passar no corpus”.
+
+**Validação:** regressão da PR #11 com **189 testes verdes** após corrigir o caso de escopo `não me lembra...` × `me lembra de não...`.
