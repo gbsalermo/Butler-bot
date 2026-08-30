@@ -1,14 +1,15 @@
 """Fast path determinístico para frases informais do núcleo do Butler.
 
 Não é NLU geral: só reconhece pedidos operacionais explícitos de tarefa e
-compromisso. Provas e lembretes usam parsers especializados.
+compromisso. A família linguística vem de ``language_primitives``; este módulo
+continua sendo autoridade da persistência desses dois domínios.
 """
 
 import re
-import unicodedata
 from datetime import datetime, timedelta, timezone
 
 import app
+import language_primitives as language
 from nlu import parse_date, parse_time, validate_future
 from settings import UTC_OFFSET_HOURS
 from telegram_api import send_message
@@ -17,10 +18,7 @@ LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
 
 
 def _norm(text):
-    v = unicodedata.normalize("NFKD", (text or "").lower())
-    v = "".join(c for c in v if not unicodedata.combining(c))
-    v = re.sub(r"[^a-z0-9:/ ]+", " ", v)
-    return re.sub(r"\s+", " ", v).strip()
+    return language.normalize_text(language.strip_butler(text), keep_temporal=True)
 
 
 def _row(row, key, default=None):
@@ -49,13 +47,13 @@ def _clean_title(text, kind):
     if kind == "tarefa":
         patterns = [
             r"^(?:butler[,!:\-]?\s*)?(?:eu\s+)?(?:tenho que|tenho de|preciso|preciso de|devo)\s+",
-            r"^(?:butler[,!:\-]?\s*)?(?:cria|crie|faz|faça|faca|anota|anote|bota|coloca|coloque|marca|marque|adiciona|adicione)\s+(?:ai\s+|aí\s+)?(?:pra mim\s+|para mim\s+)?(?:como\s+)?(?:uma\s+)?tarefa\s*(?:de\s+)?",
+            r"^(?:butler[,!:\-]?\s*)?(?:cria|crie|criar|faz|faça|faca|fazer|anota|anote|anotar|bota|botar|coloca|coloque|colocar|marca|marque|marcar|adiciona|adicione|adicionar)\s+(?:ai\s+|aí\s+)?(?:pra mim\s+|para mim\s+)?(?:como\s+)?(?:uma\s+)?tarefa\s*(?:de\s+)?",
             r"^(?:butler[,!:\-]?\s*)?(?:nova tarefa|tarefa)\s*[:\-]?\s*",
         ]
     else:
         patterns = [
             r"^(?:butler[,!:\-]?\s*)?(?:tenho|vou ter|vai ter)\s+(?:um\s+|uma\s+)?(?:compromisso\s+(?:de\s+|com\s+)?)?",
-            r"^(?:butler[,!:\-]?\s*)?(?:cria|crie|faz|faça|faca|marca|marque|anota|anote|bota|coloca|coloque|agenda|agende|adiciona|adicione)\s+(?:ai\s+|aí\s+)?(?:pra mim\s+|para mim\s+)?(?:um\s+|uma\s+)?compromisso\s*(?:de\s+|com\s+)?",
+            r"^(?:butler[,!:\-]?\s*)?(?:cria|crie|criar|faz|faça|faca|fazer|marca|marque|marcar|anota|anote|anotar|bota|botar|coloca|coloque|colocar|agenda|agende|agendar|adiciona|adicione|adicionar)\s+(?:ai\s+|aí\s+)?(?:pra mim\s+|para mim\s+)?(?:um\s+|uma\s+)?compromisso\s*(?:de\s+|com\s+)?",
             r"^(?:butler[,!:\-]?\s*)?(?:novo compromisso|compromisso)\s*[:\-]?\s*",
         ]
     for pattern in patterns:
@@ -81,28 +79,15 @@ def classify(text):
     if n in {"tarefa", "tarefas", "compromisso", "compromissos"}:
         return None
 
-    # Lembretes explícitos pertencem ao parser especializado.
-    if re.match(r"^(?:butler\s+)?(?:me\s+)?(?:lembra|lembre|avisa|avise)\b", n):
-        return "lembrete"
-    if re.match(r"^(?:butler\s+)?(?:cria|crie|faz|faca|anota|coloca|adiciona)\s+(?:um\s+|uma\s+)?lembrete\b", n):
-        return "lembrete"
+    families = set(language.detect_action_families(text))
 
-    task_patterns = (
-        r"^(?:butler\s+)?(?:eu\s+)?(?:tenho que|tenho de|preciso|devo)\b",
-        r"^(?:butler\s+)?(?:cria|crie|faz|faca|anota|bota|coloca|marca|adiciona)\b.*\btarefa\b",
-        r"^(?:butler\s+)?(?:nova tarefa|tarefa)\b.+",
-    )
-    if any(re.search(p, n) for p in task_patterns):
+    # Lembretes pertencem ao parser especializado e respeitam polaridade.
+    if "reminder" in families:
+        return "lembrete" if language.is_positive_action_request(text, "reminder") else None
+
+    if "create_task" in families:
         return "tarefa"
-
-    appointment_patterns = (
-        r"^(?:butler\s+)?(?:cria|crie|faz|faca|marca|anota|bota|coloca|agenda|adiciona)\b.*\bcompromisso\b",
-        r"^(?:butler\s+)?(?:novo compromisso|compromisso)\b.+",
-        r"^(?:butler\s+)?tenho\s+(?:consulta|dentista|reuniao|entrevista|medico|medica)\b",
-        r"^(?:butler\s+)?vou ter\s+(?:consulta|dentista|reuniao|entrevista|compromisso)\b",
-        r"^(?:butler\s+)?(?:consulta|dentista|reuniao|entrevista|medico|medica)\b",
-    )
-    if any(re.search(p, n) for p in appointment_patterns):
+    if "create_appointment" in families:
         return "compromisso"
     return None
 

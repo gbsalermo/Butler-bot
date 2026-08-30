@@ -69,33 +69,42 @@ CORRECTION_PATTERNS = (
     ("rejection", r"^nao[, ]+", "nao"),
 )
 
+SAFE_TASK_VERBS = (
+    "pagar|comprar|fazer|terminar|entregar|revisar|estudar|resolver|limpar|ligar|"
+    "enviar|buscar|levar|organizar|atualizar|corrigir|trabalhar|preparar|finalizar|"
+    "arrumar|marcar|agendar"
+)
+
 # Famílias de ato linguístico. Elas NÃO escolhem domínio nem autorizam escrita.
 # A mesma frase pode produzir mais de uma família; o parser do domínio decide.
 ACTION_PATTERNS = (
     (
         "reminder",
         (
-            r"^(?:por favor\s+)?(?:(?:nao|nunca|nem)\s+)?(?:me\s+)?(?:lembra|lembre|avisa|avise|recorda|recorde)\b",
+            r"^(?:por favor\s+)?(?:so\s+)?(?:(?:nao|nunca|nem)\s+)?(?:me\s+)?(?:lembra|lembre|avisa|avise|recorda|recorde)\b",
             r"^(?:por favor\s+)?(?:(?:nao|nunca|nem)\s+)?(?:deixa|deixe)\s+(?:eu\s+)?(?:esquecer|vacilar)\b",
-            r"^(?:por favor\s+)?(?:(?:nao|nunca|nem)\s+)?(?:me\s+)?(?:da|dá)\s+(?:um\s+)?(?:toque|aviso|alo)\b",
-            r"^(?:cria|crie|faz|faca|anota|anote|coloca|coloque|adiciona|adicione|bota|marca|marque)\b.*\blembrete\b",
+            r"^(?:por favor\s+)?(?:(?:nao|nunca|nem)\s+)?(?:me\s+)?da\s+(?:um\s+)?(?:toque|aviso|alo)\b",
+            r"^(?:cria|crie|criar|faz|faca|fazer|anota|anote|anotar|coloca|coloque|colocar|adiciona|adicione|adicionar|bota|botar|marca|marque|marcar)\b.*\b(?:lembrete|aviso)\b",
+            r"^(?:me\s+)?chama\s+(?:a\s+)?atencao\b",
+            r"^(?:quando der|quando chegar)\b.*\b(?:me avisa|me lembra)\b",
         ),
     ),
     (
         "create_task",
         (
-            r"^(?:cria|crie|faz|faca|anota|anote|coloca|coloque|adiciona|adicione|bota|marca|marque)\b.*\btarefa\b",
+            r"^(?:cria|crie|criar|faz|faca|fazer|anota|anote|anotar|coloca|coloque|colocar|adiciona|adicione|adicionar|bota|botar|marca|marque|marcar)\b.*\btarefa\b",
             r"^(?:eu\s+)?(?:tenho que|tenho de|devo)\b",
+            rf"^(?:eu\s+)?preciso\s+(?:de\s+)?(?:{SAFE_TASK_VERBS})\b",
             r"^(?:nova tarefa|tarefa)\b.+",
         ),
     ),
     (
         "create_appointment",
         (
-            r"^(?:cria|crie|faz|faca|marca|marque|anota|anote|agenda|agende|adiciona|adicione)\b.*\bcompromisso\b",
+            r"^(?:cria|crie|criar|faz|faca|fazer|marca|marque|marcar|anota|anote|anotar|agenda|agende|agendar|adiciona|adicione|adicionar)\b.*\bcompromisso\b",
             r"^(?:eu\s+)?tenho\s+(?:consulta|dentista|reuniao|entrevista|medico|medica)\b",
             r"^(?:eu\s+)?vou ter\s+(?:consulta|dentista|reuniao|entrevista|compromisso)\b",
-            r"^(?:consulta|dentista|reuniao|entrevista)\b",
+            r"^(?:consulta|dentista|reuniao|entrevista|medico|medica)\b",
         ),
     ),
     (
@@ -131,7 +140,7 @@ ACTION_PATTERNS = (
     (
         "create_routine",
         (
-            r"^(?:cria|crie|faz|faca|adiciona|adicione|cadastra|cadastre)\b.*\brotina\b",
+            r"^(?:(?:quero|gostaria de|pode)\s+)?(?:cria|crie|criar|faz|faca|fazer|adiciona|adicione|adicionar|cadastra|cadastre|cadastrar)\b.*\brotina\b",
             r"^(?:nova rotina|rotina)\b.+",
         ),
     ),
@@ -143,6 +152,14 @@ ACTION_PATTERNS = (
         ),
     ),
 )
+
+# Algumas construções possuem negação superficial, mas ato positivo. Ex.:
+# "não deixa eu esquecer" é um pedido de lembrete, não uma recusa ao lembrete.
+POSITIVE_NEGATION_IDIOMS = {
+    "reminder": (
+        r"^(?:por favor\s+)?nao\s+(?:deixa|deixe)\s+(?:eu\s+)?(?:esquecer|vacilar)\b",
+    ),
+}
 
 
 def normalize_text(text: str | None, *, keep_temporal: bool = False) -> str:
@@ -180,8 +197,33 @@ def detect_action_families(text: str | None) -> list[str]:
     return found
 
 
+def has_action_family(text: str | None, family: str) -> bool:
+    return family in detect_action_families(text)
+
+
 def has_explicit_action(text: str | None) -> bool:
     return bool(detect_action_families(text))
+
+
+def action_polarity(text: str | None, family: str) -> str | None:
+    """Retorna `positive`, `negative` ou `None` para uma família reconhecida.
+
+    A polaridade é linguística, não autorização de escrita. O domínio ainda deve
+    resolver alvo, tempo e confiança antes de persistir qualquer coisa.
+    """
+    if not has_action_family(text, family):
+        return None
+
+    normalized = _normalized_without_butler(text)
+    for pattern in POSITIVE_NEGATION_IDIOMS.get(family, ()):
+        if re.search(pattern, normalized):
+            return "positive"
+
+    return "negative" if negation_scope(text) == "action" else "positive"
+
+
+def is_positive_action_request(text: str | None, family: str) -> bool:
+    return action_polarity(text, family) == "positive"
 
 
 def detect_relations(text: str | None) -> list[dict]:
@@ -194,8 +236,6 @@ def detect_relations(text: str | None) -> list[dict]:
     matches: list[dict] = []
     occupied: list[tuple[int, int]] = []
 
-    # Expressões mais longas vêm primeiro em RELATION_PATTERNS. Evitamos que o
-    # `e` de `alem disso`, por exemplo, apareça como relação separada.
     for relation, pattern, connector in RELATION_PATTERNS:
         for match in re.finditer(pattern, normalized):
             span = match.span()
