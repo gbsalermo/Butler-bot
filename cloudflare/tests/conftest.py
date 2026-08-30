@@ -57,6 +57,12 @@ if "workers" not in sys.modules:
     class _WorkerEntrypoint:
         pass
 
+    class _DurableObject:
+        def __init__(self, ctx=None, env=None):
+            self.ctx = ctx
+            self.env = env
+
     workers.Response = _Response
     workers.WorkerEntrypoint = _WorkerEntrypoint
+    workers.DurableObject = _DurableObject
     sys.modules["workers"] = workers
