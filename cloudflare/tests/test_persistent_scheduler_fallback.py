@@ -1,6 +1,5 @@
+import asyncio
 from datetime import datetime, timedelta
-
-import pytest
 
 import entry
 import personal_alarm
@@ -82,28 +81,27 @@ def test_task_can_recover_late_on_same_day_but_simple_reminder_cannot():
     assert simple is None
 
 
-@pytest.mark.asyncio
-async def test_alarm_stays_armed_even_when_user_has_no_scheduled_items():
-    db = _DB()
-    now = _local(2026, 8, 30, 13, 0)
+def test_alarm_stays_armed_even_when_user_has_no_scheduled_items():
+    async def scenario():
+        db = _DB()
+        now = _local(2026, 8, 30, 13, 0)
+        return await personal_alarm._next_event(db, 1, now=now)
 
-    next_event = await personal_alarm._next_event(db, 1, now=now)
-
+    next_event = asyncio.run(scenario())
     assert next_event == _local(2026, 8, 31, 7, 0)
 
 
-@pytest.mark.asyncio
-async def test_day_off_skips_today_but_keeps_tomorrow_alarm_alive():
-    db = _DB(day_off=1)
-    now = _local(2026, 8, 30, 6, 0)
+def test_day_off_skips_today_but_keeps_tomorrow_alarm_alive():
+    async def scenario():
+        db = _DB(day_off=1)
+        now = _local(2026, 8, 30, 6, 0)
+        return await personal_alarm._next_event(db, 1, now=now)
 
-    next_event = await personal_alarm._next_event(db, 1, now=now)
-
+    next_event = asyncio.run(scenario())
     assert next_event == _local(2026, 8, 31, 7, 0)
 
 
-@pytest.mark.asyncio
-async def test_post_webhook_rearms_persistent_alarms(monkeypatch):
+def test_post_webhook_rearms_persistent_alarms(monkeypatch):
     calls = []
 
     async def fake_core_fetch(self, request):
@@ -120,11 +118,12 @@ async def test_post_webhook_rearms_persistent_alarms(monkeypatch):
     monkeypatch.setattr(worker, "sync_attendance_alarms", fake_attendance)
     monkeypatch.setattr(worker, "sync_personal_alarms", fake_personal)
 
-    instance = worker.Default()
-    instance.env = object()
-    request = type("Request", (), {"method": "POST"})()
+    async def scenario():
+        instance = worker.Default()
+        instance.env = object()
+        request = type("Request", (), {"method": "POST"})()
+        return await instance.fetch(request)
 
-    response = await instance.fetch(request)
-
+    response = asyncio.run(scenario())
     assert response == "ok"
     assert calls == ["core", "attendance", "personal"]
