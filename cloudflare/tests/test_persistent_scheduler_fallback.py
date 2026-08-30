@@ -81,10 +81,20 @@ def test_task_can_recover_late_on_same_day_but_simple_reminder_cannot():
     assert simple is None
 
 
-def test_alarm_stays_armed_even_when_user_has_no_scheduled_items():
+def test_alarm_stays_armed_with_weekly_summary_when_it_is_the_next_event():
     async def scenario():
         db = _DB()
-        now = _local(2026, 8, 30, 13, 0)
+        now = _local(2026, 8, 30, 13, 0)  # domingo
+        return await personal_alarm._next_event(db, 1, now=now)
+
+    next_event = asyncio.run(scenario())
+    assert next_event == _local(2026, 8, 30, 20, 0)
+
+
+def test_after_weekly_window_next_alarm_is_next_morning():
+    async def scenario():
+        db = _DB()
+        now = _local(2026, 8, 30, 21, 5)
         return await personal_alarm._next_event(db, 1, now=now)
 
     next_event = asyncio.run(scenario())
