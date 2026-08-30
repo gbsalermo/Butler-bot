@@ -75,9 +75,9 @@ ACTION_PATTERNS = (
     (
         "reminder",
         (
-            r"^(?:por favor\s+)?(?:me\s+)?(?:lembra|lembre|avisa|avise|recorda|recorde)\b",
-            r"^(?:por favor\s+)?(?:nao\s+)?(?:deixa|deixe)\s+(?:eu\s+)?(?:esquecer|vacilar)\b",
-            r"^(?:por favor\s+)?(?:me\s+)?(?:da|dá)\s+(?:um\s+)?(?:toque|aviso|alo)\b",
+            r"^(?:por favor\s+)?(?:(?:nao|nunca|nem)\s+)?(?:me\s+)?(?:lembra|lembre|avisa|avise|recorda|recorde)\b",
+            r"^(?:por favor\s+)?(?:(?:nao|nunca|nem)\s+)?(?:deixa|deixe)\s+(?:eu\s+)?(?:esquecer|vacilar)\b",
+            r"^(?:por favor\s+)?(?:(?:nao|nunca|nem)\s+)?(?:me\s+)?(?:da|dá)\s+(?:um\s+)?(?:toque|aviso|alo)\b",
             r"^(?:cria|crie|faz|faca|anota|anote|coloca|coloque|adiciona|adicione|bota|marca|marque)\b.*\blembrete\b",
         ),
     ),
