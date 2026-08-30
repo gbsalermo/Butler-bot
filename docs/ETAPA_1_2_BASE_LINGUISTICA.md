@@ -137,7 +137,7 @@ Esses pontos pertencem às subetapas 1.3–1.5.
 - [x] polaridade de lembrete possui teste;
 - [x] `preciso de ajuda` não vira tarefa;
 - [x] `criar uma tarefa` não vira lembrete;
-- [ ] regressão completa verde no PR;
+- [x] regressão completa verde no PR;
 - [ ] regressão pós-merge verde na `main`.
 
 Próxima subetapa após o gate: **1.3 — referências + contexto curto com expiração e barreira de assunto**.
