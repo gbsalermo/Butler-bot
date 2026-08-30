@@ -16,11 +16,34 @@ from telegram_api import send_message
 
 LATER_KB = [
     ["➕ Adicionar à lista", "📚 Livros"],
-    ["🎬 Filmes", "🗂️ Outras"],
+    ["🎬 Filmes", "🎓 Cursos"],
+    ["🗂️ Outras"],
     ["✏️ Editar item", "🗑️ Remover item"],
     ["⬅️ Voltar ao cotidiano"],
 ]
-CATEGORY_KB = [["📚 Livro", "🎬 Filme"], ["🗂️ Outra"], ["❌ Cancelar ação"]]
+CATEGORY_KB = [
+    ["📚 Livro", "🎬 Filme"],
+    ["🎓 Curso", "🗂️ Outra"],
+    ["❌ Cancelar ação"],
+]
+CATEGORY_CHOICES = {
+    "📚 Livro": "livro",
+    "🎬 Filme": "filme",
+    "🎓 Curso": "curso",
+    "🗂️ Outra": "outra",
+}
+CATEGORY_EMPTY_LABELS = {
+    "livro": "livros",
+    "filme": "filmes",
+    "curso": "cursos",
+    "outra": "outros itens",
+}
+CATEGORY_TITLES = {
+    "livro": "📚 Livros",
+    "filme": "🎬 Filmes",
+    "curso": "🎓 Cursos",
+    "outra": "🗂️ Outras",
+}
 CANCEL_KB = [["❌ Cancelar ação"]]
 
 
@@ -136,11 +159,10 @@ async def _list_category(db, token, chat_id, uid, category):
         ).bind(uid, category).all()
     rows = list(getattr(result, "results", []) or [])
     if not rows:
-        label = {"livro": "livros", "filme": "filmes", "outra": "outros itens"}[category]
+        label = CATEGORY_EMPTY_LABELS[category]
         await _send(token, chat_id, f"Ainda não há {label} nessa lista.", LATER_KB)
         return
-    title = {"livro": "📚 Livros", "filme": "🎬 Filmes", "outra": "🗂️ Outras"}[category]
-    parts = [title]
+    parts = [CATEGORY_TITLES[category]]
     for row in rows:
         suffix = f" [{_rowget(row, 'custom_category')}]" if category == "outra" and _rowget(row, "custom_category") else ""
         parts.append(f"#{_rowget(row, 'id')} • {_rowget(row, 'name')}{suffix}")
@@ -156,10 +178,9 @@ async def _handle_later_state(db, token, chat_id, uid, text, state, payload):
         return True
 
     if state == "later_add_category":
-        choices = {"📚 Livro": "livro", "🎬 Filme": "filme", "🗂️ Outra": "outra"}
-        category = choices.get(text)
+        category = CATEGORY_CHOICES.get(text)
         if not category:
-            await _send(token, chat_id, "Escolha Livro, Filme ou Outra.", CATEGORY_KB)
+            await _send(token, chat_id, "Escolha Livro, Filme, Curso ou Outra.", CATEGORY_KB)
             return True
         payload["category"] = category
         await app.set_state(db, uid, "later_add_name", payload)
@@ -256,7 +277,7 @@ async def handle_message(db, token, message):
         await _send(
             token,
             chat_id,
-            "📌 Ler/ver depois\n\nUma lista simples para guardar coisas que você quer ler ou ver mais tarde.",
+            "📌 Ler/ver depois\n\nUma lista simples para guardar livros, filmes, cursos e outras coisas para depois.",
             LATER_KB,
         )
         return True
@@ -273,6 +294,9 @@ async def handle_message(db, token, message):
         return True
     if text == "🎬 Filmes":
         await _list_category(db, token, chat_id, uid, "filme")
+        return True
+    if text == "🎓 Cursos":
+        await _list_category(db, token, chat_id, uid, "curso")
         return True
     if text == "🗂️ Outras":
         await _list_category(db, token, chat_id, uid, "outra")
