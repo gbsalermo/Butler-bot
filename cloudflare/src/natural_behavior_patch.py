@@ -53,6 +53,18 @@ async def _remember(db, uid, kind, iid):
     ).bind(uid, iid, payload).run()
 
 
+async def handle_explicit_simple_reminder(db, token, message):
+    """Wrapper de compatibilidade para o dispatcher histórico.
+
+    Desde a Etapa 1.2, este módulo não cria lembretes. Toda criação natural é
+    delegada ao ``colloquial_reminder_fastpath``, que é a autoridade única do
+    domínio para reconhecimento + wizard + persistência.
+    """
+    from colloquial_reminder_fastpath import handle_message
+
+    return await handle_message(db, token, message)
+
+
 async def remember_after_message(db, message):
     """Compatibilidade para criações que ainda terminam no `app.py` base.
 
