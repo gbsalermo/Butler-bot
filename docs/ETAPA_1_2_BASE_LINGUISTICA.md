@@ -1,7 +1,7 @@
 # Butler — Etapa 1.2: Base Linguística Comum
 
 **Data-base:** 30/08/2026  
-**Status:** implementação da subetapa 1.2  
+**Status:** concluída  
 **Origem:** `docs/ETAPA_1_AUDITORIA_LINGUAGEM.md`
 
 ## Objetivo
@@ -138,6 +138,6 @@ Esses pontos pertencem às subetapas 1.3–1.5.
 - [x] `preciso de ajuda` não vira tarefa;
 - [x] `criar uma tarefa` não vira lembrete;
 - [x] regressão completa verde no PR;
-- [ ] regressão pós-merge verde na `main`.
+- [x] regressão pós-merge verde na `main`.
 
-Próxima subetapa após o gate: **1.3 — referências + contexto curto com expiração e barreira de assunto**.
+Próxima subetapa: **1.3 — referências + contexto curto com expiração e barreira de assunto**.
