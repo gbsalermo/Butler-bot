@@ -23,6 +23,7 @@ BATCH_STATE = "compound_batch_confirm"
 CONFIRM_LABEL = "✅ Registrar tudo"
 CANCEL_LABEL = "❌ Cancelar lote"
 MAX_BATCH_ACTIONS = 5
+BATCH_MAX_AGE_MINUTES = 10
 
 RELATION_LABELS = {
     "addition": "adição",
@@ -76,7 +77,6 @@ def _normalized(text):
 
 
 def _strip_leading_temporal(segment):
-    """Remove apenas moldura temporal inicial para revelar o verbo principal."""
     value = (segment or "").strip()
     previous = None
     while value and value != previous:
@@ -92,12 +92,10 @@ def _strip_leading_temporal(segment):
 
 
 def _segment_families(segment):
-    candidate = _strip_leading_temporal(segment)
-    return language.detect_action_families(candidate)
+    return language.detect_action_families(_strip_leading_temporal(segment))
 
 
 def analyze_compound(text):
-    """Retorna estrutura sem efeitos colaterais e sem acessar D1."""
     normalized = _normalized(text)
     if not normalized:
         return {"segments": [], "action_segments": [], "is_compound_action": False}
@@ -112,13 +110,7 @@ def analyze_compound(text):
         start, end = int(relation["start"]), int(relation["end"])
         piece = normalized[cursor:start].strip()
         if piece:
-            segments.append(
-                {
-                    "text": piece,
-                    "relation": pending_relation,
-                    "connector": pending_connector,
-                }
-            )
+            segments.append({"text": piece, "relation": pending_relation, "connector": pending_connector})
         pending_relation = relation["relation"]
         pending_connector = relation["connector"]
         cursor = end
@@ -175,11 +167,6 @@ def _plan_title(segment_text, family):
 
 
 def build_batch_plan(analysis, *, now=None):
-    """Transforma análise em plano somente quando todos os blocos são completos.
-
-    Retorna ``None`` se qualquer ação for ambígua, não suportada, estiver sem data
-    ou, no caso de lembrete, sem horário. Nada é persistido nesta função.
-    """
     actions = analysis.get("automatic_actions") or []
     if len(actions) < 2 or len(actions) > MAX_BATCH_ACTIONS:
         return None
@@ -197,9 +184,7 @@ def build_batch_plan(analysis, *, now=None):
         text = segment.get("text") or ""
         due = parse_date(text, today)
         tm = parse_time(text)
-        if due is None:
-            return None
-        if family == "reminder" and tm is None:
+        if due is None or (family == "reminder" and tm is None):
             return None
 
         ok, _ = validate_future(due, tm, current.replace(tzinfo=None))
@@ -235,6 +220,21 @@ def build_batch_plan(analysis, *, now=None):
     return plans
 
 
+def _batch_is_fresh(payload, *, now=None):
+    prepared_at = (payload or {}).get("prepared_at")
+    if not prepared_at:
+        return False
+    try:
+        prepared = datetime.fromisoformat(str(prepared_at))
+    except Exception:
+        return False
+    if prepared.tzinfo is None:
+        prepared = prepared.replace(tzinfo=LOCAL_TZ)
+    current = now or _now()
+    age = (current - prepared.astimezone(LOCAL_TZ)).total_seconds()
+    return 0 <= age <= BATCH_MAX_AGE_MINUTES * 60
+
+
 def _render_plan_line(plan, position):
     label = FAMILY_LABELS.get(plan.get("family"), "• ação")
     when = plan["due_date"][8:10] + "/" + plan["due_date"][5:7]
@@ -255,9 +255,7 @@ def preview_text(analysis, plan=None):
         family = _primary_family(segment)
         label = FAMILY_LABELS.get(family, "• ação")
         relation = segment.get("relation")
-        relation_text = ""
-        if relation:
-            relation_text = f" ({RELATION_LABELS.get(relation, relation)})"
+        relation_text = f" ({RELATION_LABELS.get(relation, relation)})" if relation else ""
         out.append(f"{position}. {label}{relation_text} — {segment['text']}")
     out.append(
         "\nReconheci mais de uma ação, mas pelo menos uma ainda precisa de informação "
@@ -278,6 +276,15 @@ async def _confirm_batch(db, token, chat_id):
     state, payload = await app.get_state(db, uid)
     if state != BATCH_STATE:
         await send_message(token, chat_id, "Não tenho nenhum lote pendente para registrar.")
+        return True
+    if not _batch_is_fresh(payload):
+        await app.clear_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "Esse lote expirou. Manda a mensagem de novo para eu recalcular tudo.",
+            reply_markup={"keyboard": app.MAIN_KB, "resize_keyboard": True},
+        )
         return True
 
     plans = (payload or {}).get("plans") or []
@@ -305,14 +312,7 @@ async def _confirm_batch(db, token, chat_id):
     for plan in plans:
         groups.append("(?,?,?,?,?,?,'pendente')")
         bind_values.extend(
-            [
-                uid,
-                plan["kind"],
-                plan["title"],
-                plan.get("details"),
-                plan["due_date"],
-                plan.get("due_time"),
-            ]
+            [uid, plan["kind"], plan["title"], plan.get("details"), plan["due_date"], plan.get("due_time")]
         )
 
     sql = (
@@ -365,8 +365,6 @@ async def handle_message(db, token, message):
         return False
     chat_id = int(chat_id)
 
-    # Os botões são gates baratos: mensagens comuns continuam sem consultar D1
-    # antes de a análise local concluir que há realmente um lote composto.
     if text == CONFIRM_LABEL:
         return await _confirm_batch(db, token, chat_id)
     if text == CANCEL_LABEL:
@@ -384,7 +382,12 @@ async def handle_message(db, token, message):
     uid = await _uid(db, chat_id)
     if uid is None:
         return False
-    await app.set_state(db, uid, BATCH_STATE, {"plans": plan})
+    await app.set_state(
+        db,
+        uid,
+        BATCH_STATE,
+        {"plans": plan, "prepared_at": _now().isoformat()},
+    )
     await send_message(
         token,
         chat_id,
