@@ -89,18 +89,7 @@ O onboarding atual que orienta `Imprimir → Salvar como PDF` diretamente do SIG
 
 ## 3. O que o inventário confirmou
 
-### Parser atual
-
-`app.parse_schedule_text()` já extrai:
-
-```text
-name
-weekday
-start
-end
-location
-code
-```
+`app.parse_schedule_text()` já extrai `name`, `weekday`, `start`, `end`, `location` e `code`.
 
 Exemplo:
 
@@ -108,18 +97,11 @@ Exemplo:
 Sistemas Digitais I 35M45 PAV II sala 05
 ```
 
-vira duas sessões:
+vira duas sessões, terça e quinta, de 10:00–12:00 no mesmo local.
 
-```text
-terça-feira   10:00–12:00  PAV II sala 05
-quinta-feira 10:00–12:00  PAV II sala 05
-```
+O `code` pode continuar apenas como dado intermediário do parser; não precisa virar novo campo no banco nesta etapa.
 
-O `code` faz parte da saída do parser, mas não precisa virar novo campo no banco nesta etapa.
-
-### Preview
-
-A decisão atual é boa e permanece obrigatória:
+O fluxo atual de preview também deve ser preservado:
 
 ```text
 arquivo
@@ -130,17 +112,13 @@ arquivo
 → cadastro
 ```
 
-Não haverá `parser → banco` silencioso.
-
-### Cadastro manual
-
-Continua sendo alternativa válida quando o arquivo não puder ser interpretado com confiança.
+Cadastro manual continua sendo alternativa válida quando o arquivo não puder ser interpretado com confiança.
 
 ---
 
 ## 4. Problema real que a Etapa 2 deve resolver
 
-O objetivo não é adicionar mais informação às matérias. É diminuir casos como:
+O objetivo é diminuir casos como:
 
 ```text
 matéria não reconhecida
@@ -154,11 +132,7 @@ matéria duplicada na mesma importação
 arquivo parcialmente entendido ser cadastrado como se estivesse correto
 ```
 
-O Butler deve preferir:
-
-> "Não consegui interpretar estas 2 linhas; confira antes de cadastrar."
-
-em vez de inventar ou cadastrar grade errada.
+O Butler deve preferir dizer que não conseguiu interpretar uma linha a inventar ou cadastrar grade errada.
 
 ---
 
@@ -166,50 +140,25 @@ em vez de inventar ou cadastrar grade errada.
 
 ### 2.1 — Caracterizar o comportamento atual ✅
 
-- [x] parser SIGAA identificado;
-- [x] fonte recomendada confirmada;
-- [x] PDF textual/TXT confirmados;
-- [x] sem OCR confirmado;
-- [x] múltiplos dias do mesmo código caracterizados;
-- [x] blocos M/T/N caracterizados;
-- [x] localização opcional caracterizada;
-- [x] falsos positivos básicos cobertos;
-- [x] edição atual reconhecida como suficiente;
-- [x] testes de caracterização adicionados.
+- parser SIGAA identificado;
+- fonte recomendada confirmada;
+- PDF textual/TXT confirmados;
+- sem OCR confirmado;
+- múltiplos dias e blocos M/T/N caracterizados;
+- localização opcional caracterizada;
+- falsos positivos básicos cobertos;
+- edição atual reconhecida como suficiente;
+- testes de caracterização adicionados.
 
 ### 2.2 — Extração SIGAA mais robusta
 
-Melhorar a leitura sem alterar o modelo persistido.
+Melhorar leitura de nome, local, espaços/quebras de linha, códigos com múltiplos dias, combinações M/T/N, cabeçalhos/rodapés e texto repetido pelo PDF.
 
-Cobrir variações reais de:
-
-```text
-nome da matéria
-código da turma/componente quando aparecer na linha
-local vazio ou longo
-espaços/quebras de linha do PDF
-códigos com mais de um dia
-combinações M/T/N
-linhas de cabeçalho/rodapé
-texto repetido pelo PDF
-```
-
-O parser deve continuar determinístico.
+Sem alterar o modelo persistido.
 
 ### 2.3 — Validação e confiança
 
-Antes da prévia, validar cada matéria/sessão.
-
-Exemplos de erro que devem bloquear o cadastro daquele bloco:
-
-- nome vazio;
-- dia inválido;
-- horário impossível;
-- código SIGAA parcialmente reconhecido;
-- sessão duplicada dentro do mesmo arquivo;
-- linha ambígua que poderia representar mais de uma matéria.
-
-Classificação desejada:
+Classificar cada bloco como:
 
 ```text
 ✅ reconhecido
@@ -217,77 +166,49 @@ Classificação desejada:
 ❌ não reconhecido
 ```
 
+Bloquear nome vazio, horário impossível, código parcialmente reconhecido, duplicata e linha ambígua.
+
 ### 2.4 — Prévia mais clara
 
-O usuário deve conseguir conferir facilmente o resultado antes de salvar.
-
-Exemplo:
-
-```text
-📥 Encontrei 6 matérias
-
-1. Cálculo II
-   terça 08:00–10:00 — PAV I 03
-   quinta 08:00–10:00 — PAV I 03
-
-2. Física II
-   quarta 14:00–16:00 — Lab. Física
-
-⚠️ Não consegui interpretar:
-• linha: "..."
-
-[✅ Confirmar cadastro]
-[❌ Cancelar]
-```
-
-Se houver bloco ambíguo, o Butler não deve fingir confiança total.
+Mostrar exatamente matérias, dias, horários e locais que serão cadastrados, além de qualquer linha ambígua/rejeitada.
 
 ### 2.5 — Cadastro inicial seguro
 
-Ao confirmar:
+Após confirmação:
 
 - cadastrar somente o que apareceu na prévia;
-- preservar o formato atual de `subjects` + `subject_sessions`;
-- evitar duplicatas dentro da mesma importação;
-- isolar tudo por usuário;
-- não cadastrar trecho rejeitado/ambíguo;
-- limpar corretamente o estado do wizard após confirmar/cancelar.
+- manter `subjects` + `subject_sessions` como hoje;
+- evitar duplicatas na própria importação;
+- manter isolamento por usuário;
+- não cadastrar trecho ambíguo/rejeitado;
+- limpar corretamente o estado do wizard.
 
 O foco oficial é **novo usuário / primeira grade**.
 
-Reimportação de uma grade já existente não é objetivo desta etapa. Os riscos técnicos encontrados no inventário ficam documentados, mas não justificam redesenhar o sistema agora.
+Reimportação de grade existente não é objetivo desta etapa.
 
 ### 2.6 — Onboarding e regressão real
 
-Primeiro acesso deve explicar:
+Explicar onde pegar a grade no SIGAA, tabela recomendada, PDF textual/TXT, ausência de OCR, prévia antes de salvar e alternativa de cadastro manual.
 
-1. onde pegar a grade no SIGAA;
-2. qual tabela usar;
-3. PDF textual ou TXT;
-4. por que print/scan não funciona;
-5. que haverá uma prévia antes do cadastro;
-6. que cadastro manual continua disponível.
-
-Criar corpus com exemplos reais/anônimos de grades e variações de PDF/TXT.
+Adicionar corpus com exemplos reais/anônimos.
 
 ---
 
-## 6. Gate de saída da Etapa 2
+## 6. Gate de saída
 
-A Etapa 2 estará concluída quando:
-
-- [ ] parser reconhecer com segurança as principais variações reais do SIGAA;
-- [ ] múltiplos dias/horários forem extraídos corretamente;
-- [ ] cabeçalhos/rodapés/linhas irrelevantes não virarem matéria;
-- [ ] duplicatas da própria importação forem eliminadas;
-- [ ] blocos ambíguos forem sinalizados em vez de inventados;
-- [ ] prévia mostrar claramente tudo que será cadastrado;
-- [ ] nada for persistido antes da confirmação;
-- [ ] cadastro final usar o mesmo modelo acadêmico atual;
-- [ ] onboarding de novos usuários explicar o formato recomendado;
-- [ ] cadastro manual continuar disponível;
-- [ ] dois usuários permanecerem isolados;
-- [ ] regressão completa ficar verde.
+- [ ] principais variações reais do SIGAA reconhecidas com segurança;
+- [ ] múltiplos dias/horários extraídos corretamente;
+- [ ] cabeçalhos/rodapés/linhas irrelevantes ignorados;
+- [ ] duplicatas da própria importação eliminadas;
+- [ ] blocos ambíguos sinalizados;
+- [ ] prévia clara;
+- [ ] nada persistido antes da confirmação;
+- [ ] cadastro final usa o modelo acadêmico atual;
+- [ ] onboarding de novos usuários validado;
+- [ ] cadastro manual preservado;
+- [ ] isolamento multiusuário;
+- [ ] regressão completa verde.
 
 **Não é requisito da Etapa 2 modificar o schema acadêmico atual.**
 
@@ -295,12 +216,10 @@ A Etapa 2 estará concluída quando:
 
 ## 7. Observações técnicas fora do escopo
 
-O inventário encontrou pontos que podem ser revisitados apenas se um caso real exigir no futuro, como comportamento de reimportação de usuário já existente e associações históricas.
-
-Eles **não devem puxar a Etapa 2 para uma reformulação acadêmica** sem nova decisão explícita do produto.
+O inventário encontrou pontos sobre reimportação de usuários existentes e associações históricas. Eles podem ser revisitados se surgirem como problema real, mas **não devem puxar a Etapa 2 para uma reformulação acadêmica** sem nova decisão explícita.
 
 ---
 
 ## Próximo passo
 
-Fechar a PR 2.1 mantendo os testes de caracterização e iniciar **2.2 — Extração SIGAA mais robusta**, sem migration e sem alterar o formato atual das matérias.
+Fechar a PR 2.1 e iniciar **2.2 — Extração SIGAA mais robusta**, sem migration e sem alterar o formato atual das matérias.
