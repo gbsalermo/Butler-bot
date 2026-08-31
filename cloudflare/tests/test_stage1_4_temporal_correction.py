@@ -37,8 +37,9 @@ class _Stmt:
 
     async def run(self):
         if self.sql.startswith("UPDATE daily_items"):
-            new_date, new_time, item_id, uid = self.args
+            new_title, new_date, new_time, item_id, uid = self.args
             item = self.db.items[(int(uid), int(item_id))]
+            item["title"] = new_title
             item["due_date"] = new_date
             item["due_time"] = new_time
             item["status"] = "pendente"
@@ -108,6 +109,16 @@ def _fixed_now():
     return datetime(2026, 8, 30, 21, 30, tzinfo=correction_patch.LOCAL_TZ)
 
 
+def _patch_send(monkeypatch):
+    sent = []
+
+    async def fake_send(_token, chat, text, **_kwargs):
+        sent.append((chat, text))
+
+    monkeypatch.setattr(correction_patch, "send_message", fake_send)
+    return sent
+
+
 def test_temporal_correction_understands_short_repair_phrases(monkeypatch):
     monkeypatch.setattr(correction_patch, "_now", _fixed_now)
     assert correction_patch.temporal_correction("não, 16h") == {"date": None, "time": "16:00"}
@@ -117,21 +128,40 @@ def test_temporal_correction_understands_short_repair_phrases(monkeypatch):
     assert result["time"] == "14:30"
 
 
+def test_elliptical_temporal_replacement_uses_new_side(monkeypatch):
+    monkeypatch.setattr(correction_patch, "_now", _fixed_now)
+    result = correction_patch.temporal_correction("quinta não, sexta")
+    assert result["date"].isoformat() == "2026-09-04"
+    assert correction_patch.temporal_correction("15h não, 16h") == {"date": None, "time": "16:00"}
+
+
+def test_title_correction_is_explicit_and_temporal_has_priority(monkeypatch):
+    monkeypatch.setattr(correction_patch, "_now", _fixed_now)
+    assert correction_patch.title_correction("não é dentista, é oftalmo") == {
+        "expected_old": "dentista",
+        "new_title": "oftalmo",
+    }
+    assert correction_patch.title_correction("dentista não, oftalmo") == {
+        "expected_old": "dentista",
+        "new_title": "oftalmo",
+    }
+    assert correction_patch.title_correction("quis dizer oftalmo") == {
+        "expected_old": None,
+        "new_title": "oftalmo",
+    }
+    assert correction_patch.title_correction("quis dizer terça") is None
+
+
 def test_negated_new_reminder_is_not_previous_turn_correction(monkeypatch):
     monkeypatch.setattr(correction_patch, "_now", _fixed_now)
     assert correction_patch.temporal_correction("não me lembra de estudar hoje às 20h") is None
     assert correction_patch.temporal_correction("não essa, a outra") is None
-    assert correction_patch.temporal_correction("deixa como tava") is None
+    assert correction_patch.is_undo_phrase("deixa como tava") is True
 
 
 def test_time_only_correction_updates_recent_created_item_without_duplicate(monkeypatch):
     monkeypatch.setattr(correction_patch, "_now", _fixed_now)
-    sent = []
-
-    async def fake_send(_token, chat, text, **_kwargs):
-        sent.append((chat, text))
-
-    monkeypatch.setattr(correction_patch, "send_message", fake_send)
+    sent = _patch_send(monkeypatch)
 
     async def scenario():
         db = _DB()
@@ -150,20 +180,110 @@ def test_time_only_correction_updates_recent_created_item_without_duplicate(monk
     assert sent and "Corrigido" in sent[-1][1]
 
 
-def test_list_context_cannot_be_silently_corrected(monkeypatch):
+def test_title_correction_updates_same_item(monkeypatch):
     monkeypatch.setattr(correction_patch, "_now", _fixed_now)
+    sent = _patch_send(monkeypatch)
 
     async def scenario():
         db = _DB()
         handled = await correction_patch.handle_message(
             db,
             "token",
-            {"chat": {"id": 200}, "text": "melhor quinta"},
+            {"chat": {"id": 100}, "text": "não é dentista, é oftalmo"},
         )
         return handled, db
 
     handled, db = asyncio.run(scenario())
-    assert handled is False
+    assert handled is True
+    assert db.items[(1, 10)]["title"] == "oftalmo"
+    assert db.items[(1, 10)]["due_date"] == "2026-08-31"
+    assert len(db.items) == 2
+    assert "Dentista virou oftalmo" in sent[-1][1]
+
+
+def test_mismatched_title_correction_is_not_applied(monkeypatch):
+    monkeypatch.setattr(correction_patch, "_now", _fixed_now)
+    sent = _patch_send(monkeypatch)
+
+    async def scenario():
+        db = _DB()
+        handled = await correction_patch.handle_message(
+            db,
+            "token",
+            {"chat": {"id": 100}, "text": "não é relatório, é consulta"},
+        )
+        return handled, db
+
+    handled, db = asyncio.run(scenario())
+    assert handled is True
+    assert db.items[(1, 10)]["title"] == "Dentista"
+    assert "não alterei nada" in sent[-1][1]
+
+
+def test_undo_restores_immediately_previous_values(monkeypatch):
+    monkeypatch.setattr(correction_patch, "_now", _fixed_now)
+    sent = _patch_send(monkeypatch)
+
+    async def scenario():
+        db = _DB()
+        assert await correction_patch.handle_message(
+            db, "token", {"chat": {"id": 100}, "text": "não, 16h"}
+        )
+        assert db.items[(1, 10)]["due_time"] == "16:00"
+        assert await correction_patch.handle_message(
+            db, "token", {"chat": {"id": 100}, "text": "deixa como tava"}
+        )
+        return db
+
+    db = asyncio.run(scenario())
+    assert db.items[(1, 10)]["title"] == "Dentista"
+    assert db.items[(1, 10)]["due_date"] == "2026-08-31"
+    assert db.items[(1, 10)]["due_time"] == "15:00"
+    assert "Voltei como estava" in sent[-1][1]
+
+
+def test_multi_turn_correction_keeps_only_last_step_for_undo(monkeypatch):
+    monkeypatch.setattr(correction_patch, "_now", _fixed_now)
+    _patch_send(monkeypatch)
+
+    async def scenario():
+        db = _DB()
+        assert await correction_patch.handle_message(
+            db, "token", {"chat": {"id": 100}, "text": "não, 16h"}
+        )
+        assert await correction_patch.handle_message(
+            db, "token", {"chat": {"id": 100}, "text": "15h não, 17h"}
+        )
+        assert db.items[(1, 10)]["due_time"] == "17:00"
+        assert await correction_patch.handle_message(
+            db, "token", {"chat": {"id": 100}, "text": "desfaz"}
+        )
+        return db
+
+    db = asyncio.run(scenario())
+    assert db.items[(1, 10)]["due_time"] == "16:00"
+
+
+def test_list_context_cannot_be_silently_corrected_or_undone(monkeypatch):
+    monkeypatch.setattr(correction_patch, "_now", _fixed_now)
+
+    async def scenario():
+        db = _DB()
+        corrected = await correction_patch.handle_message(
+            db,
+            "token",
+            {"chat": {"id": 200}, "text": "melhor quinta"},
+        )
+        undone = await correction_patch.handle_message(
+            db,
+            "token",
+            {"chat": {"id": 200}, "text": "deixa como tava"},
+        )
+        return corrected, undone, db
+
+    corrected, undone, db = asyncio.run(scenario())
+    assert corrected is False
+    assert undone is False
     assert db.items[(2, 20)]["due_date"] == "2026-09-04"
     assert db.items[(2, 20)]["due_time"] == "18:00"
 
