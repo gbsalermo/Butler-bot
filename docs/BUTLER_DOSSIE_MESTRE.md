@@ -1,16 +1,20 @@
 # Butler — Dossiê Mestre
 
-**Versão:** 1.0  
-**Data-base:** 29/08/2026  
-**Status:** referência mestre do produto e da manutenção
+**Versão:** 1.1  
+**Data-base:** 31/08/2026  
+**Status:** referência mestre do produto e das decisões estruturais
 
-> Este arquivo explica **o que é o Butler, como a produção está montada, quais módulos são autoridades e como o projeto deve evoluir sem voltar a acumular camadas paralelas**. Para detalhes exatos do runtime, `docs/ARCHITECTURE.md` continua sendo a fonte técnica de verdade. Para ordem futura de evolução, use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
+> Este arquivo explica **o que é o Butler, como a produção está montada, quais módulos são autoridades, quais decisões já estão fechadas e como o projeto deve evoluir sem voltar a acumular camadas paralelas**.
+>
+> Para andamento exato e próximo passo: `docs/STATUS_ATUAL.md`.  
+> Para o runtime técnico exato: `docs/ARCHITECTURE.md`.  
+> Para a ordem futura: `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
 
 ---
 
 # 1. O que é o Butler
 
-Butler é um assistente pessoal via Telegram projetado para acompanhar o estado real do cotidiano do usuário e ajudá-lo a agir sobre ele.
+Butler é um assistente pessoal multiusuário via Telegram projetado para acompanhar o estado real do cotidiano do usuário e ajudá-lo a agir sobre ele.
 
 O produto não deve ser reduzido a:
 
@@ -20,9 +24,17 @@ O produto não deve ser reduzido a:
 - uma IA que toma decisões sem confirmação;
 - um catálogo de funcionalidades sem integração.
 
-A proposta é combinar **operações determinísticas**, **linguagem natural conservadora**, **contexto curto**, **agenda e histórico reais**, **automação temporal confiável** e, futuramente, memória/Library seletivas.
+A proposta combina:
 
-O Butler deve saber trabalhar com informações como:
+- operações determinísticas;
+- linguagem natural conservadora;
+- contexto curto;
+- agenda e histórico reais;
+- automação temporal confiável;
+- isolamento multiusuário;
+- memória/Library seletivas apenas em etapa futura.
+
+O Butler deve trabalhar com informações como:
 
 ```text
 tarefas
@@ -54,7 +66,7 @@ Qual é a próxima coisa realmente importante?
 
 1. **Core governa ações críticas.** Linguagem, memória e Library nunca escrevem silenciosamente onde uma operação determinística deve validar.
 2. **Ação explícita vence contexto antigo.** Mudar de assunto não pode deixar o último tópico sequestrar a mensagem.
-3. **Nada é inventado.** Não presumir presença, conclusão, treino, gasto, compromisso, fato pessoal ou progresso.
+3. **Nada é inventado.** Não presumir presença, conclusão, treino, gasto, compromisso, prioridade, clima ou progresso.
 4. **Isolamento por usuário é obrigatório.** Toda operação pessoal resolve `telegram_chat_id → user_id` e filtra SQL corretamente.
 5. **Ambiguidade de escrita pede confirmação.** Especialmente remoção, alteração ou alvo não identificado.
 6. **Botões e texto natural coexistem.** Botão é UX, não a única interface.
@@ -63,13 +75,54 @@ Qual é a próxima coisa realmente importante?
 9. **Migration é a fonte formal do banco.** `ensure_schema()` é apenas tolerância operacional.
 10. **Código novo entra no módulo dono.** Novo patch é exceção, não padrão.
 11. **Produção e código preservado são coisas diferentes.** Existir no repositório não significa estar ligado ao webhook.
-12. **Uma etapa só termina com regressão.** Funcionar manualmente uma vez não é critério de conclusão.
+12. **Uma etapa só termina com regressão e gate.** Funcionar manualmente uma vez não é conclusão.
+13. **CI verde não prova deploy Cloudflare.** Código validado e produção publicada são estados diferentes.
+14. **Não recriar planejamento já decidido.** Outra IA deve continuar a etapa atual documentada em `STATUS_ATUAL.md`.
 
 ---
 
-# 3. Arquitetura de produção
+# 3. Estado atual do desenvolvimento
 
-## 3.1 Visão
+Roadmap oficial:
+
+```text
+0. 🧹 Arrumar a casa                         ✅ concluída
+1. 🗣️ Linguagem natural + conversa real     🚧 em andamento
+2. 🎓 Acadêmico + importação robusta         ⏳
+3. ⏱️ Auxiliares de Tempo / Modo Estudo     ⏳
+4. 📚 Cursos e trilhas de estudo             ⏳
+5. 📥 Caixa de entrada                       ⏳
+6. 🗂️ Projetos e trabalho                    ⏳
+7. 🧭 Resumo/contexto/priorização             ⏳
+8. 🧠 Memória + Library seletiva             ⏳
+9. 🔒 Hardening                              ⏳
+```
+
+## Etapa 1
+
+```text
+1.1 auditoria da linguagem           ✅ concluída
+1.2 base linguística comum           ✅ concluída
+1.3 contexto curto/referências       ✅ concluída
+1.4 correção/auto-reparo             🚧 em andamento
+```
+
+A primeira fatia da 1.4 já está na `main`: correção temporal do item recém-criado, por exemplo `não, 16h`, sem duplicar o registro.
+
+Ainda faltam na 1.4, entre outros pontos:
+
+- rollback seguro (`deixa como tava`);
+- correção explícita de título/alvo;
+- sequências maiores;
+- correções em fluxos guiados quando aplicável.
+
+Fechar a 1.4 **não fecha automaticamente a Etapa 1**. O gate global ainda inclui conjunções, mensagens compostas/múltiplas intenções, corpus ampliado, sequências reais, falsos positivos e isolamento entre dois usuários.
+
+Fonte atualizada: `docs/STATUS_ATUAL.md`.
+
+---
+
+# 4. Arquitetura de produção
 
 ```text
 Telegram
@@ -87,22 +140,21 @@ Cloudflare D1 / Durable Objects / APIs externas
 Telegram Bot API
 ```
 
-O deploy atual usa Cloudflare Worker e webhook. A raiz `src/` contém um runtime histórico em polling/SQLite e não governa produção.
+A raiz `src/` contém runtime histórico em polling/SQLite e não governa produção.
 
-## 3.2 `worker.py`
+## `worker.py`
 
-Responsabilidades:
+Responsabilidades atuais:
 
 - ser o entrypoint do Worker;
-- sincronizar alarmes persistentes de presença;
-- sincronizar alarmes pessoais;
-- delegar HTTP e cron ao `entry.Default`.
+- manter `AttendanceAlarm` e `PersonalAlarm`;
+- sincronizar alarms no cron;
+- após webhook, solicitar reconciliação persistente com `ctx.waitUntil(...)`, sem fazer o Telegram esperar essa varredura;
+- delegar HTTP/cron ao `entry.Default`.
 
-## 3.3 `entry.py`
+## `entry.py`
 
-É o **orquestrador autoritativo**.
-
-Após a Etapa 0, a lógica foi explicitada em funções testáveis:
+É o orquestrador autoritativo e expõe:
 
 ```text
 dispatch_callback()
@@ -110,236 +162,208 @@ dispatch_message()
 dispatch_scheduled()
 ```
 
-Isso permite proteger a precedência do runtime em pytest sem depender de uma requisição HTTP real do Cloudflare.
+A ordem é parte do contrato do produto.
 
-## 3.4 `app.py`
+## `app.py`
 
-É o núcleo-base herdado e ainda importante. Mantém:
-
-- bootstrap de usuário;
-- estados guiados;
-- parte dos CRUDs;
-- agenda-base;
-- mercado;
-- finanças;
-- treino-base;
-- scheduler de compatibilidade.
-
-Não é, porém, a única fonte da interface final. Instalações de módulos operacionais ainda substituem símbolos de `app.py` no bootstrap.
+Núcleo-base herdado ainda necessário. Mantém bootstrap, estados guiados, operações-base e scheduler de compatibilidade. Não é, sozinho, a fonte final do comportamento visível.
 
 ---
 
-# 4. Dispatcher de mensagens
+# 5. Dispatcher de mensagens
 
-A ordem é parte do comportamento.
+Ordem simplificada atual:
 
 ```text
-1. start/reset
-2. aviso administrativo (prévia)
-3. diagnóstico administrativo de usuários
-4. diagnóstico de alertas
-5. despedida prioritária
-6. usabilidade / Ler-Ver Depois
-7. menu operacional
-8. rotinas UI/edição
-9. presença UI
-10. navegação global
-11. core_fast_path
-12. schema/gestão de presença
-13. presença natural
-14. provas/acadêmico
-15. lembrete explícito
-16. referências
-17. contexto de tarefa
-18. runtime_guard
-19. mercado informal
-20. quality
-21. musculação
-22. conversation_layer
-23. app.py somente se botão ou estado guiado exigir
-24. fallback
+1.  start/reset
+2.  aviso administrativo
+3.  diagnósticos
+4.  despedida prioritária
+5.  usabilidade / Ler-Ver Depois
+6.  menu / rotinas / presença UI / navegação
+7.  core_fast_path
+8.  presença / provas / acadêmico
+9.  correction_patch
+10. lembrete explícito
+11. referência curta
+12. contexto de tarefa
+13. runtime_guard
+14. mercado
+15. quality
+16. musculação
+17. conversation_layer
+18. app.py somente para botão/estado guiado necessário
+19. fallback
 ```
 
 Um handler que retorna `True` consome a mensagem.
 
-### Por que isso importa
+A posição de `correction_patch` é deliberada: uma correção do turno anterior deve ser tratada antes de parsers que poderiam criar um novo item.
 
-Se uma frase cai no domínio errado, o primeiro diagnóstico é:
-
-```text
-qual handler anterior capturou a mensagem?
-```
-
-Não se deve começar criando mais regex antes de entender a precedência.
+A migration 0003 é a fonte formal do schema de presença; DDL defensivo não roda mais em toda mensagem do dispatcher geral.
 
 ---
 
-# 5. Callbacks
+# 6. Callbacks
 
 Ordem autoritativa:
 
 ```text
 admin_announcement_flow
 → attendance
-→ conversation/context item
+→ conversation/context item callbacks
 ```
 
-O aviso administrativo fica primeiro porque seus callbacks possuem efeito de broadcast e precisam de autorização/idempotência próprias.
-
-`test_dispatcher_integration.py` protege essa ordem.
+A precedência administrativa é protegida por regressão porque envolve broadcast/efeitos sensíveis.
 
 ---
 
-# 6. Mapa dos domínios
+# 7. Linguagem natural e contexto — arquitetura ativa
 
-## 6.1 Menu e navegação
+A produção **não usa NLU ampla como roteador central**.
 
-**Autoridade:** `operational_menu.py`.
+## `language_primitives.py`
 
-Menu principal:
+Autoridade para famílias linguísticas e polaridade compartilháveis.
 
-```text
-➕ Adicionar | 🗓️ Hoje
-🛒 Item faltando | 📚 Matérias
-🏠 Cotidiano | 🏋️ Musculação
-🌙 Day-off
-```
-
-`production_usability_patch.py` sincroniza `app.MAIN_KB`/`COTIDIANO_KB` com essa fonte.
-
-A Etapa 0 removeu a cópia divergente do menu principal em `conversation_layer.py`.
-
-## 6.2 Tarefas
-
-Autoridades atuais:
-
-- `task_context_patch.py`;
-- `runtime_guard.py`;
-- partes-base em `app.py`;
-- fast paths em `core_fast_path.py` e auxiliares.
-
-Tarefa vencida e não concluída permanece pendente. Conclusão deve ser explícita.
-
-## 6.3 Compromissos
-
-Autoridades:
-
-- `operational_menu.py` para navegação/listagem;
-- `app.py` para parte do cadastro guiado;
-- `reliable_reminders.py` para alerta temporal.
-
-Compromisso passado pode sair da tela operacional sem ser apagado do histórico.
-
-## 6.4 Mercado
-
-Autoridades:
-
-- `grocery_phrase_patch.py`;
-- `quality_patch.py` para algumas formulações informais;
-- `app.py` para base/listagem.
-
-Política atual: relatos claros como “acabou o café” são tratados como atualização explícita do estado doméstico e entram na lista. Alterar essa política exige mudança funcional própria.
-
-## 6.5 Rotinas
-
-Autoridades:
-
-- `routine_integration.py`;
-- `runtime_guard.py`;
-- `routine_ui_patch.py`;
-- `routine_editing.py`;
-- `quality_patch.py` somente para checkpoint inteligente.
-
-A Etapa 0 retirou de `quality_patch.py` a responsabilidade por lembretes de tarefas/compromissos.
-
-## 6.6 Metas
-
-Autoridade principal: `goal_operational.py`.
-
-Complementos ativos instalados por `operational_menu.py`:
-
-- `goal_polish.py`;
-- `goal_deadline_patch.py`;
-- `goal_routine_bridge.py`;
-- `goal_natural_patch.py`.
-
-## 6.7 Acadêmico
-
-Família ativa:
-
-- `academic_intelligence.py`;
-- `academic_polish.py`;
-- `exam_phrase_patch.py`;
-- `exam_cancel_patch.py`;
-- `attendance_patch.py`;
-- `attendance_enhancement.py`;
-- `attendance_management.py`;
-- `attendance_production_fix.py`;
-- `attendance_alarm.py`.
-
-Essa família funciona, mas ainda é uma das maiores concentrações de patches sobrepostos. A consolidação funcional e edição completa de matérias pertencem à **Etapa 2**.
-
-## 6.8 Musculação
-
-Autoridades:
-
-- `workout_progress_patch.py`;
-- base de treino em `app.py`;
-- `protocol_mass_data.py` para o perfil Protocol Mass.
-
-Regras:
-
-- não inferir carga/repetição;
-- substituição não apaga histórico;
-- protocolo pessoal não deve ser aplicado automaticamente a usuários genéricos.
-
-## 6.9 Ler/Ver Depois
-
-Autoridade: `production_usability_patch.py`.
-
-Categorias básicas:
+Contrato:
 
 ```text
-livro
-filme
-outra categoria informada pelo usuário
+reconhece linguagem
+→ não consulta D1
+→ não envia Telegram
+→ não executa CRUD
 ```
 
-A Etapa 0 formalizou a tabela `later_items` na migration `0008_later_items.sql`.
+## `short_context.py`
 
-## 6.10 Clima
+Autoridade de contexto curto:
 
-Autoridades:
+- janela inicial de 30 minutos;
+- isolamento por `user_id`;
+- histórico de alvos;
+- referências posicionais pela ordem realmente vista;
+- barreira de mudança de assunto;
+- contrato reaproveitado pelos helpers antigos de `conversation_layer`.
 
-- `weather_context.py`;
-- `weather_service.py`.
+## `reference_patch.py`
 
-Fonte: Open-Meteo.
+Resolve referências como:
 
-Integrado a:
+```text
+essa / ela / ele
+a primeira / segunda / terceira
+a outra
+a anterior
+a última
+```
 
-- `Hoje`/`Amanhã` quando aplicável;
-- consulta direta de clima;
-- resumo matinal.
+Resolver alvo não equivale a autorizar escrita.
 
-Falha meteorológica não pode derrubar a agenda.
+## `correction_patch.py`
 
-## 6.11 Administração
+Primeira fatia da Etapa 1.4.
 
-Somente proprietário:
+Somente contextos `source=created` ou `source=corrected` podem sofrer correção silenciosa. Lista exibida não é alvo automático de reparo.
 
-- `admin_diagnostics.py` — contagem/lista de usuários registrados;
-- `admin_announcement_flow.py` — prévia e confirmação de avisos para usuários.
+## `temporal_language.py`
 
-Broadcast exige confirmação. A confirmação por botão usa `admin_pending_announcements`, expira e é idempotente.
+Primitivas de tempo relativo já utilizadas pelo trabalho linguístico. O Assistente Geral de Tempo persistente continua planejado para a Etapa 3.
 
 ---
 
-# 7. Scheduler, lembretes e alarmes
+# 8. Mapa de domínios e autoridades
 
-## 7.1 Cron operacional
+| Domínio | Autoridade principal | Observação |
+|---|---|---|
+| Dispatcher | `entry.py` | mensagens, callbacks e cron |
+| Linguagem compartilhada | `language_primitives.py` | sem efeitos colaterais |
+| Contexto curto | `short_context.py` | 30 min, isolamento e histórico |
+| Auto-reparo | `correction_patch.py` | Etapa 1.4 |
+| Menu principal | `operational_menu.py` | `app.MAIN_KB` sincronizado como fallback |
+| Tarefas | `task_context_patch.py`, `runtime_guard.py`, `app.py` | fast paths complementam |
+| Compromissos | `operational_menu.py`, `app.py` | entrega em `reliable_reminders.py` |
+| Lembretes temporais | `reliable_reminders.py` | autoridade única de `daily_items` |
+| Mercado | `grocery_phrase_patch.py`, `quality_patch.py`, `app.py` | relatos claros podem gravar diretamente |
+| Rotinas | `routine_integration.py`, `routine_editing.py`, `routine_ui_patch.py` | checkpoints próprios |
+| Metas | `goal_operational.py` + `goal_*` | integrada ao menu operacional |
+| Acadêmico | `academic_*`, `exam_*`, `attendance_*` | ainda fragmentado; consolidar na Etapa 2 |
+| Musculação | `workout_progress_patch.py`, `app.py`, `protocol_mass_data.py` | proprietário × usuário genérico |
+| Ler/Ver Depois | `production_usability_patch.py` | migration 0008 |
+| Clima | `weather_context.py`, `weather_service.py`, `weather_personality.py` | Open-Meteo + apresentação |
+| Resumos | `reliable_summaries.py` | manhã e semanal |
+| Administração | `admin_diagnostics.py`, `admin_announcement_flow.py` | proprietário |
+| Alarmes pessoais | `personal_alarm.py` | contingência persistente |
+| Presença rígida | `attendance_alarm.py` | Durable Object separado |
+| Day-off | `day_off_policy.py` | escopo diário |
+| Performance | `performance_patch.py` | cache por update e hot path |
 
-`entry.dispatch_scheduled()`:
+Mapa detalhado: `cloudflare/src/README.md`.
+
+---
+
+# 9. Funcionalidades ativas
+
+O runtime de produção cobre:
+
+- tarefas e pendências;
+- compromissos e agenda;
+- lembretes simples;
+- matérias, grade, provas, presença e faltas;
+- importação SIGAA por PDF textual/TXT;
+- lista de itens faltando em casa;
+- rotinas e metas;
+- musculação, exercícios, séries, cargas e progresso;
+- Ler/Ver Depois;
+- clima por usuário;
+- Day-off;
+- resumo matinal e fechamento semanal;
+- alarmes persistentes/redundância temporal;
+- diagnóstico e avisos administrativos;
+- linguagem natural operacional conservadora;
+- contexto curto/referências;
+- primeira fatia de auto-reparo temporal.
+
+Finanças continuam preservadas no Core, mas não são destaque do menu principal.
+
+## Ler/Ver Depois
+
+Categorias visíveis:
+
+```text
+📚 Livros
+🎬 Filmes
+🎓 Cursos
+🗂️ Outras
+```
+
+`Cursos` aqui é captura simples; não significa que o módulo completo de Cursos/Trilhas esteja ativo.
+
+---
+
+# 10. O que não está ativo ainda
+
+Não anunciar como pronto:
+
+- broad NLU/global;
+- memória pessoal genérica;
+- Butler Library genérica no dispatcher;
+- sugestões transversais automáticas;
+- Auxiliar de Estudos completo;
+- Assistente Geral de Tempo persistente;
+- Cursos/Trilhas completos;
+- Inbox;
+- Projetos/Trabalho completos;
+- priorização global;
+- voz/web/app.
+
+Código ou documento existir para uma ideia não torna a funcionalidade operacional.
+
+---
+
+# 11. Scheduler, lembretes e alarmes
+
+## Cron operacional
 
 ```text
 day_off
@@ -347,25 +371,14 @@ day_off
 → daily_items
 → routines
 → summaries
-→ legacy
+→ app.scheduled_tick (compatibilidade)
 ```
 
-Cada etapa passa por `scheduler_runtime.run_isolated()`.
+Cada subsistema é isolado por `scheduler_runtime.run_isolated()`.
 
-## 7.2 Durable Objects
+## `daily_items`
 
-`worker.py` sincroniza:
-
-- alarmes persistentes de presença;
-- alarmes pessoais.
-
-Eles existem para eventos pontuais mais críticos do que um simples sweep periódico.
-
-## 7.3 Autoridade de `daily_items`
-
-Após a Etapa 0, `reliable_reminders.py` é a única política temporal autoritativa para tarefas, compromissos e lembretes simples.
-
-Política:
+`reliable_reminders.py` é a autoridade:
 
 ```text
 tarefa com horário → no horário
@@ -373,203 +386,146 @@ compromisso → 5 min antes
 lembrete simples → no horário, tolerância curta
 ```
 
-Garantias:
+`notification_log` evita duplicidade.
 
-- `notification_log` evita duplicidade;
-- chave do scheduler legado é suprimida para evitar dupla entrega;
-- caminho crítico valida entrega Telegram antes de considerar o aviso concluído;
-- atrasos excessivos não viram notificações obsoletas.
+## Redundância pós-incidente de 30/08
 
-## 7.4 Consolidação feita na Etapa 0
-
-Antes existiam camadas redundantes:
+O Cron Trigger continua primeira linha, mas deixou de ser ponto único de falha.
 
 ```text
-quality_patch
-→ conversation_layer._pre_send_item_reminders
-→ reminder_policy substituía por noop
-→ reliable_reminders rodava por fora
+webhook/cron
+→ sync_personal_alarms()
+→ PersonalAlarm por usuário
+→ próximo evento persistido
+→ alarm()
+→ dispatchers autoritativos
 ```
 
-Agora:
+`PersonalAlarm` cobre tarefas com horário, compromissos, lembretes simples, rotinas e resumos. `AttendanceAlarm` permanece separado.
 
-```text
-reliable_reminders = autoridade
-conversation_layer = contexto/agenda
-quality_patch = rotina + mercado
-reminder_policy = removido
-```
+Após webhook, o rearme usa `ctx.waitUntil(...)`. No cron, sincronização é síncrona.
 
-Essa simplificação reduz comportamento implícito por monkeypatch.
+Cron e Durable Objects convergem para a mesma idempotência e não criam duas políticas de negócio.
+
+Detalhes: `docs/SCHEDULER_REDUNDANCY.md`.
 
 ---
 
-# 8. Banco de dados
+# 12. Performance
 
-A fonte formal é `cloudflare/migrations/`.
+O caminho quente foi otimizado sem criar cache global.
 
-## 8.1 Migration 0001 — base
-
-Principais tabelas:
+`performance_patch.py` reaproveita, **somente durante um update**:
 
 ```text
-users
-assistant_state
-subjects
-subject_sessions
-daily_items
-grocery_items
-goals
-goal_progress
-routines
-routine_logs
-finance_entries
-finance_limits
-workout_days
-workout_exercises
-protocol_mass_state
-protocol_mass_sessions
-protocol_mass_exercise_logs
-protocol_mass_set_logs
-natural_events
-notification_log
-```
-
-## 8.2 Migration 0002
-
-```text
+telegram_chat_id → user_id
 user_sessions
-workout_logs
-workout_set_logs
 ```
 
-## 8.3 Migration 0003
+Outras decisões:
+
+- gate lexical antes de consultas de contexto irrelevantes;
+- DDL defensivo de presença fora do dispatcher geral;
+- reconciliação global de Durable Objects fora da resposta HTTP interativa.
+
+Essas regras devem permanecer protegidas por testes de latência estrutural/round-trips.
+
+---
+
+# 13. Clima
+
+Fonte objetiva: Open-Meteo.
+
+Autoridades:
+
+- `weather_service.py` — dados/preferências/formatação-base;
+- `weather_context.py` — comandos e integração com agenda;
+- `weather_personality.py` — comentário mais humano/descontraído.
+
+Regra permanente: personalidade pode melhorar a apresentação, mas não inventar temperatura, chuva, vento ou chance de precipitação.
+
+Falha meteorológica não derruba agenda/resumo.
+
+---
+
+# 14. Banco de dados
+
+Fonte formal: `cloudflare/migrations/`.
 
 ```text
-subject_attendance_settings
-subject_absences
+0001_initial.sql
+0002_app_state.sql
+0003_attendance.sql
+0004_conversation_context.sql
+0005_goal_profiles.sql
+0006_weather_preferences.sql
+0007_admin_pending_announcements.sql
+0008_later_items.sql
 ```
 
-## 8.4 Migration 0004
+Escopo resumido:
 
-```text
-conversation_context
-```
+- **0001:** usuários, matérias, `daily_items`, mercado, metas, rotinas, finanças, musculação, eventos e notificações;
+- **0002:** `user_sessions` e logs de treino;
+- **0003:** configurações/faltas acadêmicas;
+- **0004:** contexto estruturado preservado;
+- **0005:** perfis de meta;
+- **0006:** preferências de clima;
+- **0007:** avisos administrativos pendentes;
+- **0008:** Ler/Ver Depois.
 
-Tabela preservada para arquitetura estruturada de contexto; não é o roteador central atual.
+As subetapas 1.1–1.4 usam estruturas existentes e não introduziram migration nova até este snapshot.
 
-## 8.5 Migration 0005
-
-```text
-goal_profiles
-```
-
-## 8.6 Migration 0006
-
-```text
-weather_preferences
-```
-
-## 8.7 Migration 0007
-
-```text
-admin_pending_announcements
-```
-
-## 8.8 Migration 0008
-
-```text
-later_items
-```
-
-Criada na Etapa 0 para alinhar Ler/Ver Depois à disciplina formal de migrations.
-
-## 8.9 Regra de schema
-
-Para qualquer nova persistência:
+Regra de schema:
 
 ```text
 migration
 → backfill se necessário
-→ índice se consulta quente exigir
+→ índice quando justificado
 → ensure_schema defensivo apenas se necessário
 → teste
 → documentação
 ```
 
-Não criar uma tabela apenas em `ensure_schema()` e esquecer a migration.
+Migration destrutiva exige snapshot/export D1 e rollback documentado.
 
 ---
 
-# 9. Multiusuário
+# 15. Multiusuário
 
-Butler nasceu pessoal e evoluiu para multiusuário. Essa transição exige disciplina.
+Butler nasceu pessoal e evoluiu para multiusuário.
 
 Regras obrigatórias:
 
 - `telegram_chat_id` identifica a conversa externa;
-- operações internas devem obter `users.id`;
-- tabelas pessoais usam `user_id` ou vínculo indireto que preserve o dono;
-- consultas e updates precisam filtrar o usuário;
+- operações internas obtêm `users.id`;
+- tabelas pessoais usam `user_id` ou vínculo equivalente;
+- queries/updates filtram usuário;
 - contexto, sessão, memória e logs nunca são globais;
-- testes relevantes devem usar ao menos dois usuários quando houver risco de vazamento.
+- regressões de contexto/persistência devem usar dois usuários quando houver risco.
 
-O proprietário possui capacidades extras, mas isso não autoriza aplicar seus seeds/treinos/configurações pessoais aos demais.
+O proprietário possui capacidades extras, mas seus seeds/treinos/configurações não podem ser aplicados automaticamente aos demais.
 
 ---
 
-# 10. Recursos exclusivos do proprietário
+# 16. Recursos exclusivos do proprietário
 
-Hoje há diferenciação explícita por `owner_profile.is_owner(chat_id)`.
+A diferenciação usa `owner_profile.is_owner(chat_id)`.
 
-Recursos administrativos:
+Recursos administrativos incluem:
 
-- `/status usuarios` e aliases;
-- `/aviso ...` com prévia;
-- envio para todos os usuários não proprietários;
-- envio para ID interno específico;
+- diagnóstico/listagem de usuários;
+- `/aviso` com prévia;
+- envio geral ou por ID interno;
 - confirmação/cancelamento por botão.
 
-Defaults pessoais também existem em `settings.py`/perfil proprietário, incluindo localização meteorológica padrão.
-
-Antes de distribuir o Butler amplamente, configuração pessoal deve migrar para seed/configuração privada.
+Antes de distribuição ampla, defaults pessoais versionados devem migrar para configuração/seed privada.
 
 ---
 
-# 11. Linguagem e contexto — estado atual
+# 17. Arquitetura preservada/desativada
 
-A produção **não usa uma NLU ampla como roteador central**.
-
-O modelo atual privilegia:
-
-```text
-fast paths conservadores
-+ handlers por domínio
-+ estados guiados
-+ contexto operacional curto
-+ fallback estreito
-```
-
-`conversation_layer.py` e `natural_events` ajudam com referências recentes como:
-
-```text
-essa
-ela
-isso
-a anterior
-```
-
-Há também `user_sessions` para fluxos guiados.
-
-Essa opção foi tomada por confiabilidade. A **Etapa 1** deve melhorar português natural — conjugações, conjunções, frases compostas, correções e elipses — sem religar cegamente toda a NLU histórica.
-
----
-
-# 12. Arquitetura preservada/desativada
-
-O repositório preserva uma geração anterior mais ampla de linguagem, memória e Library.
-
-Principais componentes:
+O repositório preserva uma geração anterior mais ampla de linguagem, memória e Library:
 
 ```text
 context_router.py
@@ -592,137 +548,93 @@ conversational_*
 cultural_background.py
 ```
 
-Esses arquivos não devem ser apagados só por estarem fora do dispatcher. Eles concentram trabalho que pode ser reaproveitado nas Etapas 1 e 7.
+Esses arquivos:
 
-Também não devem ser tratados como funcionalidade ativa.
+- não são o roteador central de produção;
+- não devem ser apagados só por estarem fora do dispatcher;
+- não devem ser tratados como feature ativa;
+- só podem ser reativados seletivamente com precedência, política de escrita, isolamento e regressão definidos.
 
-Flags do `/health` continuam deixando isso explícito:
-
-```text
-broad_nlu_disabled
-generic_library_dispatch_disabled
-cross_domain_suggestions_disabled
-generic_personal_memory_disabled
-```
+A reativação seletiva de memória/Library pertence à **Etapa 8**.
 
 ---
 
-# 13. Limpeza realizada na Etapa 0
+# 18. Dívida técnica conhecida
 
-## 13.1 Remoções comprovadas
+## Alta prioridade estrutural
 
-### `add_intent_patch.py`
+### `app.py` grande
 
-Removido porque não estava conectado ao runtime e duplicava um caminho de intenção já absorvido pela arquitetura operacional.
+Ainda concentra diversos domínios e compatibilidade histórica. Não fazer reescrita gigante; extrair domínio por domínio quando uma etapa funcional justificar e houver testes.
 
-### `reminder_policy.py`
+### Acadêmico/presença fragmentado
 
-Removido depois que a função que ele neutralizava deixou de existir. Manter um módulo cuja única função é transformar outro scheduler em `noop` esconderia a arquitetura em vez de simplificá-la.
+Família funcional, mas distribuída em muitos módulos `patch/enhancement/management/production_fix`. Consolidação pertence à Etapa 2.
 
-## 13.2 Consolidações
+### Scheduler legado ao final do cron
 
-- menu principal deixou de ser duplicado em `conversation_layer.py`;
-- `quality_patch.py` deixou de possuir política temporal de tarefas/compromissos;
-- `conversation_layer.py` deixou de enviar lembretes de `daily_items`;
-- `reliable_reminders.py` passou a ser explicitamente a autoridade única;
-- dispatcher e cron foram extraídos para funções testáveis;
-- Ler/Ver Depois ganhou migration formal.
+`app.scheduled_tick` ainda roda por compatibilidade. Remover somente quando as dependências restantes estiverem mapeadas e cobertas.
 
----
+### Configuração pessoal versionada
 
-# 14. Dívida técnica conhecida
+Mover para seed/configuração privada antes de uso amplo.
 
-## Prioridade alta
-
-### 14.1 `app.py` grande
-
-Ainda concentra código-base de diversos domínios e compatibilidade histórica. Não deve ser quebrado em uma reescrita gigante. A estratégia é extrair domínio por domínio quando houver testes e uma etapa funcional justificar.
-
-### 14.2 Acadêmico/presença fragmentado
-
-A família funciona, mas possui muitos módulos `patch/enhancement/management/production_fix`. A Etapa 2 deve consolidar responsabilidades enquanto implementa edição completa de matérias e importador normalizado.
-
-### 14.3 Scheduler-base ainda executado
-
-`app.scheduled_tick` roda ao final por compatibilidade. O objetivo futuro é reduzir o que depende desse caminho até que ele possa ser retirado com prova de regressão.
-
-### 14.4 Configuração pessoal em código
-
-Ainda há defaults do proprietário versionados. Antes de produto genérico, mover para configuração/seed privado.
-
-## Prioridade média
+## Prioridade operacional
 
 - automatizar backup D1;
-- tornar aplicação de migrations mais observável;
-- ampliar testes de sequências reais com dois usuários;
-- consolidar patches pequenos conforme cada domínio for tocado;
-- revisar exigência de secret do webhook.
-
-## Prioridade planejada
-
-- decidir reativação de memória/Library;
-- decidir destino final do runtime raiz `src/`;
-- voz/web/app somente após estabilidade do roadmap atual.
+- melhorar observabilidade de migrations/deploy;
+- ampliar sequências reais com dois usuários;
+- consolidar patches conforme cada domínio for tocado;
+- manter regressões de hot path;
+- observar saúde real do Cron/Durable Objects.
 
 ---
 
-# 15. Segurança e integridade
+# 19. Segurança e integridade
 
 ## Telegram
 
 - token nunca entra no repositório;
 - webhook suporta secret;
-- ações administrativas exigem identidade autoritativa do proprietário;
-- callback administrativo não confia apenas em dados vindos do botão.
+- ações administrativas exigem identidade do proprietário;
+- callback sensível não confia só no dado do botão.
 
 ## Banco
 
-- foreign keys e isolamento de usuário são invariantes;
+- isolamento de usuário é invariante;
 - migrations destrutivas exigem backup/rollback;
-- updates críticos devem usar ID + usuário quando aplicável;
-- idempotência deve existir para callbacks e schedulers repetíveis.
+- updates críticos usam ID + usuário quando aplicável;
+- idempotência deve existir em callbacks/schedulers repetíveis.
 
 ## APIs externas
 
-Falha de Open-Meteo não pode impedir resumo/agenda. Falha Telegram deve ser tratada conforme criticidade da entrega.
+Falha de Open-Meteo não impede resumo/agenda. Falha Telegram deve ser tratada conforme criticidade da entrega.
 
 ---
 
-# 16. Estratégia de backup e recuperação
-
-Ainda não há rotina automática versionada de backup D1.
-
-Regra provisória obrigatória:
-
-1. migration aditiva simples pode seguir o fluxo normal;
-2. migration destrutiva ou backfill de alto impacto exige export/snapshot prévio;
-3. PR deve documentar rollback;
-4. exclusão de tabela/coluna não ocorre na mesma mudança que introduz o substituto, salvo necessidade técnica forte;
-5. retenção/automação será fechada no Hardening (Etapa 8).
-
----
-
-# 17. Testes e regressão
+# 20. Testes e regressão
 
 Workflow: `.github/workflows/butler-regression.yml`.
 
 A suíte:
 
 - compila `cloudflare/src`;
-- roda pytest em Python 3.13;
-- usa stubs mínimos de JS/Pyodide para funções determinísticas;
+- roda pytest em CPython;
+- usa stubs mínimos para JS/Pyodide/Workers;
 - não simula rede real.
 
-A Etapa 0 adicionou `test_dispatcher_integration.py`, que protege:
+Coberturas recentes incluem:
 
-- precedência de aviso administrativo;
-- precedência de callbacks;
-- fallthrough de callback;
-- ordem autoritativa dos subsistemas do cron.
+- dispatcher/callback/cron;
+- corpus da Etapa 1;
+- contexto curto/referências;
+- dois usuários;
+- auto-reparo temporal;
+- fallback persistente do scheduler;
+- hot path/round-trips D1;
+- personalidade do clima.
 
-### Regra de teste futura
-
-Cada mudança de comportamento deve preferir:
+Regra futura para mudança de comportamento:
 
 ```text
 caso feliz
@@ -730,48 +642,12 @@ caso feliz
 + falso positivo
 + correção/cancelamento quando aplicável
 + dois usuários quando houver persistência/contexto
++ idempotência quando houver tempo/callback
 ```
 
 ---
 
-# 18. Convenções de desenvolvimento
-
-## Antes de alterar
-
-1. leia este Dossiê;
-2. confirme `docs/ARCHITECTURE.md`;
-3. localize o handler em `entry.py`;
-4. identifique o módulo autoritativo;
-5. procure teste existente;
-6. só então altere código.
-
-## Novo módulo
-
-Um módulo novo deve declarar em docstring:
-
-- responsabilidade;
-- quem o chama;
-- estado/tabelas que altera;
-- invariantes que não pode violar.
-
-## Novo patch
-
-Antes de criar `*_patch.py` ou `*_fix.py`, responder:
-
-```text
-Por que não cabe no módulo dono?
-Qual símbolo será substituído?
-Quem instala?
-Em qual ordem?
-Como será removido depois?
-Qual teste protege a substituição?
-```
-
-Sem respostas claras, não criar patch.
-
----
-
-# 19. Deploy e operação
+# 21. Deploy e operação
 
 Runtime esperado:
 
@@ -785,84 +661,117 @@ Open-Meteo
 
 Configuração relevante está em `cloudflare/wrangler.jsonc` e secrets do ambiente.
 
-`/health` é o painel técnico de capacidades e flags. A Etapa 0 passa a identificar o dispatcher como `butler-operational-core-v4` e registra a consolidação estrutural.
+`/health` registra capacidades/flags, mas não substitui teste de fluxo real.
 
-CI verde confirma código/testes no GitHub; **não deve ser confundido com prova de deploy Cloudflare concluído**.
-
----
-
-# 20. Documentos e hierarquia
-
-Ordem recomendada de leitura:
-
-1. `docs/BUTLER_DOSSIE_MESTRE.md` — visão completa;
-2. `docs/ARCHITECTURE.md` — runtime técnico atual;
-3. `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` — ordem futura;
-4. `docs/INVENTARIO_ETAPA_0.md` — classificação estrutural;
-5. `docs/MAINTAINER_GUIDE.md` — manutenção prática;
-6. `cloudflare/src/README.md` — mapa de módulos;
-7. `CONTINUIDADE.md` — decisões duradouras/históricas;
-8. `docs/AUDIT_MAIN_2026-08.md` — auditoria anterior preservada como histórico.
-
-Não duplicar a mesma função em todos os documentos. Quando mudar produção, atualizar Arquitetura/Dossiê; quando mudar ordem futura, atualizar Trilha; quando mudar decisão de longo prazo, atualizar Continuidade.
+CI verde confirma código/testes no GitHub; **não confirma que o deploy Cloudflare ocorreu**.
 
 ---
 
-# 21. Roadmap oficial
+# 22. Próximas etapas — intenção de produto
 
-Fonte completa: `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
+## Etapa 2 — Acadêmico + importação robusta
+
+- edição integral de matérias;
+- múltiplos horários/localizações;
+- modelo acadêmico normalizado;
+- pipeline de importação com prévia/correção/confirmação;
+- SIGAA como adaptador, não modelo interno;
+- presença sempre explícita.
+
+## Etapa 3 — Auxiliares de Tempo / Modo Estudo
+
+- sessão ativa de estudo;
+- foco/pausa;
+- tópico atual;
+- progresso explícito;
+- assistente geral de tempo/timers persistentes.
+
+## Etapa 4 — Cursos e trilhas
+
+Modelo conceitual:
 
 ```text
-0. 🧹 Arrumar a casa
-1. 🗣️ Linguagem natural + conversa real
-2. 🎓 Acadêmico + importação
-3. 📚 Cursos e trilhas
-4. 📥 Caixa de entrada
-5. 🗂️ Projetos e trabalho
-6. 🧭 Resumo e priorização
-7. 🧠 Memória + Library seletiva
-8. 🔒 Hardening
+Curso
+→ módulo
+   → conteúdo
+      → materiais/atividades
+      → progresso
 ```
 
-A Etapa 0 existe para que as próximas funcionalidades entrem em uma base compreensível, e não sobre uma pilha crescente de correções paralelas.
+Curso autogerido e curso ao vivo têm políticas diferentes; conclusão é explícita.
+
+## Etapa 5 — Inbox
+
+Captura rápida sem obrigar classificação imediata.
+
+## Etapa 6 — Projetos e trabalho
+
+Estado, próximos passos, bloqueios e “onde parei?”.
+
+## Etapa 7 — Resumo/contexto/priorização
+
+Combinar dados reais para ajudar a decidir o que merece atenção hoje/na semana, usando regras explicáveis.
+
+## Etapa 8 — Memória + Library seletiva
+
+Reativar somente componentes que agreguem valor sem sequestrar o Core.
+
+## Etapa 9 — Hardening
+
+Backup, recuperação, observabilidade, segurança, consolidação arquitetural e preparação para distribuição mais ampla.
 
 ---
 
-# 22. Definition of Done global
+# 23. Definition of Done global
 
 Uma mudança no Butler só está concluída quando, conforme aplicável:
 
 - comportamento está no módulo autoritativo;
 - persistência é isolada por usuário;
-- migration existe;
+- migration existe quando há schema novo;
 - callbacks são idempotentes;
 - scheduler não duplica entrega;
-- Day-off é respeitado conforme política do domínio;
-- UX possui cancelamento/voltar quando existe fluxo guiado;
+- Day-off é respeitado;
+- UX possui cancelamento/voltar em fluxo guiado;
 - testes cobrem a mudança;
 - CI passa;
 - documentação relevante foi sincronizada;
-- nenhum recurso preservado é anunciado como ativo sem estar no dispatcher.
+- nenhum recurso preservado é anunciado como ativo;
+- deploy real é validado separadamente quando necessário.
 
 ---
 
-# 23. Estado ao final da Etapa 0
+# 24. Hierarquia documental
 
-A base pretendida para iniciar a Etapa 1 é:
+Ordem recomendada para outra IA:
 
-```text
-✓ produção Cloudflare claramente separada do legado
-✓ dispatcher explícito e testável
-✓ callback order testável
-✓ cron order testável
-✓ menu principal com uma autoridade
-✓ lembretes de daily_items com uma autoridade
-✓ migrations 0001–0008 documentadas
-✓ código removido somente com prova de desuso
-✓ preservados identificados sem reativação acidental
-✓ Dossiê Mestre criado
-✓ inventário técnico criado
-✓ dívida técnica priorizada
-```
+1. `docs/STATUS_ATUAL.md` — onde estamos;
+2. `docs/BUTLER_DOSSIE_MESTRE.md` — visão completa/decisões;
+3. `docs/ARCHITECTURE.md` — runtime técnico;
+4. `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` — roadmap;
+5. documento da subetapa atual (`ETAPA_1_4_CORRECOES.md` no snapshot atual);
+6. `docs/SCHEDULER_REDUNDANCY.md` — arquitetura temporal de contingência;
+7. `docs/MAINTAINER_GUIDE.md` — manutenção prática;
+8. `cloudflare/src/README.md` — mapa de módulos;
+9. `CONTINUIDADE.md` — decisões duradouras;
+10. `INVENTARIO_ETAPA_0.md` / `AUDIT_MAIN_2026-08.md` — histórico estrutural.
 
-A próxima evolução deve ser **Etapa 1 — Linguagem natural + estabilidade de conversa**, sem criar uma NLU ampla e imprevisível. O trabalho deve partir do dispatcher estável, de um corpus de frases reais e de testes de sequência completa.
+Cada documento tem função diferente. **Não usar um snapshot histórico para contradizer `STATUS_ATUAL.md` ou `ARCHITECTURE.md`.**
+
+---
+
+# 25. Regra de continuidade
+
+Ao assumir o Butler:
+
+1. confira `docs/STATUS_ATUAL.md`;
+2. verifique se a `main` avançou depois do SHA/snapshot registrado;
+3. leia commits novos se houver;
+4. continue a etapa/subetapa aberta;
+5. localize o handler real em `entry.py`;
+6. identifique o módulo autoritativo;
+7. teste o caminho real;
+8. atualize documentação junto com o comportamento;
+9. só avance de etapa quando o gate estiver fechado.
+
+No estado de 31/08/2026, o próximo trabalho oficial é **continuar a Etapa 1.4**, não iniciar a Etapa 2 e não criar um novo roadmap.
