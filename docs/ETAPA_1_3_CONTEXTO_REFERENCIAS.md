@@ -1,7 +1,7 @@
 # Butler — Etapa 1.3: Referências + Contexto Curto
 
 **Data-base:** 30/08/2026  
-**Status:** em implementação  
+**Status:** em implementação — primeira fatia validada  
 **Anterior:** Etapa 1.2 concluída
 
 ## Objetivo
@@ -66,7 +66,7 @@ user_id
 
 O alvo final também é buscado com `id + user_id`.
 
-Contexto de um usuário nunca é candidato para outro.
+Contexto de um usuário nunca é candidato para outro. A regressão desta fatia inclui dois usuários simultâneos com listas posicionais diferentes em um fake D1.
 
 ## Barreira de assunto
 
@@ -124,6 +124,24 @@ a última / o último
 
 `a outra` só é executada sem pergunta quando existir exatamente uma alternativa inequívoca.
 
+## Qualificador temporal
+
+Referências como:
+
+```text
+cancela aquela de amanhã
+```
+
+usam `amanhã` para validar o alvo atual.
+
+Já:
+
+```text
+muda ela pra sexta
+```
+
+trata `sexta` como destino da alteração. A data não pode ser usada para rejeitar a referência antes do reschedule.
+
 ## Autoridade de escrita
 
 A Etapa 1.3 resolve o alvo, mas não cria um segundo CRUD.
@@ -141,12 +159,11 @@ Portanto a resolução de linguagem e a escrita continuam separadas.
 
 ## Próximos passos dentro da 1.3
 
-- ampliar testes multiusuário com DB fake;
-- validar qualificadores como `aquela de amanhã` antes de resolver;
 - consolidar histórico `a anterior` em mais fluxos;
 - garantir contexto em listas além de tarefas quando fizer sentido;
 - integrar criação/edição que ainda grava contexto no formato antigo;
-- testar mudança explícita de assunto em sequências de 3–8 turnos.
+- testar mudança explícita de assunto em sequências de 3–8 turnos;
+- ampliar repertório sem permitir referência vaga a item expirado.
 
 ## Adição de produto registrada durante a 1.3
 
@@ -179,7 +196,7 @@ mas a execução persistente do timer permanece para a Etapa 3.
 - [x] `a outra` é conservadora quando há múltiplos candidatos;
 - [x] ação nova funciona como barreira de contexto;
 - [x] linguagem de tempo relativo possui corpus separado;
-- [ ] regressão completa verde;
-- [ ] cenários DB multiusuário adicionados;
-- [ ] qualificadores temporais de referência validados;
+- [x] regressão completa verde no PR;
+- [x] cenários DB multiusuário adicionados;
+- [x] qualificadores temporais de referência validados;
 - [ ] regressão pós-merge verde na `main`.
