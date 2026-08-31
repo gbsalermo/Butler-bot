@@ -8,7 +8,7 @@
 
 O modelo acadêmico atual do Butler já atende bem ao uso esperado e **não deve ser reformulado nesta etapa**.
 
-A Etapa 2 passa a ter um objetivo bem mais específico:
+A Etapa 2 passa a ter um objetivo específico:
 
 > aumentar a confiança na extração e no cadastro inicial das matérias de novos usuários.
 
@@ -162,7 +162,7 @@ em vez de inventar ou cadastrar grade errada.
 
 ---
 
-## 5. Nova ordem da Etapa 2
+## 5. Ordem da Etapa 2
 
 ### 2.1 — Caracterizar o comportamento atual ✅
 
