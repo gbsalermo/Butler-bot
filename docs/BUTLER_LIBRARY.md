@@ -1,6 +1,9 @@
 # Butler Library
 
-> **Status atual:** arquitetura e acervo preservados. O dispatcher genérico da Library **não está habilitado no webhook operacional de produção**. Para o fluxo ativo, consulte `docs/ARCHITECTURE.md` e `cloudflare/src/entry.py`.
+**Data-base:** 31/08/2026  
+**Roadmap:** reativação seletiva prevista para a **Etapa 8**
+
+> **Status atual:** arquitetura e acervo preservados. O dispatcher genérico da Library **não está habilitado no webhook operacional de produção**. Para o estado do projeto consulte `docs/STATUS_ATUAL.md`; para o fluxo ativo, `docs/ARCHITECTURE.md` e `cloudflare/src/entry.py`.
 
 ## Objetivo original e ainda válido
 
@@ -16,6 +19,8 @@ Entidades como personagens, filósofos, receitas, jogos e livros devem preferenc
 - **contexto da Library:** continuidade curta das consultas daquele usuário.
 
 Essa separação continua sendo uma boa direção arquitetural caso a Library seja reativada.
+
+O `short_context.py` da Etapa 1 é hoje a autoridade de contexto operacional do Core. Uma futura Library não deve criar outra memória genérica que concorra silenciosamente com esse contrato.
 
 ## Estrutura preservada
 
@@ -54,7 +59,8 @@ Isso significa que:
 - editar uma entrada em `knowledge/` não garante que o webhook a responderá;
 - `library_catalog_handler.py` não deve ser tratado como fallback final de produção hoje;
 - testes de `library_index.py` preservam a qualidade do acervo, mas não provam integração com `entry.py`;
-- uma futura reativação precisa escolher posição e precedência no dispatcher.
+- uma futura reativação precisa escolher posição e precedência no dispatcher;
+- a categoria `🎓 Cursos` em Ler/Ver Depois não é uma ativação da Library nem do domínio completo de Cursos/Trilhas.
 
 ## Recuperação preservada
 
@@ -85,7 +91,7 @@ me fala de uma série
 → quero assistir ela toda
 ```
 
-Essa continuidade deve continuar obedecendo a uma regra se for reativada:
+Se essa continuidade for reativada, deve respeitar:
 
 ```text
 mensagem explícita atual > contexto antigo
@@ -102,7 +108,7 @@ Se for reativada:
 - consulta pode responder;
 - comentário pode gerar proposta;
 - ação derivada precisa de confirmação quando não foi pedida explicitamente;
-- escrita confirmada deve passar por uma API/gateway do domínio correspondente;
+- escrita confirmada deve passar por API/gateway do domínio correspondente;
 - toda escrita deve ser limitada ao usuário correto.
 
 ## Dados e direitos autorais
@@ -117,22 +123,35 @@ Preferir:
 
 Não armazenar obras comerciais completas sem autorização/licença.
 
-## Como reativar com segurança
+## Como reativar com segurança — Etapa 8
 
-Uma reativação futura deve ser um trabalho explícito, não um import casual. Checklist:
+Uma reativação futura deve ser trabalho explícito, não import casual.
+
+Checklist:
 
 1. definir quais domínios entram primeiro;
-2. definir em que ponto de `entry.py` a Library roda;
-3. garantir que Core/fast paths tenham prioridade;
-4. decidir política de contexto e expiração;
-5. garantir isolamento de qualquer contexto pessoal;
-6. conectar escritas somente por gateways do Core;
-7. adicionar testes do dispatcher final, não apenas do índice;
-8. atualizar flags do `/health`;
-9. atualizar README/arquitetura.
+2. justificar valor real para o produto;
+3. definir em que ponto de `entry.py` a Library roda;
+4. garantir prioridade do Core/fast paths;
+5. decidir política de contexto, expiração e invalidação;
+6. garantir isolamento de qualquer contexto pessoal;
+7. conectar escritas somente por gateways do Core;
+8. exigir confirmação para ação derivada;
+9. adicionar testes do dispatcher final, não apenas do índice;
+10. atualizar flags do `/health`;
+11. atualizar `STATUS_ATUAL.md`, README, Dossiê e Arquitetura.
+
+## Gate mínimo da Etapa 8 para Library
+
+- [ ] domínios reativados possuem casos de uso claros;
+- [ ] nenhuma consulta cultural captura intenção operacional explícita;
+- [ ] contexto pessoal é isolado por usuário;
+- [ ] nenhuma escrita silenciosa fora do Core;
+- [ ] testes de integração cobrem precedência/falsos positivos;
+- [ ] flags do `/health` refletem o runtime real.
 
 ## Direção recomendada
 
-Não ampliar o catálogo apenas porque o arquivo existe. Primeiro decidir se a Library voltará ao runtime de produção e em qual escopo.
+Não ampliar o catálogo apenas porque os arquivos existem. Primeiro estabilizar as etapas anteriores e, na Etapa 8, decidir quais partes da Library justificam voltar ao runtime.
 
 Quando voltar, a prioridade deve ser recuperação orientada a dados e cobertura de integração, evitando o retorno de uma cadeia de `if`s por exemplo.
