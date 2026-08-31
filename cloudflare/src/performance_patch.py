@@ -15,6 +15,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 
 import app
+import academic_import
 
 
 _REQUEST_CACHE = ContextVar("butler_request_cache", default=None)
@@ -174,3 +175,8 @@ def install_performance_patches():
 
     _patch_runtime_state_helpers()
     _patch_uid_helpers()
+
+    # ``entry.py`` ainda usa uma cadeia explícita de installers. O importador é
+    # um módulo acadêmico próprio; este hook apenas garante que ele entre cedo no
+    # bootstrap para que ``academic_polish`` possa encadear o wrapper de estado.
+    academic_import.install()
