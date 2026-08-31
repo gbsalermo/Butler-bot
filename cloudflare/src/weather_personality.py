@@ -1,0 +1,106 @@
+"""Comentários curtos do Butler para a previsão do tempo.
+
+A classificação usa os mesmos dados diários já retornados pelo Open-Meteo. Não
+substitui os números da previsão: apenas traduz o cenário em uma frase curta e
+útil antes dos dados técnicos.
+"""
+
+
+def _number(value, default=None):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _period(heading):
+    text = (heading or "").lower()
+    if "amanhã" in text or "amanha" in text:
+        return "Amanhã"
+    if "hoje" in text:
+        return "Hoje"
+    return "Pelo jeito"
+
+
+def _pick(options, forecast, city, category):
+    """Escolhe variante de forma estável, mas diferente entre dias/cidades."""
+    seed = f"{forecast.get('date','')}|{city}|{category}"
+    index = sum((pos + 1) * ord(char) for pos, char in enumerate(seed)) % len(options)
+    return options[index]
+
+
+def forecast_comment(forecast, heading="Tempo", city=""):
+    """Retorna uma frase coloquial coerente com o cenário do dia."""
+    rain = _number(forecast.get("rain_sum"), 0.0) or 0.0
+    rain_hours = _number(forecast.get("rain_hours"), 0.0) or 0.0
+    cloud = _number(forecast.get("cloud_cover_mean"))
+    tmax = _number(forecast.get("temperature_max"))
+    wind = _number(forecast.get("wind_max"), 0.0) or 0.0
+    code = int(forecast.get("weather_code", -1) or -1)
+    period = _period(heading)
+
+    if code in {95, 96, 99} or rain >= 15:
+        category = "storm"
+        options = (
+            f"{period} o céu parece estar de mau humor. Se for sair, vai preparado para chuva de verdade.",
+            f"{period} tem cara de dia em que o guarda-chuva deixa de ser acessório e vira equipamento obrigatório.",
+            f"{period} a previsão está bem molhada. Melhor não contar com a sorte para chegar seco.",
+        )
+    elif rain >= 5 or rain_hours >= 4:
+        category = "rain"
+        options = (
+            f"{period} a chuva deve aparecer com vontade. Leva alguma proteção e não confia muito naquele 'é só uma garoinha'.",
+            f"{period} está com uma bela cara de chuva. Guarda-chuva na mão evita correr igual condenado depois.",
+            f"{period} o céu provavelmente vai abrir a torneira em algum momento. Melhor sair prevenido.",
+        )
+    elif rain > 0.1:
+        category = "light_rain"
+        options = (
+            f"{period} pode cair uma chuva rápida. Nada apocalíptico, mas é bom não ser pego de surpresa.",
+            f"{period} existe chance de umas gotas atrapalharem o roteiro. Uma proteção leve já resolve a novela.",
+            f"{period} a chuva pode dar uma passada por aí. Não parece o fim do mundo, só o suficiente para incomodar.",
+        )
+    elif tmax is not None and tmax >= 33 and (cloud is None or cloud <= 55):
+        category = "very_hot"
+        options = (
+            f"{period} o sol deve trabalhar sem nenhuma consideração pelos outros. Água, sombra e juízo ajudam bastante.",
+            f"{period} promete aquele calor que faz até o asfalto parecer pessoal. Se hidrata e procura sombra quando der.",
+            f"{period} tem tudo para ser um dia de sol castigando. Garrafa d'água por perto e menos heroísmo no calor.",
+        )
+    elif tmax is not None and tmax >= 30 and (cloud is None or cloud <= 65):
+        category = "hot"
+        options = (
+            f"{period} deve esquentar bem. Não precisa declarar guerra ao sol: água e sombra já fazem um bom serviço.",
+            f"{period} o calor vem aí com certa falta de educação. Vale se hidratar direito durante o dia.",
+            f"{period} parece dia de roupa leve e água por perto. O sol não deve facilitar muito.",
+        )
+    elif wind >= 35:
+        category = "windy"
+        options = (
+            f"{period} o vento deve aparecer com disposição. Segura o boné e evita confiar em papel solto.",
+            f"{period} vai ventar bem. Pelo menos o cabelo ganha uma personalidade nova sem cobrar nada.",
+            f"{period} o vento pode incomodar um pouco. Nada de deixar coisa leve dando sopa por aí.",
+        )
+    elif tmax is not None and tmax <= 22:
+        category = "cool"
+        options = (
+            f"{period} deve ficar mais fresco. Talvez seja um raro dia em que sair no sol não pareça uma punição.",
+            f"{period} a temperatura vem mais comportada. Se você sente frio fácil, uma camada extra não é má ideia.",
+            f"{period} promete um clima mais fresco e civilizado. Aproveita enquanto dura.",
+        )
+    elif cloud is not None and cloud >= 75:
+        category = "cloudy"
+        options = (
+            f"{period} o céu deve passar boa parte do tempo fechado. Pelo menos o sol resolveu diminuir o expediente.",
+            f"{period} tem cara de dia cinza, com bastante nuvem fazendo hora extra.",
+            f"{period} o céu deve ficar bem encoberto. Não é exatamente fotogênico, mas também não é motivo para cancelar o dia.",
+        )
+    else:
+        category = "pleasant"
+        options = (
+            f"{period} o tempo parece relativamente comportado. Um daqueles dias em que o clima talvez não tente sabotar seus planos.",
+            f"{period} a previsão está tranquila. Dá para tocar o dia sem montar uma operação especial contra o tempo.",
+            f"{period} o clima parece colaborar. Aproveita, porque até a meteorologia às vezes resolve ajudar.",
+        )
+
+    return _pick(options, forecast, city, category)

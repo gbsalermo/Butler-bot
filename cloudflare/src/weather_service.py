@@ -16,6 +16,7 @@ from settings import (
     DEFAULT_WEATHER_LONGITUDE,
     TIMEZONE_NAME,
 )
+from weather_personality import forecast_comment
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -123,8 +124,6 @@ async def geocode_city(city):
     if not results:
         raise ValueError("cidade não encontrada")
 
-    # Em consultas ambíguas, prioriza Brasil; caso contrário usa o primeiro
-    # resultado fornecido pelo geocodificador.
     chosen = next((item for item in results if item.get("country_code") == "BR"), results[0])
     name = chosen.get("name") or city.strip()
     admin = chosen.get("admin1")
@@ -206,8 +205,6 @@ async def fetch_daily_forecast(location, target):
         "weather_code": int(first("weather_code", -1)),
         "temperature_max": first("temperature_2m_max"),
         "temperature_min": first("temperature_2m_min"),
-        # max = maior probabilidade HORÁRIA do dia; não deve ser apresentada
-        # isoladamente como se fosse a chance do dia inteiro.
         "rain_probability_max": first("precipitation_probability_max"),
         "rain_probability_mean": first("precipitation_probability_mean"),
         "rain_sum": first("precipitation_sum"),
@@ -260,7 +257,10 @@ def format_forecast(location, forecast, heading="Tempo"):
     rain_hours = _number(forecast.get("rain_hours"))
     wind = _number(forecast.get("wind_max"))
 
-    lines = [f"{icon} {heading} — {location['city']}"]
+    lines = [
+        f"{icon} {heading} — {location['city']}",
+        forecast_comment(forecast, heading=heading, city=location["city"]),
+    ]
     if tmin is not None and tmax is not None:
         lines.append(f"• {condition}; {round(tmin)}–{round(tmax)} °C")
 
@@ -275,16 +275,12 @@ def format_forecast(location, forecast, heading="Tempo"):
 
     if rain_mean is not None and rain_sum is not None and rain_sum > 0.1:
         if rain_max is not None and rain_max > rain_mean:
-            lines.append(
-                f"• Chance de chuva: de {round(rain_mean)}% até {round(rain_max)}%"
-            )
+            lines.append(f"• Chance de chuva: de {round(rain_mean)}% até {round(rain_max)}%")
         else:
             lines.append(f"• Chance de chuva: {round(rain_mean)}%")
     elif rain_mean is not None and rain_sum is None:
         if rain_max is not None and rain_max > rain_mean:
-            lines.append(
-                f"• Chance de chuva: de {round(rain_mean)}% até {round(rain_max)}%"
-            )
+            lines.append(f"• Chance de chuva: de {round(rain_mean)}% até {round(rain_max)}%")
         else:
             lines.append(f"• Chance de chuva: {round(rain_mean)}%")
     elif rain_max is not None and rain_sum is None:
