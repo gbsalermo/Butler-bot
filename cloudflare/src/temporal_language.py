@@ -1,7 +1,8 @@
-"""Sinais linguísticos de tempo relativo para a Etapa 1 e futuro Assistente de Tempo.
+"""Sinais linguísticos de tempo relativo para o Assistente Geral de Tempo.
 
-Não agenda nada. Apenas reconhece pedidos de cronômetro/alerta rápido e converte
-expressões relativas em duração determinística.
+Este módulo continua puro: reconhece pedidos de cronômetro/alerta rápido e
+converte expressões relativas em duração determinística, sem acessar D1 nem
+executar a ação.
 """
 
 from __future__ import annotations
@@ -64,10 +65,10 @@ def parse_timer_duration_seconds(text: str | None) -> int | None:
 
 
 def classify_quick_time_intent(text: str | None) -> dict:
-    """Contrato futuro do Assistente de Tempo sem persistência.
+    """Classifica a intenção temporal sem persistência.
 
     `timer`: cronômetro puro.
-    `relative_alert`: lembrete/tarefa verbal com prazo relativo curto.
+    `relative_alert`: lembrete/tarefa verbal positiva com prazo relativo curto.
     `None`: não é assunto do assistente rápido.
     """
     duration = parse_timer_duration_seconds(text)
@@ -79,7 +80,9 @@ def classify_quick_time_intent(text: str | None) -> dict:
         return {"kind": None, "delay_seconds": None}
 
     families = set(language.detect_action_families(text))
-    if "reminder" in families or "create_task" in families:
+    if "reminder" in families and language.is_positive_action_request(text, "reminder"):
+        return {"kind": "relative_alert", "delay_seconds": delay}
+    if "create_task" in families and language.action_polarity(text, "create_task") != "negative":
         return {"kind": "relative_alert", "delay_seconds": delay}
 
     return {"kind": None, "delay_seconds": delay}
