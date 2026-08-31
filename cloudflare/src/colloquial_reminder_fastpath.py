@@ -95,7 +95,7 @@ async def _save(db, token, chat_id, uid, title, due, tm):
     await app.clear_state(db, uid)
     try:
         import conversation_layer
-        await conversation_layer._remember(db, uid, "lembrete", iid)
+        await conversation_layer._remember(db, uid, "lembrete", iid, {"source": "created"})
     except Exception:
         pass
     await send_message(
