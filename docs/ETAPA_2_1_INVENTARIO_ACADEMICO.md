@@ -26,9 +26,9 @@ O formato atual deve ser **preservado**.
 
 ---
 
-## 1. O que já funciona e deve continuar igual
+## O que já funciona e deve continuar igual
 
-O Butler já representa matéria e aulas de forma suficiente para o produto atual:
+O Butler já representa matéria e aulas de forma suficiente:
 
 ```text
 subjects
@@ -42,38 +42,16 @@ subject_sessions
 → local
 ```
 
-Uma matéria pode ter múltiplos horários/localizações.
-
-Também já existem:
-
-- cadastro manual;
-- edição de nome/dia/horário/local;
-- adicionar/remover aula;
-- trancar/remover matéria;
-- provas;
-- faltas e limite de faltas;
-- avisos de aula;
-- consultas naturais;
-- importação por PDF textual/TXT.
-
-Nada disso precisa ser remodelado nesta etapa.
+Uma matéria pode ter múltiplos horários/localizações. Cadastro manual, edição, provas, faltas, avisos acadêmicos e consultas naturais permanecem como estão.
 
 ---
 
-## 2. Fonte recomendada para novos usuários
+## Fonte recomendada para novos usuários
 
-A fonte oficial recomendada permanece a tabela do painel principal do SIGAA:
+A fonte oficial permanece a tabela do painel principal do SIGAA:
 
 ```text
 Componente Curricular | Local | Horário
-```
-
-Exemplos de códigos aceitos pelo parser atual:
-
-```text
-35M45
-24M23
-2T23
 ```
 
 Formatos aceitos:
@@ -81,44 +59,13 @@ Formatos aceitos:
 - PDF com texto pesquisável/selecionável;
 - TXT.
 
-Não usar OCR em produção para print, foto, imagem ou PDF escaneado.
-
-O onboarding atual que orienta `Imprimir → Salvar como PDF` diretamente do SIGAA deve ser mantido.
+Print, foto, imagem ou PDF escaneado continuam fora do fluxo porque o Butler não usa OCR em produção.
 
 ---
 
-## 3. O que o inventário confirmou
+## Objetivo técnico real
 
-`app.parse_schedule_text()` já extrai `name`, `weekday`, `start`, `end`, `location` e `code`.
-
-Exemplo:
-
-```text
-Sistemas Digitais I 35M45 PAV II sala 05
-```
-
-vira duas sessões, terça e quinta, de 10:00–12:00 no mesmo local.
-
-O `code` pode continuar apenas como dado intermediário do parser; não precisa virar novo campo no banco nesta etapa.
-
-O fluxo atual de preview também deve ser preservado:
-
-```text
-arquivo
-→ extração
-→ prévia
-→ usuário confere
-→ confirmação
-→ cadastro
-```
-
-Cadastro manual continua sendo alternativa válida quando o arquivo não puder ser interpretado com confiança.
-
----
-
-## 4. Problema real que a Etapa 2 deve resolver
-
-O objetivo é diminuir casos como:
+Melhorar a confiabilidade do parser atual para evitar:
 
 ```text
 matéria não reconhecida
@@ -129,36 +76,26 @@ um código com dois dias virar só uma aula
 horário M/T/N convertido incorretamente
 linha irrelevante virar matéria
 matéria duplicada na mesma importação
-arquivo parcialmente entendido ser cadastrado como se estivesse correto
+arquivo parcialmente entendido ser cadastrado como correto
 ```
 
-O Butler deve preferir dizer que não conseguiu interpretar uma linha a inventar ou cadastrar grade errada.
+Em caso de dúvida, o Butler deve sinalizar a linha para conferência em vez de inventar.
 
 ---
 
-## 5. Ordem da Etapa 2
+## Ordem da Etapa 2
 
-### 2.1 — Caracterizar o comportamento atual ✅
+### 2.1 — Caracterização do comportamento atual ✅
 
-- parser SIGAA identificado;
-- fonte recomendada confirmada;
-- PDF textual/TXT confirmados;
-- sem OCR confirmado;
-- múltiplos dias e blocos M/T/N caracterizados;
-- localização opcional caracterizada;
-- falsos positivos básicos cobertos;
-- edição atual reconhecida como suficiente;
-- testes de caracterização adicionados.
+Parser, múltiplos dias, blocos M/T/N, localização opcional, falsos positivos básicos e onboarding já possuem testes de caracterização.
 
 ### 2.2 — Extração SIGAA mais robusta
 
-Melhorar leitura de nome, local, espaços/quebras de linha, códigos com múltiplos dias, combinações M/T/N, cabeçalhos/rodapés e texto repetido pelo PDF.
-
-Sem alterar o modelo persistido.
+Tratar melhor espaços/quebras de linha, locais, códigos com múltiplos dias, combinações M/T/N, cabeçalhos/rodapés e texto repetido pelo PDF, sem alterar o modelo persistido.
 
 ### 2.3 — Validação e confiança
 
-Classificar cada bloco como:
+Classificar blocos:
 
 ```text
 ✅ reconhecido
@@ -166,45 +103,43 @@ Classificar cada bloco como:
 ❌ não reconhecido
 ```
 
-Bloquear nome vazio, horário impossível, código parcialmente reconhecido, duplicata e linha ambígua.
+Evitar nome vazio, horário impossível, código parcialmente reconhecido, duplicata e linha ambígua.
 
-### 2.4 — Prévia mais clara
+### 2.4 — Prévia clara
 
-Mostrar exatamente matérias, dias, horários e locais que serão cadastrados, além de qualquer linha ambígua/rejeitada.
+Mostrar exatamente matéria, dias, horários e local de tudo que será salvo, além de qualquer trecho ambíguo/rejeitado.
 
 ### 2.5 — Cadastro inicial seguro
 
 Após confirmação:
 
-- cadastrar somente o que apareceu na prévia;
+- salvar somente o que apareceu na prévia;
 - manter `subjects` + `subject_sessions` como hoje;
-- evitar duplicatas na própria importação;
+- evitar duplicatas dentro da importação;
 - manter isolamento por usuário;
-- não cadastrar trecho ambíguo/rejeitado;
-- limpar corretamente o estado do wizard.
+- não salvar bloco ambíguo/rejeitado;
+- limpar o wizard corretamente.
 
-O foco oficial é **novo usuário / primeira grade**.
+Foco oficial: **novo usuário / primeira grade**.
 
 Reimportação de grade existente não é objetivo desta etapa.
 
-### 2.6 — Onboarding e regressão real
+### 2.6 — Onboarding + regressão real
 
-Explicar onde pegar a grade no SIGAA, tabela recomendada, PDF textual/TXT, ausência de OCR, prévia antes de salvar e alternativa de cadastro manual.
-
-Adicionar corpus com exemplos reais/anônimos.
+Explicar onde obter a grade, formato recomendado, PDF/TXT, ausência de OCR, prévia e cadastro manual. Adicionar exemplos reais/anônimos ao corpus.
 
 ---
 
-## 6. Gate de saída
+## Gate de saída
 
 - [ ] principais variações reais do SIGAA reconhecidas com segurança;
-- [ ] múltiplos dias/horários extraídos corretamente;
+- [ ] múltiplos dias/horários corretos;
 - [ ] cabeçalhos/rodapés/linhas irrelevantes ignorados;
-- [ ] duplicatas da própria importação eliminadas;
-- [ ] blocos ambíguos sinalizados;
+- [ ] duplicatas internas eliminadas;
+- [ ] ambiguidades sinalizadas;
 - [ ] prévia clara;
-- [ ] nada persistido antes da confirmação;
-- [ ] cadastro final usa o modelo acadêmico atual;
+- [ ] nada salvo antes de confirmação;
+- [ ] mesmo modelo acadêmico atual no cadastro final;
 - [ ] onboarding de novos usuários validado;
 - [ ] cadastro manual preservado;
 - [ ] isolamento multiusuário;
@@ -214,11 +149,9 @@ Adicionar corpus com exemplos reais/anônimos.
 
 ---
 
-## 7. Observações técnicas fora do escopo
+## Observações fora do escopo
 
-O inventário encontrou pontos sobre reimportação de usuários existentes e associações históricas. Eles podem ser revisitados se surgirem como problema real, mas **não devem puxar a Etapa 2 para uma reformulação acadêmica** sem nova decisão explícita.
-
----
+O inventário encontrou questões sobre reimportação e associações históricas. Elas podem ser revisitadas se surgirem como problema real, mas não justificam uma reforma acadêmica nesta etapa.
 
 ## Próximo passo
 
