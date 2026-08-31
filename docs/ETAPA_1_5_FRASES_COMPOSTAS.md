@@ -1,46 +1,17 @@
 # Butler — Etapa 1.5: Frases compostas e conjunções
 
 **Data-base:** 31/08/2026  
-**Status:** em implementação — análise/preview + confirmação segura em lote
+**Status:** concluída
 
 ## Objetivo
 
 Entender mensagens com mais de uma oração sem usar `split(" e ")` ingênuo e sem transformar contexto causal, condição, alternativa ou complemento nominal em CRUD.
 
-Exemplo-alvo:
+## Resultado
 
-```text
-Amanhã tenho aula às 8,
-depois quero estudar Java
-e às 18 tenho dentista.
-```
+A Etapa 1.5 substituiu o `compound_router` histórico por uma camada neutra de linguagem e adicionou confirmação explícita para conjuntos totalmente determinísticos.
 
-A estrutura esperada é:
-
-```text
-1. scheduled_event — aula às 8
-2. planned_activity — estudar Java
-   relação: sequência
-3. create_appointment — dentista às 18
-   relação: adição
-```
-
-## Primeira fatia — análise e preview
-
-O antigo `compound_router.py`, que misturava acadêmico, culinária, pets e memória, foi substituído por uma camada neutra.
-
-Ela:
-
-- não acessa D1 para analisar;
-- reutiliza `language_primitives.detect_relations()`;
-- remove molduras temporais iniciais somente para revelar o verbo principal;
-- identifica os atos linguísticos de cada segmento;
-- classifica a relação entre os blocos;
-- impede que um parser de ação única salve apenas o primeiro pedaço de uma mensagem composta.
-
-## Relações
-
-São consideradas estruturalmente:
+O Butler agora distingue relações como:
 
 ```text
 e / também / além disso -> adição
@@ -55,43 +26,37 @@ embora -> concessão
 ou -> alternativa
 ```
 
-## Regra de segurança
+Conector nunca é tratado sozinho como autorização de escrita.
 
-Conector não é sinônimo de nova ação.
-
-```text
-Tenho aula, mas estou cansado.
-```
-
-Só há uma ação reconhecida.
+## Proteções linguísticas
 
 ```text
 Me lembra de comprar pão e leite amanhã.
 ```
 
-`e leite` é conteúdo do lembrete, não uma segunda ação.
+continua sendo um lembrete, não duas ações.
 
 ```text
 Tenho reunião com João e Maria amanhã.
 ```
 
-`e Maria` não cria outro compromisso.
+continua sendo um compromisso.
 
 ```text
 Tenho aula porque tenho que trabalhar.
 ```
 
-A oração `tenho que trabalhar` aparece como contexto causal e não é candidata a CRUD automático.
+`tenho que trabalhar` é contexto causal e não vira automaticamente tarefa.
 
 ```text
 Tenho aula ou tenho dentista às 18h.
 ```
 
-`ou` representa escolha; não executamos as duas alternativas.
+é alternativa; os dois lados não são executados.
 
-## Segunda fatia — confirmação explícita do lote
+## Preview e confirmação em lote
 
-Quando há 2 a 5 ações independentes e **todas** já podem ser resolvidas de forma determinística, o Butler monta um plano e pergunta antes de persistir.
+Quando existem de 2 a 5 ações independentes e todas já possuem os dados mínimos, o Butler mostra o plano antes de persistir.
 
 Exemplo:
 
@@ -109,76 +74,75 @@ Está tudo definido. Confirma que eu registre o lote inteiro?
 [✅ Registrar tudo] [❌ Cancelar lote]
 ```
 
-O primeiro subconjunto liberado para lote é:
+O subconjunto liberado nesta etapa é:
 
 - tarefa com data definida;
 - compromisso com data definida;
-- lembrete simples com data **e horário** definidos.
+- lembrete simples com data e horário definidos.
 
-Ainda não entram no lote:
+Continuam fora da execução em lote:
 
 - rotina;
 - evento acadêmico;
 - atividade planejada sem autoridade de persistência definida;
 - temporizador rápido da futura Etapa 3;
 - cancelamento/conclusão/reagendamento em massa;
-- qualquer ação incompleta;
-- alternativas com `ou`;
+- ações incompletas;
+- alternativas;
 - cláusulas causais/condicionais/concessivas.
 
-## Sem gravação parcial
+## Persistência sem metade do lote
 
-O Butler não chama dois handlers independentes em sequência.
+Depois de pré-validar todos os blocos, o conjunto é persistido por um **único `INSERT` multi-values** em `daily_items`.
 
-Depois da pré-validação de todos os blocos, o conjunto é persistido por um **único `INSERT` multi-values** em `daily_items`.
+Assim o fluxo não chama handlers independentes em sequência e não entra em wizard entre uma ação e outra.
 
-Com isso, o caminho normal não fica sujeito a:
+Antes da confirmação:
+
+- todas as datas/horários são validadas;
+- lembrete precisa de horário exato;
+- a confirmação expira após 10 minutos;
+- horários são revalidados quando o botão é pressionado.
+
+## Texto original preservado
+
+A decisão linguística usa texto normalizado, mas o conteúdo persistido usa o segmento original reconstruído.
+
+Portanto:
 
 ```text
-salvar ação 1
-→ abrir wizard
-→ falhar ação 2
-→ deixar metade do pedido gravada
+comprar café
+reunião
+entregar relatório
 ```
 
-Se algum bloco não estiver completamente definido antes da confirmação, nenhum item do lote é criado.
-
-## Revalidação na confirmação
-
-Antes do `INSERT`, datas/horários são validados novamente.
-
-Se o usuário deixar a confirmação aberta e um horário já tiver passado, o lote é cancelado e precisa ser recalculado.
-
-Além disso, a confirmação pendente expira após **10 minutos**. Um botão antigo de `Registrar tudo` não pode registrar silenciosamente um lote esquecido horas ou dias depois.
-
-## Contexto após criação
-
-Depois de registrar o lote, a ordem dos IDs retornados é gravada no `short_context` com `source=compound_created`.
-
-Isso prepara sequências futuras como:
+não são degradados para:
 
 ```text
-Butler registra:
-1. pagar boleto
-2. dentista
+comprar cafe
+reuniao
+entregar relatorio
+```
 
-Usuário:
+## Contexto pós-lote
+
+Os IDs retornados são armazenados em `short_context` na mesma ordem exibida.
+
+Isso mantém compatibilidade com:
+
+```text
 conclui a primeira
+cancela a segunda
+muda a terceira pra sexta
 ```
 
-A resolução posicional continua pertencendo à Etapa 1.3; a 1.5 apenas fornece a lista criada na ordem exibida.
+A resolução continua pertencendo à autoridade de contexto da Etapa 1.3.
 
 ## Desempenho
 
-Mensagens comuns continuam sendo analisadas localmente e retornam antes de acessar D1.
+A análise de mensagens comuns continua local. D1 só entra quando existe lote determinístico para confirmação ou quando o usuário confirma/cancela esse lote.
 
-D1 só entra quando:
-
-- há um lote determinístico a ser guardado para confirmação;
-- o usuário pressiona `✅ Registrar tudo`;
-- o usuário pressiona `❌ Cancelar lote`.
-
-## Gate parcial
+## Gate final
 
 - [x] substituir `compound_router` histórico por camada neutra;
 - [x] segmentação guiada por relações da base comum;
@@ -186,21 +150,23 @@ D1 só entra quando:
 - [x] `e` em conteúdo não vira automaticamente nova ação;
 - [x] causa/condição/concessão não viram CRUD secundário;
 - [x] alternativa não executa os dois lados;
-- [x] preview simples não acessa D1;
-- [x] confirmação explícita do conjunto interpretado;
-- [x] pré-validação completa antes de oferecer `Registrar tudo`;
-- [x] tarefa + compromisso + lembrete simples suportados no lote seguro;
-- [x] persistência do lote em um único INSERT multi-values;
-- [x] revalidação temporal antes da confirmação;
+- [x] preview simples sem acesso ao D1;
+- [x] confirmação explícita;
+- [x] pré-validação completa;
+- [x] tarefa + compromisso + lembrete simples em lote seguro;
+- [x] um único INSERT para o conjunto;
+- [x] revalidação temporal;
 - [x] confirmação expira após 10 minutos;
-- [x] contexto posicional registrado após criação;
-- [ ] ampliar corpus de frases compostas e combinações de 3–5 ações;
-- [ ] testar dois usuários com lotes simultâneos;
-- [ ] validar sequências pós-lote (`a primeira`, `a segunda`, correções e cancelamentos);
-- [ ] fechar gate completo da 1.5.
+- [x] contexto posicional após criação;
+- [x] combinações de 3 a 5 ações cobertas;
+- [x] 6+ ações recusadas pelo gate de lote;
+- [x] dois usuários com lotes simultâneos isolados;
+- [x] `a primeira / a segunda / a terceira` validado após lote;
+- [x] texto original/acentos preservados;
+- [x] regressão completa verde.
 
-## Próxima fatia
+## Próximo passo
 
-Ampliar o corpus para combinações de 3–5 ações e validar isolamento entre usuários, sequência pós-lote e falsos positivos adicionais. Não ampliar o conjunto de domínios persistidos até que cada domínio tenha contrato transacional equivalente.
+**Etapa 1.6 — Conversas completas e gate final da Etapa 1.**
 
-A Etapa 1.6 continuará sendo o gate final de conversas longas, dois usuários, falsos positivos e regressão completa.
+Ela deve combinar em sequências reais tudo que foi construído em 1.1–1.5: criação, correção, referências, mudança de assunto, mensagens compostas, dois usuários, falsos positivos e desempenho.
