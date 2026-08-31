@@ -199,4 +199,4 @@ mas a execução persistente do timer permanece para a Etapa 3.
 - [x] regressão completa verde no PR;
 - [x] cenários DB multiusuário adicionados;
 - [x] qualificadores temporais de referência validados;
-- [ ] regressão pós-merge verde na `main`.
+- [x] regressão pós-merge verde na `main`.
