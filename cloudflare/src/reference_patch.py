@@ -119,6 +119,37 @@ def _action_family(text):
     return None
 
 
+def values_intersection(refs, values):
+    return bool({ref.get("value") for ref in refs}.intersection(values))
+
+
+def _needs_reference_runtime(text, refs=None, family=None, normalized=None):
+    """Gate lexical barato antes de qualquer SELECT de contexto/usuário.
+
+    A Etapa 1.3 adicionou resolução contextual, mas o handler fica tarde no
+    dispatcher. Mensagens sem referência não devem pagar dois ou mais round-trips
+    ao D1 apenas para descobrirmos que este módulo não se aplica.
+    """
+    refs = refs if refs is not None else language.detect_references(text)
+    family = family if family is not None else _action_family(text)
+    normalized = normalized if normalized is not None else language.normalize_text(language.strip_butler(text))
+
+    if refs and family:
+        return True
+    if refs and values_intersection(refs, {"a outra", "o outro"}):
+        return True
+    if "proxima semana" in normalized and any(
+        marker in normalized for marker in ("passa", "joga", "adia", "adiar")
+    ):
+        return True
+    if ("cancela" in normalized or "cancelar" in normalized) and any(
+        marker in normalized
+        for marker in ("o que marquei", "o compromisso", "a tarefa", "o que eu marquei")
+    ):
+        return True
+    return False
+
+
 async def _delegate_context_action(db, token, message, uid, item_id, family):
     original = (message.get("text") or "").strip()
     synthetic = dict(message)
@@ -147,14 +178,21 @@ async def _delegate_context_action(db, token, message, uid, item_id, family):
 async def handle_reference(db, token, message):
     chat = (message.get("chat") or {}).get("id")
     text = (message.get("text") or "").strip()
-    if not chat:
+    if not chat or not text:
         return False
+
+    # Tudo abaixo deste ponto pode tocar D1. Primeiro verificamos apenas sinais
+    # linguísticos locais; uma mensagem comum como "qual meu treino hoje?" sai
+    # daqui sem SELECT de usuário nem SELECT de contexto.
+    refs = language.detect_references(text)
+    family = _action_family(text)
+    normalized = language.normalize_text(language.strip_butler(text))
+    if not _needs_reference_runtime(text, refs, family, normalized):
+        return False
+
     uid = await _uid(db, int(chat))
     if not uid:
         return False
-
-    refs = language.detect_references(text)
-    family = _action_family(text)
 
     # Ações com referência natural são resolvidas aqui e delegadas ao domínio.
     if refs and family:
@@ -209,41 +247,44 @@ async def handle_reference(db, token, message):
         if await _delegate_context_action(db, token, message, uid, target_id, family):
             return True
 
-    normalized = language.normalize_text(language.strip_butler(text))
-    ctx = await short_context.latest(db, uid)
-    ctx_id = ctx.get("id") if ctx else None
-
-    # `essa não, a outra` sem ação apenas troca o foco conversacional.
-    if refs and values_intersection(refs, {"a outra", "o outro"}) and ctx_id:
-        alternatives = await _alternative_candidates(db, uid, ctx)
-        if len(alternatives) == 1:
-            item_id = alternatives[0]
-            row = await db.prepare("SELECT id,kind,title FROM daily_items WHERE id=? AND user_id=?").bind(item_id, uid).first()
-            if row:
-                await short_context.remember(db, uid, _row(row, "kind"), item_id)
-                await send_message(token, int(chat), f"Certo, então estamos falando de #{item_id} {_row(row,'title')}. Continue.", reply_markup=_kb(app.MAIN_KB))
-                return True
-        elif alternatives:
-            rows = []
-            for item_id in alternatives:
-                row = await db.prepare("SELECT id,title FROM daily_items WHERE id=? AND user_id=?").bind(item_id, uid).first()
+    # `essa não, a outra` sem ação apenas troca o foco conversacional. Só aqui
+    # precisamos buscar contexto; cancelamento por data/hora abaixo não precisa.
+    if refs and values_intersection(refs, {"a outra", "o outro"}):
+        ctx = await short_context.latest(db, uid)
+        ctx_id = ctx.get("id") if ctx else None
+        if ctx_id:
+            alternatives = await _alternative_candidates(db, uid, ctx)
+            if len(alternatives) == 1:
+                item_id = alternatives[0]
+                row = await db.prepare("SELECT id,kind,title FROM daily_items WHERE id=? AND user_id=?").bind(item_id, uid).first()
                 if row:
-                    rows.append(row)
-            await send_message(token, int(chat), "Tenho mais de uma 'outra'. Escolha pelo número:\n" + "\n".join(f"• #{_row(row,'id')} {_row(row,'title')}" for row in rows), reply_markup=_kb(app.MAIN_KB))
-            return True
+                    await short_context.remember(db, uid, _row(row, "kind"), item_id)
+                    await send_message(token, int(chat), f"Certo, então estamos falando de #{item_id} {_row(row,'title')}. Continue.", reply_markup=_kb(app.MAIN_KB))
+                    return True
+            elif alternatives:
+                rows = []
+                for item_id in alternatives:
+                    row = await db.prepare("SELECT id,title FROM daily_items WHERE id=? AND user_id=?").bind(item_id, uid).first()
+                    if row:
+                        rows.append(row)
+                await send_message(token, int(chat), "Tenho mais de uma 'outra'. Escolha pelo número:\n" + "\n".join(f"• #{_row(row,'id')} {_row(row,'title')}" for row in rows), reply_markup=_kb(app.MAIN_KB))
+                return True
 
-    if "proxima semana" in normalized and any(x in normalized for x in ("passa", "joga", "adia", "adiar")) and ctx_id:
-        row = await db.prepare("SELECT id,kind,title,due_date,due_time FROM daily_items WHERE id=? AND user_id=?").bind(ctx_id, uid).first()
-        if row:
-            try:
-                base = datetime.fromisoformat(_row(row, "due_date")).date() if _row(row, "due_date") else _now().date()
-            except Exception:
-                base = _now().date()
-            target_date = base + timedelta(days=7)
-            await db.prepare("UPDATE daily_items SET due_date=?,status='pendente',postpone_count=postpone_count+1 WHERE id=? AND user_id=?").bind(target_date.isoformat(), ctx_id, uid).run()
-            await short_context.remember(db, uid, _row(row, "kind"), int(_row(row, "id")))
-            await send_message(token, int(chat), f"⏰ {_row(row,'title')} foi para {target_date.strftime('%d/%m')}" + (f" às {_row(row,'due_time')}" if _row(row, "due_time") else "") + ". Semana que vem ganhou mais um problema. 😌", reply_markup=_kb(app.MAIN_KB))
-            return True
+    if "proxima semana" in normalized and any(x in normalized for x in ("passa", "joga", "adia", "adiar")):
+        ctx = await short_context.latest(db, uid)
+        ctx_id = ctx.get("id") if ctx else None
+        if ctx_id:
+            row = await db.prepare("SELECT id,kind,title,due_date,due_time FROM daily_items WHERE id=? AND user_id=?").bind(ctx_id, uid).first()
+            if row:
+                try:
+                    base = datetime.fromisoformat(_row(row, "due_date")).date() if _row(row, "due_date") else _now().date()
+                except Exception:
+                    base = _now().date()
+                target_date = base + timedelta(days=7)
+                await db.prepare("UPDATE daily_items SET due_date=?,status='pendente',postpone_count=postpone_count+1 WHERE id=? AND user_id=?").bind(target_date.isoformat(), ctx_id, uid).run()
+                await short_context.remember(db, uid, _row(row, "kind"), int(_row(row, "id")))
+                await send_message(token, int(chat), f"⏰ {_row(row,'title')} foi para {target_date.strftime('%d/%m')}" + (f" às {_row(row,'due_time')}" if _row(row, "due_time") else "") + ". Semana que vem ganhou mais um problema. 😌", reply_markup=_kb(app.MAIN_KB))
+                return True
 
     # Cancelamento por data/hora continua disponível quando não há pronome.
     if "cancela" in normalized or "cancelar" in normalized:
@@ -261,7 +302,3 @@ async def handle_reference(db, token, message):
                 await send_message(token, int(chat), "Tem mais de uma coisa nesse horário. Escolha pelo #ID:\n" + "\n".join(f"• #{_row(row,'id')} {_row(row,'title')}" for row in rows), reply_markup=_kb(app.MAIN_KB))
                 return True
     return False
-
-
-def values_intersection(refs, values):
-    return bool({ref.get("value") for ref in refs}.intersection(values))
