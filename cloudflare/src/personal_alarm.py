@@ -1,12 +1,12 @@
 """Relógio persistente de contingência para notificações pessoais.
 
 O Cron Trigger continua sendo o scheduler primário, mas este Durable Object
-mantém um próximo evento armado por usuário. Diferente da versão inicial, o
-alarm não depende do próprio cron para descobrir apenas lembretes simples:
+mantém um próximo evento armado por usuário. Ele cobre:
 
 - tarefas com horário;
 - compromissos (T-5);
 - lembretes pessoais;
+- timers/alertas rápidos;
 - checkpoints de rotina;
 - resumo da manhã;
 - fechamento semanal.
@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 from workers import DurableObject, Response
 
 from day_off_policy import expire_stale_day_offs
+from quick_time import dispatch_due_quick_timers, next_quick_timer
 from reliable_reminders import dispatch_due_reminders
 from reliable_summaries import dispatch_summaries
 from routine_integration import _applies, _routine_reminders, _times
@@ -105,7 +106,6 @@ def _recoverable_candidate(now, desired, logical_kind):
 
     late = now - desired
     if logical_kind == "tarefa":
-        # Tarefa permanece pendente e pode avisar atrasada no mesmo dia.
         if desired.date() == now.date():
             return now + timedelta(seconds=1)
         return None
@@ -136,14 +136,7 @@ async def _item_candidates(db, uid, now, day_off):
         if parsed is None:
             continue
         desired, logical_kind = parsed
-
-        # Day-off de hoje bloqueia tarefas/compromissos, mas não o lembrete
-        # pessoal explícito. Eventos de dias futuros continuam armáveis.
-        if (
-            day_off
-            and desired.date() == today
-            and logical_kind != "lembrete"
-        ):
+        if day_off and desired.date() == today and logical_kind != "lembrete":
             continue
 
         iid = int(_row(item, "id"))
@@ -168,8 +161,6 @@ async def _routine_candidates(db, uid, now, day_off):
         ).bind(uid)
     )
 
-    # Olhar a semana inteira impede uma rotina matinal (<07h) de depender do
-    # resumo da manhã para rearmar o próximo alarm.
     for offset in range(0, 8):
         day = today + timedelta(days=offset)
         for routine in routines:
@@ -215,8 +206,6 @@ async def _summary_candidates(db, uid, now, day_off):
         elif now <= morning_end:
             candidates.append(now + timedelta(seconds=1))
 
-    # Sempre mantém o próximo resumo diário armado. Isso faz o Durable Object
-    # continuar vivo mesmo em dias sem tarefas, rotinas ou compromissos.
     tomorrow_morning = morning + timedelta(days=1)
     candidates.append(tomorrow_morning)
 
@@ -250,6 +239,13 @@ async def _next_event(db, uid, now=None):
     candidates.extend(await _item_candidates(db, uid, now, day_off))
     candidates.extend(await _routine_candidates(db, uid, now, day_off))
     candidates.extend(await _summary_candidates(db, uid, now, day_off))
+
+    # Timers rápidos ignoram Day-off: um cronômetro de cozinha ou alerta pontual
+    # continua sendo uma instrução explícita e temporária do usuário.
+    quick = await next_quick_timer(db, uid, now=now.astimezone(timezone.utc))
+    if quick is not None:
+        candidates.append(quick)
+
     return min(candidates) if candidates else None
 
 
@@ -288,11 +284,15 @@ class PersonalAlarm(DurableObject):
             return
         uid = int(uid)
 
-        # Um Day-off antigo não pode silenciar o fallback depois da meia-noite.
         await expire_stale_day_offs(self.env.DB)
 
-        # Os dispatchers continuam idempotentes via notification_log. Executar
-        # os três aqui é seguro mesmo se o Cron tiver rodado no mesmo minuto.
+        # Todos os dispatchers são idempotentes. Quick timers usam status próprio
+        # + notification_log; os demais preservam suas políticas existentes.
+        await dispatch_due_quick_timers(
+            self.env.DB,
+            self.env.TELEGRAM_BOT_TOKEN,
+            user_id=uid,
+        )
         await dispatch_due_reminders(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
         await _routine_reminders(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
         await dispatch_summaries(self.env.DB, self.env.TELEGRAM_BOT_TOKEN)
