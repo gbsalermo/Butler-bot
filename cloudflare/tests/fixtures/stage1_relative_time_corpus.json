@@ -1,0 +1,36 @@
+{
+  "relative_alerts": [
+    {"text": "me lembra de desligar o ovo daqui a 5 minutos", "seconds": 300},
+    {"text": "me lembre daqui a 10 minutos de olhar o forno", "seconds": 600},
+    {"text": "me avisa daqui a 15 min pra tirar a panela", "seconds": 900},
+    {"text": "me avise em 20 minutos de fechar a torneira", "seconds": 1200},
+    {"text": "não deixa eu esquecer daqui a 30 minutos de desligar o fogo", "seconds": 1800},
+    {"text": "me dá um toque em 45 minutos pra sair", "seconds": 2700},
+    {"text": "me lembra daqui a 1 hora de tirar a roupa do varal", "seconds": 3600},
+    {"text": "me avisa em 2 horas de conferir a encomenda", "seconds": 7200},
+    {"text": "tenho que ligar para alguem daqui a 10 minutos", "seconds": 600},
+    {"text": "tenho de desligar o arroz daqui a 12 minutos", "seconds": 720},
+    {"text": "preciso ligar pra minha mae daqui a 25 minutos", "seconds": 1500},
+    {"text": "devo verificar o forno em 8 minutos", "seconds": 480}
+  ],
+  "timers": [
+    {"text": "cronometra 30 minutos pra mim", "seconds": 1800},
+    {"text": "cronometra o tempo de 5 minutos", "seconds": 300},
+    {"text": "cronometre 20 minutos", "seconds": 1200},
+    {"text": "inicia um timer de 10 minutos", "seconds": 600},
+    {"text": "inicie um timer de 45 segundos", "seconds": 45},
+    {"text": "começa um cronometro de 1 hora", "seconds": 3600},
+    {"text": "comece um timer de 90 segundos", "seconds": 90},
+    {"text": "faz um cronometro de 15 minutos", "seconds": 900}
+  ],
+  "false_positives": [
+    "fiquei 30 minutos estudando",
+    "o filme tem 2 horas",
+    "a aula dura 50 minutos",
+    "corri por 20 minutos",
+    "daqui a 5 minutos talvez eu saia",
+    "em 1 hora começa o jogo",
+    "demorei 10 minutos pra chegar",
+    "meu treino foi de 1 hora"
+  ]
+}
