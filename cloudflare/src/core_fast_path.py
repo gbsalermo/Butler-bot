@@ -13,6 +13,7 @@ from compound_router import handle_message as handle_compound_message, is_compou
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery
 from operational_informal_fastpath import handle_message as handle_informal_action
+from quick_time import handle_message as handle_quick_time
 from routine_natural_fastpath import handle_message as handle_natural_routine
 from task_context_patch import handle_message as handle_task_context
 from ux_bugfixes import handle_global_navigation
@@ -111,8 +112,13 @@ async def handle_message(db, token, message):
     if await handle_weather_context(db, token, message):
         return True
 
-    # Primeira fatia da 1.5: mensagens com múltiplas ações claras recebem preview
-    # estrutural antes de qualquer parser poder registrar somente um pedaço delas.
+    # Etapa 3: tempo relativo curto precisa vencer os parsers de lembrete/tarefa.
+    # "tenho que ligar daqui a 10 minutos" é alerta rápido, não tarefa permanente.
+    if await handle_quick_time(db, token, message):
+        return True
+
+    # Mensagens com múltiplas ações claras recebem preview estrutural antes de
+    # qualquer parser poder registrar somente um pedaço delas.
     if await handle_compound_message(db, token, message):
         return True
 
