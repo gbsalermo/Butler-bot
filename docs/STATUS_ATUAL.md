@@ -67,13 +67,13 @@ Documento final: `docs/ETAPA_1_6_GATE_FINAL.md`.
 
 O formato acadêmico atual foi validado como **suficiente e excelente para o uso desejado**.
 
-A Etapa 2 **não é mais uma reforma do modelo acadêmico**.
+A Etapa 2 **não é uma reforma do modelo acadêmico**.
 
 Objetivo oficial:
 
 > aumentar a confiança ao extrair e cadastrar as matérias de novos usuários.
 
-Portanto ficam fora do escopo, salvo bug mínimo explicitamente aprovado:
+Ficam fora do escopo, salvo bug mínimo explicitamente aprovado:
 
 - redesenhar `subjects` ou `subject_sessions`;
 - adicionar professor/carga horária/semestre/observações;
