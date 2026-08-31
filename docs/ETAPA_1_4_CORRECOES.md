@@ -1,7 +1,8 @@
 # Butler — Etapa 1.4: Correção e Auto-reparo Conversacional
 
-**Data-base:** 30/08/2026  
-**Status:** em implementação — auto-reparo temporal validado  
+**Data-base:** 31/08/2026  
+**Status:** em implementação — primeira fatia temporal mesclada na `main`  
+**PR da primeira fatia:** #16  
 **Anterior:** Etapa 1.3 concluída
 
 ## Objetivo
@@ -18,6 +19,12 @@ Butler: ✏️ Corrigido: Dentista — 31/08 às 16:00.
 ```
 
 O segundo turno atualiza o mesmo registro.
+
+## Estado atual da subetapa
+
+A primeira fatia foi implementada e mesclada na `main` em 31/08/2026 pela PR #16.
+
+Ela cobre **auto-reparo temporal do item recém-criado/corrigido**. A subetapa 1.4 ainda não está encerrada: rollback, correção de título/alvo e sequências maiores permanecem abertos.
 
 ## Primeira fatia — correção temporal
 
@@ -83,6 +90,8 @@ marca dentista amanhã às 15h
 
 continua apontando para o mesmo item enquanto o contexto curto estiver válido.
 
+A autoridade de contexto continua sendo `short_context.py`; a 1.4 não deve criar uma memória paralela.
+
 ## Segurança linguística
 
 Uma negação superficial não basta para caracterizar reparo.
@@ -93,14 +102,14 @@ não me lembra de estudar hoje às 20h
 
 é uma nova intenção linguística negada e não uma correção do item anterior.
 
-Também não entram nesta fatia:
+Também não entram nesta primeira fatia:
 
 ```text
 não essa, a outra
- deixa como tava
+deixa como tava
 ```
 
-Referências continuam sob a Etapa 1.3 e rollback explícito fica para uma fatia posterior da 1.4.
+Referências continuam sob o contrato da Etapa 1.3 e rollback explícito permanece para uma fatia posterior da 1.4.
 
 ## Persistência
 
@@ -119,11 +128,30 @@ sem:
 - alterar título;
 - mudar conclusão/cancelamento.
 
+O Core/domínio continua sendo a autoridade da escrita; `correction_patch.py` não autoriza uma NLU genérica a editar qualquer item.
+
+## Posição no dispatcher
+
+`correction_patch` fica antes dos parsers de criação/fallback:
+
+```text
+acadêmico
+→ correction_patch
+→ lembrete explícito
+→ referência curta
+→ contexto de tarefa
+→ ...
+```
+
+A ordem é deliberada: uma frase de reparo válida deve corrigir o turno anterior antes que outro handler tente interpretá-la como uma nova criação.
+
 ## Desempenho
 
 `correction_patch.temporal_correction()` faz o gate linguístico localmente.
 
 Mensagens sem marcador de correção e sem data/hora retornam antes de qualquer consulta ao D1.
+
+A resolução `telegram_chat_id → user_id` também participa do cache local por update introduzido em `performance_patch.py`; isso não cria cache persistente entre mensagens.
 
 ## Testes desta fatia
 
@@ -143,7 +171,8 @@ Cobertura adicionada para:
 - `deixa como tava` com rollback seguro da última correção;
 - correções em fluxos guiados antes da persistência;
 - ampliar sequências de 3–8 turnos;
-- manter falso positivo baixo em negações e referências.
+- manter falso positivo baixo em negações e referências;
+- validar regressão completa após cada fatia e atualizar `docs/STATUS_ATUAL.md`.
 
 ## Gate parcial
 
@@ -154,8 +183,15 @@ Cobertura adicionada para:
 - [x] item de lista não é alterado silenciosamente;
 - [x] nova intenção negada não vira reparo;
 - [x] gate linguístico antes do D1;
-- [x] regressão completa verde no PR;
+- [x] primeira fatia mesclada na `main` via PR #16;
 - [ ] rollback `deixa como tava`;
 - [ ] correção explícita de título/alvo;
+- [ ] correções de fluxo guiado quando aplicável;
 - [ ] sequências ampliadas;
-- [ ] regressão pós-merge verde na `main`.
+- [ ] gate completo da 1.4 validado;
+
+## Depois da 1.4
+
+Concluir a 1.4 **não encerra automaticamente a Etapa 1**. Permanecem os gates globais de conjunções, mensagens compostas/múltiplas intenções, corpus ampliado, sequências reais, dois usuários e falsos positivos.
+
+Não iniciar a Etapa 2 enquanto o gate global da Etapa 1 estiver aberto.
