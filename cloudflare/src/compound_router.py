@@ -1,174 +1,169 @@
-"""Roteador para mensagens que misturam vários assuntos na mesma fala.
+"""Analisador conservador de frases compostas — Etapa 1.5.
 
-Ele é deliberadamente conservador: só assume a mensagem quando encontra pelo menos
-dois blocos de domínios diferentes que consegue resolver com segurança. Não executa
-faltas implícitas; consultas e sugestões podem coexistir numa única resposta.
+Esta versão substitui o roteador histórico que misturava acadêmico, receitas,
+memória e pets. Aqui a camada é neutra: segmenta, classifica relações e reconhece
+atos operacionais, mas não executa múltiplos CRUDs silenciosamente.
 """
-import re
-import unicodedata
 
-import academic_intelligence as ai
-import attendance_patch as attendance
-import companion_nlu_v2 as v2
-import cooking_library as cooking
-from deterministic_memory import _entities as personal_entities, _find_referenced, _supply
+import re
+
+import language_primitives as language
 from telegram_api import send_message
 
 
-def _norm(text):
-    value=unicodedata.normalize("NFKD",(text or "").lower())
-    value="".join(ch for ch in value if not unicodedata.combining(ch))
-    value=re.sub(r"[^a-z0-9 ]+"," ",value)
-    return re.sub(r"\s+"," ",value).strip()
+RELATION_LABELS = {
+    "addition": "adição",
+    "contrast": "contraste",
+    "cause": "causa/contexto",
+    "consequence": "consequência",
+    "condition": "condição",
+    "simultaneity": "simultaneidade",
+    "temporal": "relação temporal",
+    "sequence": "sequência",
+    "concession": "concessão",
+    "alternative": "alternativa",
+}
+
+FAMILY_LABELS = {
+    "reminder": "⏰ lembrete",
+    "create_task": "✅ tarefa",
+    "create_appointment": "📅 compromisso",
+    "scheduled_event": "🎓 evento acadêmico",
+    "create_routine": "🧘 rotina",
+    "planned_activity": "📚 atividade planejada",
+    "complete": "✅ conclusão",
+    "cancel": "🚫 cancelamento",
+    "reschedule": "↪️ reagendamento",
+    "timer": "⏱️ temporizador",
+}
+
+# Cláusulas causais/condicionais não viram uma segunda ação automaticamente.
+CONTEXT_RELATIONS = {"cause", "condition", "concession"}
+NON_AUTOMATIC_RELATIONS = CONTEXT_RELATIONS | {"alternative"}
 
 
-def _split(text):
-    clean=re.sub(r"^\s*butler[,.:;!?-]*\s*","",text or "",flags=re.I)
-    parts=[p.strip(" ,.;") for p in re.split(r"[.!?;]+",clean) if p.strip(" ,.;")]
-    out=[]
-    connector=re.compile(r"\s+e\s+(?=(?:me\s+fala|me\s+passa|me\s+indica|lembra\s+que|me\s+lembra|tambem\s+|também\s+))",re.I)
-    for part in parts:
-        out.extend(x.strip() for x in connector.split(part) if x.strip())
-    return out
+def _normalized(text):
+    return language.normalize_text(language.strip_butler(text))
 
 
-def _domain(segment):
-    n=_norm(segment)
-    if any(x in n for x in ("receita","vaca atolada","macarrao","moqueca","vatapa","baiao","cozinhar","como fazer")):return "cooking"
-    if any(x in n for x in ("racao","sache","petisco","areia")) and any(x in n for x in ("acabou","sem","falta","faltando","comprar","lembra")):return "pet_supply"
-    if any(x in n for x in ("aula","materia","sistemas","fisica","prova","faltas","faltar","faltei")) or ai._weekday_from_text(segment) is not None:return "academic"
-    return "conversation"
+def _strip_leading_temporal(segment):
+    """Remove apenas moldura temporal inicial para revelar o verbo principal."""
+    value = (segment or "").strip()
+    previous = None
+    while value and value != previous:
+        previous = value
+        value = re.sub(
+            r"^(?:hoje|amanha|segunda(?: feira)?|terca(?: feira)?|quarta(?: feira)?|quinta(?: feira)?|sexta(?: feira)?|sabado|domingo)\b\s*",
+            "",
+            value,
+        ).strip()
+        value = re.sub(r"^(?:de\s+)?(?:manha|tarde|noite)\b\s*", "", value).strip()
+        value = re.sub(r"^(?:as\s+)?\d{1,2}(?:\s+\d{2})?\b\s*", "", value).strip()
+    return value
 
 
-def _subject_terms(text):
-    n=_norm(text)
-    ignored={"segunda","terca","quarta","quinta","sexta","sabado","domingo","tenho","tem","aula","certo","ne","na","no","de","do","da","eu"}
-    return {t for t in n.split() if len(t)>=4 and t not in ignored}
+def _segment_families(segment):
+    candidate = _strip_leading_temporal(segment)
+    return language.detect_action_families(candidate)
 
 
-async def _schedule_candidates(db,uid,segment,target_date):
-    """Resolve consulta acadêmica ambígua usando termos + dia da grade.
+def analyze_compound(text):
+    """Retorna estrutura sem efeitos colaterais e sem acessar D1."""
+    normalized = _normalized(text)
+    if not normalized:
+        return {"segments": [], "action_segments": [], "is_compound_action": False}
 
-    Ex.: "segunda tenho sistemas?" pode corresponder a Sistemas Digitais I e ao
-    Laboratório de Sistemas Digitais I. Nesse caso responde ambos, em vez de omitir.
-    """
-    terms=_subject_terms(segment)
-    if not terms or not target_date:return []
-    rows=await ai._rows(db.prepare("""
-        SELECT s.id,s.name,ss.weekday,ss.start_time,ss.end_time,ss.location
-        FROM subjects s
-        JOIN subject_sessions ss ON ss.subject_id=s.id
-        WHERE s.user_id=? AND s.active=1
-        ORDER BY ss.start_time
-    """).bind(uid))
-    target_wd=target_date.weekday(); matches=[]
-    for row in rows:
-        wd=ai._weekday_from_text(str(ai._row(row,"weekday") or ""))
-        if wd!=target_wd:continue
-        name=_norm(ai._row(row,"name") or "")
-        if any(term in name for term in terms):matches.append(row)
-    return matches
+    relations = [r for r in language.detect_relations(text) if r.get("relation") != "limit"]
+    segments = []
+    cursor = 0
+    pending_relation = None
+    pending_connector = None
 
+    for relation in relations:
+        start, end = int(relation["start"]), int(relation["end"])
+        piece = normalized[cursor:start].strip()
+        if piece:
+            segments.append(
+                {
+                    "text": piece,
+                    "relation": pending_relation,
+                    "connector": pending_connector,
+                }
+            )
+        pending_relation = relation["relation"]
+        pending_connector = relation["connector"]
+        cursor = end
 
-def _social_reason(segment):
-    """Extrai apenas contexto social explícito sem inferir relação ou compromisso."""
-    m=re.search(r"\b(?:domingo|segunda|terca|terça|quarta|quinta|sexta|sabado|sábado)\b[^,.!?]{0,80}?\b(?:vou|ia)\s+sair\s+com\s+([A-Za-zÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç-]{2,30})",segment or "",flags=re.I)
-    if not m:return None
-    day=re.search(r"\b(domingo|segunda|terca|terça|quarta|quinta|sexta|sabado|sábado)\b",segment or "",flags=re.I)
-    return ((day.group(1).lower() if day else None),m.group(1).capitalize())
+    tail = normalized[cursor:].strip()
+    if tail:
+        segments.append({"text": tail, "relation": pending_relation, "connector": pending_connector})
 
+    # Sem conector útil não existe estrutura composta para esta camada.
+    if len(segments) < 2:
+        return {"segments": segments, "action_segments": [], "is_compound_action": False}
 
-async def _academic_piece(db,uid,segment):
-    n=_norm(segment); lines=[]
-    subject,subjects=await ai._subject_lookup(db,uid,segment)
-    target_date=ai._date_from_phrase(segment,ai._now().date())
+    action_segments = []
+    for index, segment in enumerate(segments):
+        families = _segment_families(segment["text"])
+        relation = segment.get("relation")
+        contextual = relation in CONTEXT_RELATIONS
+        automatic = bool(families) and relation not in NON_AUTOMATIC_RELATIONS
+        segment.update(
+            {
+                "index": index,
+                "families": families,
+                "contextual": contextual,
+                "automatic_candidate": automatic,
+            }
+        )
+        if families:
+            action_segments.append(segment)
 
-    if target_date and any(x in n for x in ("tenho","tem aula","aula","certo","ne","né")):
-        if subject:
-            sessions=await ai._rows(db.prepare("SELECT weekday,start_time,end_time,location FROM subject_sessions WHERE subject_id=? ORDER BY start_time").bind(ai._row(subject,"id")))
-            target_wd=target_date.weekday(); matching=[]
-            for session in sessions:
-                wd=ai._weekday_from_text(str(ai._row(session,"weekday") or ""))
-                if wd==target_wd:matching.append(session)
-            if matching:
-                details=[]
-                for s in matching:
-                    loc=f" — {ai._row(s,'location')}" if ai._row(s,"location") else ""
-                    details.append(f"{ai._row(s,'start_time')}{loc}")
-                lines.append(f"📚 Sim. {ai._row(subject,'name')} está na sua grade de {ai.DAY_NAMES[target_wd]}: "+", ".join(details)+".")
-            else:
-                lines.append(f"📚 Não achei {ai._row(subject,'name')} na sua grade de {ai.DAY_NAMES[target_wd]}.")
-        else:
-            candidates=await _schedule_candidates(db,uid,segment,target_date)
-            if candidates:
-                rendered=[]; seen=set()
-                for row in candidates:
-                    key=(ai._row(row,"name"),ai._row(row,"start_time"))
-                    if key in seen:continue
-                    seen.add(key)
-                    loc=f" — {ai._row(row,'location')}" if ai._row(row,"location") else ""
-                    rendered.append(f"{ai._row(row,'name')} às {ai._row(row,'start_time')}{loc}")
-                lines.append(f"📚 Sim. Na {ai.DAY_NAMES[target_date.weekday()]} você tem: "+"; ".join(rendered)+".")
-
-    if any(x in n for x in ("pensando em faltar","queria faltar","quero faltar","vou faltar","matar aula","matar a aula")):
-        label=ai._row(subject,"name") if subject else "essa aula"
-        lines.append(f"Sobre faltar {label}: entendi que você está cogitando isso, mas não registrei falta nenhuma. Só mexo nas faltas quando a decisão fica explícita/confirmada.")
-        social=_social_reason(segment)
-        if social:
-            day,name=social
-            lines.append(f"Entendi também o contexto: {day} você pretende sair com {name}. Estou usando isso só para entender a conversa; não cadastrei {name} como relação nem criei compromisso.")
-
-    if "faltas" in n and any(x in n for x in ("quantas","quanto","tenho","nela","nessa")):
-        if subject:
-            lines.append(await attendance._attendance_report(db,uid,int(ai._row(subject,"id"))))
-        else:
-            lines.append(await attendance._attendance_report(db,uid))
-    return lines
+    automatic_actions = [s for s in action_segments if s["automatic_candidate"]]
+    return {
+        "segments": segments,
+        "action_segments": action_segments,
+        "automatic_actions": automatic_actions,
+        "is_compound_action": len(automatic_actions) >= 2,
+        "requires_choice": any(s.get("relation") == "alternative" for s in action_segments),
+        "has_context_clause": any(s.get("contextual") for s in segments),
+    }
 
 
-async def _cooking_piece(db,uid,segment):
-    n=_norm(segment)
-    book,title,data=cooking._find_exact(n)
-    if not data:return []
-    await cooking._save_recipe_context(db,uid,book,title,data)
-    return [cooking._format(title,data)]
+def is_compound_action(text):
+    return bool(analyze_compound(text).get("is_compound_action"))
 
 
-async def _pet_piece(db,uid,segment):
-    item=_supply(segment)
-    if not item:return []
-    entities=await personal_entities(db,uid); referenced=_find_referenced(entities,segment)
-    pets=[e for e in entities if e.get("kind")=="pet"]
-    if referenced and referenced.get("kind")!="pet":referenced=None
-    if not referenced and len(pets)==1:referenced=pets[0]
-    pet=(referenced or {}).get("name") or "seu pet"
-    await v2._save_state(db,uid,"confirm_pet_supply",{"item":item,"pet":pet})
-    return [f"🐾 E anotei o contexto de {pet}: acabou {item}. Quer que eu coloque {item} na lista de itens faltando? Responde `pode` ou `deixa`."]
+def _primary_family(segment):
+    families = segment.get("families") or []
+    return families[0] if families else None
 
 
-async def handle_message(db,token,message):
-    chat_id=(message.get("chat") or {}).get("id")
-    if chat_id is None:return False
-    text=(message.get("text") or "").strip()
-    if not text or text.startswith("/"):return False
-    uid=await ai._uid(db,int(chat_id))
-    if not uid:return False
+def preview_text(analysis):
+    actions = analysis.get("automatic_actions") or []
+    out = ["🧩 Entendi mais de uma ação na mesma mensagem:"]
+    for position, segment in enumerate(actions, 1):
+        family = _primary_family(segment)
+        label = FAMILY_LABELS.get(family, "• ação")
+        relation = segment.get("relation")
+        relation_text = ""
+        if relation:
+            relation_text = f" ({RELATION_LABELS.get(relation, relation)})"
+        out.append(f"{position}. {label}{relation_text} — {segment['text']}")
+    out.append("\nNão registrei tudo de uma vez para não transformar contexto em tarefa por engano. Por enquanto, manda essas ações separadas.")
+    return "\n".join(out)
 
-    segments=_split(text)
-    domains=[_domain(s) for s in segments]
-    meaningful={d for d in domains if d!="conversation"}
-    academic_multi=(len(segments)==1 and domains and domains[0]=="academic" and "falt" in _norm(segments[0]) and "quant" in _norm(segments[0]))
-    if len(meaningful)<2 and not academic_multi:return False
 
-    pieces=[]; handled_domains=set()
-    for segment,domain in zip(segments,domains):
-        current=[]
-        if domain=="academic":current=await _academic_piece(db,uid,segment)
-        elif domain=="cooking":current=await _cooking_piece(db,uid,segment)
-        elif domain=="pet_supply":current=await _pet_piece(db,uid,segment)
-        if current:
-            pieces.extend(current); handled_domains.add(domain)
+async def handle_message(db, token, message):
+    """Preview seguro da primeira fatia da 1.5; não usa D1 nem executa CRUD."""
+    text = (message.get("text") or "").strip()
+    chat_id = (message.get("chat") or {}).get("id")
+    if not text or chat_id is None or text.startswith("/"):
+        return False
 
-    if len(handled_domains)<2 and not (academic_multi and pieces):return False
-    await send_message(token,int(chat_id),"\n\n".join(pieces))
+    analysis = analyze_compound(text)
+    if not analysis.get("is_compound_action"):
+        return False
+
+    await send_message(token, int(chat_id), preview_text(analysis))
     return True
