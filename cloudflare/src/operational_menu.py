@@ -2,6 +2,7 @@
 
 import app
 import runtime_guard
+import ru_menu
 import goal_operational
 import goal_polish
 import goal_deadline_patch
@@ -22,7 +23,7 @@ COTIDIANO_KB = [
     ["✅ Tarefas", "📅 Compromissos"],
     ["🧘 Rotinas", "🎯 Metas"],
     ["🛒 O que está faltando?", "➕ Item faltando"],
-    ["📌 Ler/ver depois"],
+    ["📌 Ler/ver depois", "🍽️ RU"],
     ["👤 Como me chamar", "🏠 Menu principal"],
 ]
 
@@ -163,7 +164,13 @@ async def handle_message(db, token, message):
     # Usuário + estado já vêm do cache por update quando production_usability
     # passou antes deste handler. Mesmo assim, o helper continua seguro isolado.
     uid = await _uid(db, chat_id)
-    state, _ = await runtime_guard._state(db, uid) if uid else (None, {})
+    state, state_payload = await runtime_guard._state(db, uid) if uid else (None, {})
+
+    # RU é um domínio operacional pequeno e fica acoplado ao menu autoritativo,
+    # antes dos fast paths genéricos, para consultas como "qual o almoço hoje?"
+    # não caírem em outro domínio e para o upload TXT poder continuar por estado.
+    if await ru_menu.handle_message(db, token, message, uid=uid, state=state, payload=state_payload):
+        return True
 
     # Metas tinham quatro handlers executados para qualquer texto. Agora só entram
     # quando a conversa realmente está no domínio de metas.
@@ -181,7 +188,7 @@ async def handle_message(db, token, message):
         await send_message(
             token,
             chat_id,
-            "🏠 Cotidiano. Tarefas, compromissos, rotinas, metas, lista para depois e o que está faltando em casa.",
+            "🏠 Cotidiano. Tarefas, compromissos, rotinas, metas, cardápio do RU, lista para depois e o que está faltando em casa.",
             reply_markup=_kb(COTIDIANO_KB),
         )
         return True
