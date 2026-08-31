@@ -46,32 +46,15 @@ Aceitar PDF textual/pesquisável e TXT. Sem OCR em produção.
 
 ## 2.1 — Caracterização do importador atual ✅
 
-Os testes já protegem:
-
-- múltiplos dias do mesmo código;
-- blocos M/T/N;
-- localização opcional;
-- falsos positivos básicos;
-- fonte SIGAA recomendada;
-- PDF/TXT e ausência de OCR.
+Os testes já protegem múltiplos dias, blocos M/T/N, localização opcional, falsos positivos básicos, fonte SIGAA recomendada, PDF/TXT e ausência de OCR.
 
 ## 2.2 — Extração SIGAA mais robusta
 
-Melhorar espaços/quebras de linha, locais, códigos com múltiplos dias, combinações M/T/N, cabeçalhos/rodapés e texto repetido pelo PDF.
-
-Sem alterar o modelo persistido.
+Melhorar espaços/quebras de linha, locais, códigos com múltiplos dias, combinações M/T/N, cabeçalhos/rodapés e texto repetido pelo PDF, sem alterar o modelo persistido.
 
 ## 2.3 — Validação e confiança
 
-Classificar cada bloco:
-
-```text
-✅ reconhecido
-⚠️ precisa conferir
-❌ não reconhecido
-```
-
-Evitar nome vazio, horário impossível, duplicata, código parcialmente reconhecido e linha ambígua.
+Classificar cada bloco como `✅ reconhecido`, `⚠️ precisa conferir` ou `❌ não reconhecido`. Evitar nome vazio, horário impossível, duplicata, código parcialmente reconhecido e linha ambígua.
 
 ## 2.4 — Prévia clara
 
@@ -79,17 +62,9 @@ Mostrar exatamente matéria, dias, horários e local que serão cadastrados, al�
 
 ## 2.5 — Cadastro inicial seguro
 
-Após confirmação:
+Após confirmação, salvar apenas o que apareceu na prévia, manter `subjects` + `subject_sessions` como hoje, evitar duplicatas internas, manter isolamento por usuário e não salvar bloco ambíguo/rejeitado.
 
-- salvar apenas o que apareceu na prévia;
-- manter `subjects` + `subject_sessions` como hoje;
-- evitar duplicatas internas;
-- manter isolamento por usuário;
-- não salvar bloco ambíguo/rejeitado.
-
-Foco oficial: **novo usuário / primeira grade**.
-
-Reimportação de grade existente não é objetivo desta etapa.
+Foco oficial: **novo usuário / primeira grade**. Reimportação de grade existente não é objetivo desta etapa.
 
 ## 2.6 — Onboarding + regressão real
 
