@@ -119,13 +119,13 @@ Não apagar por nome, idade ou aparência. Antes de excluir, classificar e demon
 
 ---
 
-## 5. Linguagem natural — decisões da Etapa 1
+## 5. Linguagem natural — decisões consolidadas da Etapa 1
 
-A Etapa 1 está em andamento e já consolidou decisões importantes.
+A Etapa 1 foi concluída em 31/08/2026. Seus contratos passam a ser invariantes para as próximas etapas.
 
 ### Base linguística comum
 
-`language_primitives.py` concentra famílias linguísticas, sinais e polaridade compartilháveis.
+`language_primitives.py` concentra famílias linguísticas, relações, referências, correções e polaridade compartilháveis.
 
 Regra permanente:
 
@@ -135,7 +135,7 @@ reconhecer linguagem
 autorizar escrita
 ```
 
-O módulo não deve acessar D1, enviar Telegram ou executar CRUD. O domínio continua responsável por validar e persistir.
+O módulo não acessa D1, não envia Telegram e não executa CRUD. O domínio continua responsável por validar e persistir.
 
 ### Contexto curto
 
@@ -146,26 +146,60 @@ Regras:
 - isolamento por `user_id`;
 - janela inicial de 30 minutos;
 - barreira de mudança explícita de assunto;
+- referências `essa/ela/ele/a anterior/a outra`;
 - referências posicionais baseadas na lista realmente mostrada;
 - histórico de alvos recentes;
+- listas candidatas sobrevivem a referências sequenciais quando o foco continua dentro da mesma lista;
+- item novo fora da lista não herda candidatos antigos;
 - não criar outra memória curta paralela.
 
-Chamadores legados de `conversation_layer._remember/_context` devem seguir esse contrato unificado.
+Chamadores legados de `conversation_layer._remember/_context` seguem esse contrato unificado.
 
 ### Correção / auto-reparo
 
-`correction_patch.py` implementa a primeira fatia da Etapa 1.4.
+`correction_patch.py` permite reparar o item recém-criado/corrigido sem duplicá-lo quando o contexto é seguro.
 
-Uma correção temporal curta pode alterar o item recém-criado/corrigido sem duplicá-lo:
+Exemplos suportados:
 
 ```text
-marca dentista amanhã às 15h
-→ não, 16h
+não, 16h
+quinta não, sexta
+não é dentista, é oftalmo
+dentista não, oftalmo
+deixa como tava
 ```
 
-Somente contextos `source=created` ou `source=corrected` são elegíveis para correção silenciosa. Contexto de lista não é.
+Contexto de lista não é corrigido silenciosamente.
 
-A subetapa 1.4 ainda permanece aberta; consultar `docs/STATUS_ATUAL.md` e `docs/ETAPA_1_4_CORRECOES.md`.
+### Frases compostas
+
+`compound_router.py` é uma camada neutra de segmentação. O roteador histórico que misturava acadêmico, culinária, pets e memória não deve ser reativado.
+
+Regras permanentes:
+
+- conjunção descreve relação; não autoriza segunda escrita por si só;
+- causa/condição/concessão são contexto;
+- `ou` representa alternativa e não executa ambos os lados;
+- `pão e leite` ou `João e Maria` não são artificialmente separados;
+- lotes totalmente determinísticos de 2 a 5 tarefas/compromissos/lembretes podem ser confirmados em conjunto;
+- lote incompleto não grava metade;
+- confirmação de lote expira em 10 minutos;
+- persistência do lote usa um único `INSERT` multi-values;
+- grafia/acentos originais são preservados;
+- a ordem criada alimenta o contexto posicional.
+
+### Tempo relativo reservado
+
+`temporal_language.py` reconhece `relative_alert` e `timer`, mas a Etapa 1 não executa cronômetros rápidos.
+
+```text
+me lembra daqui a 5 minutos
+cronometra 30 minutos
+```
+
+não devem ser degradados para tarefa comum. A execução persistente pertence à Etapa 3.
+
+Documento final: `docs/ETAPA_1_6_GATE_FINAL.md`.
 
 ---
 
@@ -249,23 +283,34 @@ Decisões já tomadas:
 - DDL defensivo de presença fora do dispatcher geral;
 - reconciliação global de Durable Objects fora do tempo de resposta do webhook.
 
+Se houver nova queixa de lentidão, instrumentar tempo por handler/D1/Telegram antes de otimizar novamente.
+
 ---
 
-## 9. Acadêmico
+## 9. Acadêmico — próxima frente oficial
 
 Aulas são previstas; presença nunca é presumida.
 
 O sistema pode avisar, perguntar e registrar resposta explícita, além de calcular limites de faltas conforme configuração.
 
-A Etapa 2 do roadmap deve:
+A **Etapa 2** é a próxima etapa oficial e deve:
 
 - consolidar a família acadêmica/presença;
 - concluir edição completa de matérias;
 - suportar múltiplos horários/localizações;
-- transformar importação SIGAA em adaptador sobre modelo acadêmico normalizado;
+- normalizar o modelo acadêmico;
+- transformar importação em pipeline com prévia/confirmação;
+- usar SIGAA como primeiro adaptador oficial;
+- explicar no onboarding o formato aceito/recomendado;
 - preparar reaproveitamento do motor de importação para cursos.
 
-**Não iniciar a Etapa 2 enquanto o gate global da Etapa 1 estiver aberto.**
+Fonte SIGAA recomendada:
+
+```text
+Componente Curricular | Local | Horário
+```
+
+Aceitar PDF com texto pesquisável e TXT. Produção não deve depender de OCR.
 
 ---
 
@@ -293,7 +338,7 @@ Cursos
 Outras
 ```
 
-A categoria `Cursos` é apenas uma forma de capturar algo para ver/fazer depois. Ela **não significa que o módulo completo de Cursos/Trilhas esteja ativo**.
+A categoria `Cursos` é apenas captura simples. Ela não significa que o módulo completo de Cursos/Trilhas esteja ativo.
 
 ---
 
@@ -303,7 +348,9 @@ Essas frentes são parte oficial do roadmap, mas não são funcionalidades compl
 
 ### Etapa 3 — Auxiliares de Tempo / Modo Estudo
 
-Planejada para sessões de estudo, foco/pausa, tópico atual e assistente geral de tempo persistente. A Etapa 1 já prepara linguagem de tempo relativo, mas não deve antecipar o runtime completo.
+Planejada para sessões de estudo, foco/pausa, tópico atual e assistente geral de tempo persistente.
+
+Invariante do Modo Estudo: tópico só avança quando o usuário explicitamente conclui/pula; fim de timer não conclui tópico.
 
 ### Etapa 4 — Cursos e trilhas
 
@@ -319,19 +366,18 @@ Curso
 
 Decisões já tomadas:
 
-- curso autogerido mantém o próximo conteúdo pendente até conclusão/pulo explícito;
+- curso autogerido mantém próximo conteúdo pendente até conclusão/pulo explícito;
 - curso ao vivo segue calendário fixo e não desloca aula automaticamente;
 - conclusão é explícita;
-- importador deve agrupar mídias, listas, soluções, revisões e materiais relacionados antes de salvar;
-- baixa confiança exige prévia/confirmação.
-
-Detalhes completos estão na Trilha Definitiva.
+- importador agrupa mídias/listas/soluções/revisões/materiais relacionados antes de salvar;
+- baixa confiança exige prévia/confirmação;
+- ao fechar a Etapa 4, reformular o menu por áreas da vida antes de iniciar a Etapa 5.
 
 ---
 
 ## 13. Projetos, Inbox e priorização
 
-Também são compromissos do roadmap oficial:
+Compromissos do roadmap oficial:
 
 - Caixa de entrada para captura rápida sem classificação imediata;
 - Projetos/Trabalho com estado, próximos passos, bloqueios e “onde parei?”;
@@ -350,7 +396,7 @@ Direção permanente:
 
 - preferir dados, aliases, tags e índice, não um `if` por exemplo;
 - Library pode sugerir, mas ação persistente pertence ao Core;
-- direitos autorais: preferir dados abertos, domínio público, documentos próprios e resumos/metadados.
+- preferir dados abertos, domínio público, documentos próprios e resumos/metadados.
 
 A Library genérica continua fora do dispatcher principal até etapa própria de reativação seletiva.
 
@@ -387,11 +433,9 @@ Disciplina obrigatória:
 5. teste;
 6. documentação.
 
-Migrations atuais: `0001` a `0008`.
+Migrations conhecidas: `0001` a `0008`.
 
 Migration destrutiva exige snapshot/export D1 e plano de rollback.
-
-Defaults retroativos não devem depender apenas de `app.ensure_user()` porque usuários existentes podem não passar pelo bootstrap completo.
 
 ---
 
@@ -412,7 +456,7 @@ Quando um domínio for trabalhado e houver cobertura suficiente, consolidar a re
 
 ## 19. Testes
 
-A suíte em `cloudflare/tests/` deve proteger funções determinísticas e o caminho realmente alcançado pelo dispatcher.
+A suíte em `cloudflare/tests/` protege o caminho realmente alcançado pelo dispatcher.
 
 Prioridades:
 
@@ -433,18 +477,20 @@ CI verde é condição necessária para merge, mas não prova deploy Cloudflare.
 
 ```text
 0. 🧹 Arrumar a casa                         ✅ concluída
-1. 🗣️ Linguagem natural + conversa real     🚧 em andamento
-2. 🎓 Acadêmico + importação robusta         ⏳
+1. 🗣️ Linguagem natural + conversa real     ✅ concluída
+2. 🎓 Acadêmico + importação robusta         ▶️ próxima etapa
 3. ⏱️ Auxiliares de Tempo / Modo Estudo     ⏳
 4. 📚 Cursos e trilhas de estudo             ⏳
+   fechamento: menu por áreas da vida        ⏳
 5. 📥 Caixa de entrada                       ⏳
 6. 🗂️ Projetos e trabalho                    ⏳
 7. 🧭 Resumo/contexto/priorização             ⏳
 8. 🧠 Memória + Library seletiva             ⏳
 9. 🔒 Hardening                              ⏳
+10. 🌐 Abertura pública/capacidade/escala    ⏳
 ```
 
-O status detalhado da Etapa 1 está em `docs/STATUS_ATUAL.md`.
+O status detalhado está em `docs/STATUS_ATUAL.md`.
 
 ---
 
