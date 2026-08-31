@@ -15,12 +15,14 @@ from grocery_phrase_patch import handle_message as handle_grocery
 from operational_informal_fastpath import handle_message as handle_informal_action
 from quick_time import handle_message as handle_quick_time
 from routine_natural_fastpath import handle_message as handle_natural_routine
+from study_mode import handle_message as handle_study_mode, install as install_study_mode
 from task_context_patch import handle_message as handle_task_context
 from ux_bugfixes import handle_global_navigation
 from weather_context import handle_message as handle_weather_context
 from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress
 
 install_workout_progress()
+install_study_mode()
 
 CORE_BUTTONS = {
     "adicionar", "tarefa", "tarefas", "compromisso", "compromissos", "hoje", "amanha",
@@ -112,9 +114,13 @@ async def handle_message(db, token, message):
     if await handle_weather_context(db, token, message):
         return True
 
-    # Etapa 3: tempo relativo curto precisa vencer os parsers de lembrete/tarefa.
-    # "tenho que ligar daqui a 10 minutos" é alerta rápido, não tarefa permanente.
+    # Etapa 3A: tempo relativo curto vence os parsers de lembrete/tarefa.
     if await handle_quick_time(db, token, message):
+        return True
+
+    # Etapa 3B: o Modo Estudo vem antes do compound router. Listas de tópicos
+    # como "limites, derivadas e integrais" pertencem a uma única sessão.
+    if await handle_study_mode(db, token, message):
         return True
 
     # Mensagens com múltiplas ações claras recebem preview estrutural antes de

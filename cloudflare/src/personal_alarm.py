@@ -7,6 +7,7 @@ mantém um próximo evento armado por usuário. Ele cobre:
 - compromissos (T-5);
 - lembretes pessoais;
 - timers/alertas rápidos;
+- fases do Modo Estudo;
 - checkpoints de rotina;
 - resumo da manhã;
 - fechamento semanal.
@@ -25,6 +26,7 @@ from quick_time import dispatch_due_quick_timers, next_quick_timer
 from reliable_reminders import dispatch_due_reminders
 from reliable_summaries import dispatch_summaries
 from routine_integration import _applies, _routine_reminders, _times
+from study_mode import dispatch_due_study, next_study_event
 from settings import (
     MORNING_SUMMARY_HOUR,
     MORNING_SUMMARY_MINUTE,
@@ -80,43 +82,31 @@ def _at(day, time_text):
 
 
 def _item_desired(item):
-    """Retorna (instante do aviso, tipo lógico) conforme reliable_reminders."""
     details = _row(item, "details") or ""
     if details.startswith("exam:"):
         return None
-
     try:
         day = datetime.strptime(_row(item, "due_date"), "%Y-%m-%d").date()
         due = _at(day, _row(item, "due_time"))
     except Exception:
         return None
-
     kind = _row(item, "kind")
     simple = details == "simple_reminder"
     advance = 5 if kind == "compromisso" and not simple else 0
     desired = due - timedelta(minutes=advance)
-    logical_kind = "lembrete" if simple else kind
-    return desired, logical_kind
+    return desired, "lembrete" if simple else kind
 
 
 def _recoverable_candidate(now, desired, logical_kind):
-    """Replica as janelas úteis sem transformar aviso velho em spam."""
     if desired > now:
         return desired
-
     late = now - desired
     if logical_kind == "tarefa":
-        if desired.date() == now.date():
-            return now + timedelta(seconds=1)
-        return None
+        return now + timedelta(seconds=1) if desired.date() == now.date() else None
     if logical_kind == "lembrete":
-        if late <= timedelta(minutes=STRICT_REMINDER_DELAY_MINUTES):
-            return now + timedelta(seconds=1)
-        return None
+        return now + timedelta(seconds=1) if late <= timedelta(minutes=STRICT_REMINDER_DELAY_MINUTES) else None
     if logical_kind == "compromisso":
-        if late <= timedelta(minutes=APPOINTMENT_GRACE_MINUTES):
-            return now + timedelta(seconds=1)
-        return None
+        return now + timedelta(seconds=1) if late <= timedelta(minutes=APPOINTMENT_GRACE_MINUTES) else None
     return None
 
 
@@ -130,7 +120,6 @@ async def _item_candidates(db, uid, now, day_off):
             "AND due_date>=? ORDER BY due_date,due_time LIMIT 200"
         ).bind(uid, today.isoformat())
     )
-
     for item in items:
         parsed = _item_desired(item)
         if parsed is None:
@@ -138,16 +127,13 @@ async def _item_candidates(db, uid, now, day_off):
         desired, logical_kind = parsed
         if day_off and desired.date() == today and logical_kind != "lembrete":
             continue
-
         iid = int(_row(item, "id"))
         key = f"item:new:{iid}:{today if desired.date() == today else desired.date()}:{desired.strftime('%H:%M')}"
         if await _sent(db, uid, key):
             continue
-
         candidate = _recoverable_candidate(now, desired, logical_kind)
         if candidate is not None:
             candidates.append(candidate)
-
     return candidates
 
 
@@ -160,7 +146,6 @@ async def _routine_candidates(db, uid, now, day_off):
             "WHERE user_id=? AND active=1 AND time_hhmm IS NOT NULL"
         ).bind(uid)
     )
-
     for offset in range(0, 8):
         day = today + timedelta(days=offset)
         for routine in routines:
@@ -168,7 +153,6 @@ async def _routine_candidates(db, uid, now, day_off):
                 continue
             if day_off and day == today:
                 continue
-
             rid = int(_row(routine, "id"))
             for time_text in _times(_row(routine, "time_hhmm")):
                 try:
@@ -182,14 +166,12 @@ async def _routine_candidates(db, uid, now, day_off):
                     candidates.append(desired)
                 elif day == today and now - desired <= timedelta(minutes=ROUTINE_GRACE_MINUTES):
                     candidates.append(now + timedelta(seconds=1))
-
     return candidates
 
 
 async def _summary_candidates(db, uid, now, day_off):
     candidates = []
     today = now.date()
-
     morning_key = f"morning:{today.isoformat()}"
     morning_sent = await _sent(db, uid, morning_key)
     morning = now.replace(
@@ -199,15 +181,12 @@ async def _summary_candidates(db, uid, now, day_off):
         microsecond=0,
     )
     morning_end = morning + timedelta(minutes=MORNING_RECOVERY_MINUTES)
-
     if not day_off and not morning_sent:
         if now < morning:
             candidates.append(morning)
         elif now <= morning_end:
             candidates.append(now + timedelta(seconds=1))
-
-    tomorrow_morning = morning + timedelta(days=1)
-    candidates.append(tomorrow_morning)
+    candidates.append(morning + timedelta(days=1))
 
     if today.weekday() == WEEKLY_SUMMARY_WEEKDAY:
         weekly_key = f"weekly:{today.isoformat()}"
@@ -224,7 +203,6 @@ async def _summary_candidates(db, uid, now, day_off):
                 candidates.append(weekly)
             elif now <= weekly_end:
                 candidates.append(now + timedelta(seconds=1))
-
     return candidates
 
 
@@ -240,11 +218,16 @@ async def _next_event(db, uid, now=None):
     candidates.extend(await _routine_candidates(db, uid, now, day_off))
     candidates.extend(await _summary_candidates(db, uid, now, day_off))
 
-    # Timers rápidos ignoram Day-off: um cronômetro de cozinha ou alerta pontual
-    # continua sendo uma instrução explícita e temporária do usuário.
-    quick = await next_quick_timer(db, uid, now=now.astimezone(timezone.utc))
+    now_utc = now.astimezone(timezone.utc)
+    quick = await next_quick_timer(db, uid, now=now_utc)
     if quick is not None:
         candidates.append(quick)
+
+    # Sessão de estudo ativa também é instrução explícita do usuário e não é
+    # silenciada por Day-off. O relógio apenas muda a fase; nunca conclui tópico.
+    study = await next_study_event(db, uid, now=now_utc)
+    if study is not None:
+        candidates.append(study)
 
     return min(candidates) if candidates else None
 
@@ -263,7 +246,6 @@ class PersonalAlarm(DurableObject):
             uid = int(raw)
         except Exception:
             return Response("invalid user_id", status=400)
-
         await self.storage.put("user_id", uid)
         await self._schedule(uid)
         return Response("ok")
@@ -283,12 +265,14 @@ class PersonalAlarm(DurableObject):
         if uid is None:
             return
         uid = int(uid)
-
         await expire_stale_day_offs(self.env.DB)
 
-        # Todos os dispatchers são idempotentes. Quick timers usam status próprio
-        # + notification_log; os demais preservam suas políticas existentes.
         await dispatch_due_quick_timers(
+            self.env.DB,
+            self.env.TELEGRAM_BOT_TOKEN,
+            user_id=uid,
+        )
+        await dispatch_due_study(
             self.env.DB,
             self.env.TELEGRAM_BOT_TOKEN,
             user_id=uid,
