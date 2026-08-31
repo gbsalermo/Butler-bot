@@ -51,6 +51,8 @@ REFERENCE_PATTERNS = (
     ("ordinal", r"\bo primeiro\b", "o primeiro"),
     ("ordinal", r"\ba segunda\b", "a segunda"),
     ("ordinal", r"\bo segundo\b", "o segundo"),
+    ("ordinal", r"\ba terceira\b", "a terceira"),
+    ("ordinal", r"\bo terceiro\b", "o terceiro"),
     ("deictic", r"\bessa\b", "essa"),
     ("deictic", r"\besse\b", "esse"),
     ("deictic", r"\bisso\b", "isso"),

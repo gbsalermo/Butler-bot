@@ -60,9 +60,12 @@ def context_is_fresh(created_at: str | None, *, now: datetime | None = None, max
 def ordinal_index(text: str | None) -> int | None:
     normalized = language.normalize_text(language.strip_butler(text))
     mapping = {
-        "primeira": 0, "primeiro": 0,
-        "segunda": 1, "segundo": 1,
-        "terceira": 2, "terceiro": 2,
+        "primeira": 0,
+        "primeiro": 0,
+        "segunda": 1,
+        "segundo": 1,
+        "terceira": 2,
+        "terceiro": 2,
     }
     for word, index in mapping.items():
         if f" {word} " in f" {normalized} ":
@@ -82,16 +85,37 @@ def should_consume_context(text: str | None) -> bool:
         return False
 
     families = set(language.detect_action_families(text))
-    if families.intersection({"reminder", "create_task", "create_appointment", "scheduled_event", "create_routine", "planned_activity", "timer"}):
+    if families.intersection(
+        {
+            "reminder",
+            "create_task",
+            "create_appointment",
+            "scheduled_event",
+            "create_routine",
+            "planned_activity",
+            "timer",
+        }
+    ):
         return False
 
     if language.detect_references(text) or ordinal_index(text) is not None:
         return True
 
     return normalized in {
-        "certo", "ok", "feito", "pronto", "ja foi",
-        "adiar", "adia", "depois", "mais tarde", "agora nao",
-        "nao agora", "daqui a pouco", "mantem", "pendente",
+        "certo",
+        "ok",
+        "feito",
+        "pronto",
+        "ja foi",
+        "adiar",
+        "adia",
+        "depois",
+        "mais tarde",
+        "agora nao",
+        "nao agora",
+        "daqui a pouco",
+        "mantem",
+        "pendente",
     }
 
 
@@ -126,7 +150,11 @@ def referenced_candidate_id(payload: dict | None, text: str | None) -> int | Non
         history = [int(x) for x in (payload.get("history_ids") or []) if str(x).isdigit()]
         return history[1] if len(history) > 1 else None
 
-    if "latest" in kinds or kinds.intersection({"deictic", "pronoun"}) or values.intersection({"aquela", "aquele"}):
+    if (
+        "latest" in kinds
+        or kinds.intersection({"deictic", "pronoun"})
+        or values.intersection({"aquela", "aquele"})
+    ):
         try:
             return int(payload.get("id"))
         except Exception:
@@ -155,7 +183,15 @@ def reference_due_date_qualifier(text: str | None, *, today=None):
     return parse_date(match.group(1), base)
 
 
-async def remember(db, uid: int, kind: str, target_id: int | None = None, detail: dict | None = None, *, candidate_ids: list[int] | None = None):
+async def remember(
+    db,
+    uid: int,
+    kind: str,
+    target_id: int | None = None,
+    detail: dict | None = None,
+    *,
+    candidate_ids: list[int] | None = None,
+):
     """Grava contexto por usuário mantendo um pequeno histórico de alvos distintos."""
     history_ids: list[int] = []
     previous = await latest(db, uid, allow_stale=False)
@@ -185,7 +221,14 @@ async def remember(db, uid: int, kind: str, target_id: int | None = None, detail
     return payload
 
 
-async def remember_list(db, uid: int, kind: str, candidate_ids: list[int], *, source: str = "list"):
+async def remember_list(
+    db,
+    uid: int,
+    kind: str,
+    candidate_ids: list[int],
+    *,
+    source: str = "list",
+):
     ids = [int(x) for x in candidate_ids]
     target = ids[0] if ids else None
     return await remember(db, uid, kind, target, {"source": source}, candidate_ids=ids)
@@ -233,3 +276,22 @@ async def resolve_daily_item(db, uid: int, text: str | None, *, kind: str | None
     if qualifier is not None and _row(row, "due_date") != qualifier.isoformat():
         return None
     return row
+
+
+# Compatibilidade para módulos antigos que ainda chamam conversation_layer._remember
+# e conversation_layer._context. A Etapa 1.3 não cria uma segunda fonte de contexto:
+# ambos passam a delegar para esta autoridade e herdam expiração/histórico.
+async def legacy_remember(db, uid, kind, target_id=None, detail=None):
+    return await remember(db, uid, kind, target_id, detail)
+
+
+async def legacy_context(db, uid):
+    return await latest(db, uid)
+
+
+def install():
+    """Redireciona a API de contexto legada para a autoridade da Etapa 1.3."""
+    import conversation_layer
+
+    conversation_layer._remember = legacy_remember
+    conversation_layer._context = legacy_context

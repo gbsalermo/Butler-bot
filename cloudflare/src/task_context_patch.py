@@ -158,5 +158,9 @@ async def handle_message(db, token, message):
 
 
 def install():
+    # A Etapa 1.3 transforma short_context na única autoridade de contexto curto.
+    # Chamadores antigos de conversation_layer._remember/_context passam pela
+    # mesma expiração e pelo mesmo histórico sem precisarem ser migrados de uma vez.
+    short_context.install()
     runtime_guard._task_list = _task_list
     runtime_guard._find_task = _find_task
