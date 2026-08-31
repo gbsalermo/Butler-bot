@@ -2,7 +2,7 @@ import re
 import unicodedata
 
 import runtime_guard
-import conversation_layer
+import short_context
 from telegram_api import send_message
 
 TASK_KB = [["✅ Concluir tarefa", "⏰ Adiar tarefa"],["📌 Manter pendente", "🚫 Cancelar tarefa"],["⬅️ Voltar ao cotidiano"]]
@@ -66,6 +66,18 @@ async def _task_list(db, uid):
     rs = await _visible_tasks(db, uid)
     if not rs:
         return "✅ Nenhuma tarefa ativa. As antigas continuam no histórico; eu só parei de transformar essa tela num museu. 😌"
+
+    # A ordem exibida vira contexto posicional curto. Assim `a segunda` aponta
+    # para a segunda linha que o usuário realmente viu, não para uma nova busca
+    # cuja ordenação possa ter mudado entre os turnos.
+    await short_context.remember_list(
+        db,
+        uid,
+        "tarefa",
+        [int(_row(r, "id")) for r in rs],
+        source="task_list",
+    )
+
     out = ["✅ Tarefas"]
     for pos, r in enumerate(rs, 1):
         icon = {"pendente":"⏳", "concluido":"✅", "cancelado":"🚫"}.get(_row(r,"status"), "•")
@@ -79,6 +91,7 @@ async def _task_list(db, uid):
 
 async def _find_task(db, uid, text):
     raw = (text or "").strip()
+
     # Na tela de tarefas, números são posições temporárias, não IDs eternos do banco.
     m = re.search(r"#?(\d+)\b", raw)
     if m:
@@ -86,6 +99,12 @@ async def _find_task(db, uid, text):
         rs = await _visible_tasks(db, uid)
         if 1 <= pos <= len(rs):
             return rs[pos-1]
+
+    # Referências naturais (`essa`, `ela`, `a segunda`) usam somente contexto
+    # fresco e isolado por usuário.
+    contextual = await short_context.resolve_daily_item(db, uid, raw, kind="tarefa")
+    if contextual:
+        return contextual
 
     target = re.sub(r"^(?:certo|ok|feito|concluir|conclui|finalizar|finaliza|cancelar|cancela|adiar|adia|manter|pendente)\s+", "", raw, flags=re.I).strip()
     if not target:
@@ -108,6 +127,8 @@ async def handle_message(db, token, message):
     n = _norm(text)
 
     # Quando um lembrete acabou de apontar uma tarefa, "adiar" não deve perguntar qual tarefa.
+    # O contexto, porém, expira: um `depois` solto muito tempo mais tarde não
+    # pode ressuscitar uma tarefa antiga.
     postpone_only = n in (
         "adiar", "adia", "depois", "mais tarde", "agora nao", "agora não",
         "deixa pra depois", "deixa para depois", "nao agora", "não agora", "daqui a pouco"
@@ -115,7 +136,7 @@ async def handle_message(db, token, message):
     if not postpone_only:
         return False
 
-    ctx = await conversation_layer._context(db, uid)
+    ctx = await short_context.latest(db, uid)
     if not ctx or ctx.get("kind") != "tarefa" or not ctx.get("id"):
         return False
 
