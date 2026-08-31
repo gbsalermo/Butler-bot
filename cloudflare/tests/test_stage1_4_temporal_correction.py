@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 import correction_patch
 
@@ -43,14 +43,13 @@ class _Stmt:
             item["due_time"] = new_time
             item["status"] = "pendente"
         elif "INSERT INTO natural_events" in self.sql:
-            import json
             uid, target_id, detail = self.args
             self.db.events.append(
                 {
                     "user_id": int(uid),
                     "target_id": int(target_id),
                     "detail": detail,
-                    "created_at": "2026-08-31 00:30:00",
+                    "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                 }
             )
         return _Result([])
@@ -59,6 +58,8 @@ class _Stmt:
 class _DB:
     def __init__(self):
         import json
+
+        fresh = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         self.users = {100: 1, 200: 2}
         self.items = {
             (1, 10): {
@@ -87,7 +88,7 @@ class _DB:
                 "detail": json.dumps(
                     {"kind": "compromisso", "id": 10, "detail": {"source": "created"}, "context_version": 2}
                 ),
-                "created_at": "2026-08-31 00:20:00",
+                "created_at": fresh,
             },
             {
                 "user_id": 2,
@@ -95,7 +96,7 @@ class _DB:
                 "detail": json.dumps(
                     {"kind": "tarefa", "id": 20, "detail": {"source": "task_list"}, "context_version": 2}
                 ),
-                "created_at": "2026-08-31 00:20:00",
+                "created_at": fresh,
             },
         ]
 
@@ -110,7 +111,7 @@ def _fixed_now():
 def test_temporal_correction_understands_short_repair_phrases(monkeypatch):
     monkeypatch.setattr(correction_patch, "_now", _fixed_now)
     assert correction_patch.temporal_correction("não, 16h") == {"date": None, "time": "16:00"}
-    assert correction_patch.temporal_correction("quis dizer terça") ["date"].isoformat() == "2026-09-01"
+    assert correction_patch.temporal_correction("quis dizer terça")["date"].isoformat() == "2026-09-01"
     result = correction_patch.temporal_correction("na verdade quarta às 14:30")
     assert result["date"].isoformat() == "2026-09-02"
     assert result["time"] == "14:30"
