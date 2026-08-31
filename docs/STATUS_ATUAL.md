@@ -2,18 +2,18 @@
 
 **Data-base:** 31/08/2026  
 **Branch de produção:** `main`  
-**Snapshot técnico validado da Etapa 1:** `f08bff2e4edf5303f8b79a5a420ecd80356043fa`  
-**Handoff documental da Etapa 1:** `e3220d95aed43b1e5730709e56aa07d6716e77d9`  
-**Fase oficial:** **Etapa 2 — Importação acadêmica confiável**  
-**Subetapa em andamento:** **2.1 — Caracterização do importador atual**
+**Etapa 1 — Linguagem natural:** ✅ concluída  
+**Etapa 2 — Importação acadêmica confiável:** ✅ concluída  
+**Próxima fase oficial:** **Etapa 3 — Auxiliares de Tempo / Modo Estudo**  
+**Snapshot técnico validado:** `1542ec1e1f932fdcc75b32d097ddee0089ee2034`
 
-> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para runtime use `ARCHITECTURE.md`; para decisões duradouras use `CONTINUIDADE.md`; para ordem futura use `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`. O escopo atualizado da Etapa 2 está em `ETAPA_2_1_INVENTARIO_ACADEMICO.md`.
+> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para runtime use `ARCHITECTURE.md`; para decisões duradouras use `CONTINUIDADE.md`; para ordem futura use `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`. O fechamento acadêmico está em `ETAPA_2_GATE_FINAL.md`.
 
 ---
 
 ## 1. O projeto em uma frase
 
-Butler é um assistente pessoal multiusuário via Telegram que combina organização cotidiana, universidade, tarefas, compromissos, rotinas, metas, musculação, mercado, clima e acompanhamento temporal confiável, mantendo operações críticas determinísticas e linguagem natural conservadora.
+Butler é um assistente pessoal multiusuário via Telegram que combina organização cotidiana, universidade, tarefas, compromissos, lembretes, rotinas, metas, musculação, mercado, clima e acompanhamento temporal confiável, mantendo operações críticas determinísticas e linguagem natural conservadora.
 
 Produção:
 
@@ -36,8 +36,8 @@ A raiz `src/` continua histórica/preservada e não governa produção.
 ```text
 0. 🧹 Arrumar a casa                         ✅ concluída
 1. 🗣️ Linguagem natural + conversa real     ✅ concluída
-2. 🎓 Importação acadêmica confiável         🚧 em andamento — 2.1
-3. ⏱️ Auxiliares de Tempo / Modo Estudo     ⏳ planejada
+2. 🎓 Importação acadêmica confiável         ✅ concluída
+3. ⏱️ Auxiliares de Tempo / Modo Estudo     ▶️ próxima etapa
 4. 📚 Cursos e trilhas de estudo             ⏳ planejada
    fechamento: menu por áreas da vida        ⏳ planejado
 5. 📥 Caixa de entrada                       ⏳ planejada
@@ -48,45 +48,39 @@ A raiz `src/` continua histórica/preservada e não governa produção.
 10. 🌐 Abertura pública/capacidade/escala    ⏳ planejada
 ```
 
-### Etapa 1 — concluída
-
-| Subetapa | Status | Resultado principal |
-|---|---|---|
-| 1.1 Auditoria da linguagem | ✅ | mapa da linguagem ativa, corpus e primitivas determinísticas |
-| 1.2 Base Linguística Comum | ✅ | famílias compartilhadas, polaridade e redução de parsers concorrentes |
-| 1.3 Referências + Contexto Curto | ✅ | `short_context.py`, expiração, isolamento, referências e listas posicionais |
-| 1.4 Correção / Auto-reparo | ✅ | correção temporal/título, elipse e rollback seguro sem duplicar item |
-| 1.5 Frases compostas | ✅ | conjunções, preview e lote seguro de 2–5 ações com confirmação |
-| 1.6 Conversas completas | ✅ | integração multi-turno, dois usuários, expiração, barreira de assunto e gate final |
-
-Documento final: `docs/ETAPA_1_6_GATE_FINAL.md`.
+O arquivo `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` continua sendo a autoridade da **ordem e dos gates**. Este `STATUS_ATUAL.md` é a autoridade do ponto de continuidade quando rótulos históricos de status em documentos maiores ainda não tiverem sido sincronizados.
 
 ---
 
-## 3. Decisão de produto para a Etapa 2
+## 3. Resultado consolidado da Etapa 1
 
-O formato acadêmico atual foi validado como **suficiente e excelente para o uso desejado**.
+A linguagem natural foi estruturada sem religar NLU ampla/opaca.
 
-A Etapa 2 **não é uma reforma do modelo acadêmico**.
+Ativos:
 
-Objetivo oficial:
+- `language_primitives.py` — famílias, relações, referências e polaridade sem CRUD;
+- `short_context.py` — contexto curto de 30 min, isolamento por usuário e referências posicionais;
+- `correction_patch.py` — auto-reparo recente seguro (`não, 16h`, `quinta não, sexta`, correção de título, `desfaz`);
+- `compound_router.py` — mensagens compostas, conjunções, preview e lote confirmado de 2–5 ações;
+- `temporal_language.py` — reconhecimento de alertas relativos/timers reservado para a Etapa 3.
 
-> aumentar a confiança ao extrair e cadastrar as matérias de novos usuários.
+Invariante permanente:
 
-Ficam fora do escopo, salvo bug mínimo explicitamente aprovado:
+```text
+reconhecer linguagem ≠ autorizar escrita
+```
 
-- redesenhar `subjects` ou `subject_sessions`;
-- adicionar professor/carga horária/semestre/observações;
-- criar novo modelo de avaliações/trabalhos;
-- refatorar presença/faltas;
-- criar migration acadêmica por melhoria arquitetural;
-- alterar o formato de matéria/horário que já funciona.
-
-Os achados de reimportação destrutiva e identidade de matéria permanecem documentados como observações técnicas, mas **não puxam esta etapa para uma reestruturação**.
+Gate final: `docs/ETAPA_1_6_GATE_FINAL.md`.
 
 ---
 
-## 4. Formato acadêmico que deve permanecer
+## 4. Resultado consolidado da Etapa 2
+
+### Decisão de produto
+
+O formato acadêmico atual foi validado como suficiente e **não foi remodelado**.
+
+Permanece:
 
 ```text
 subjects
@@ -95,134 +89,135 @@ subjects
 
 subject_sessions
 → dia da semana
-→ horário inicial
-→ horário final
+→ início
+→ fim
 → local
 ```
 
-O sistema atual já permite:
+Não foram adicionados professor, carga horária, semestre, novo modelo de avaliações ou migration acadêmica.
 
-- múltiplos horários por matéria;
-- cadastro manual;
-- edição de nome/dia/horário/local;
-- adicionar/remover aula;
-- trancar/remover matéria;
-- provas;
-- faltas/limite de faltas;
-- avisos acadêmicos;
-- consultas naturais.
+### Novo importador de primeiro acesso
 
-Nada disso precisa ser remodelado na Etapa 2.
+`academic_import.py` é a camada de confiança para **novo usuário sem matérias cadastradas**.
 
----
+Fluxo:
 
-## 5. Contrato da importação para novos usuários
+```text
+PDF textual/TXT
+→ extração de texto existente
+→ parse_schedule_report
+→ validação + deduplicação
+→ prévia
+→ confirmação explícita
+→ subjects + subject_sessions atuais
+```
 
-Fonte SIGAA recomendada:
+Se houver qualquer trecho acadêmico ambíguo:
+
+```text
+itens seguros + issue
+→ mostra o que entendeu
+→ mostra trecho problemático + motivo
+→ NÃO persiste nada
+```
+
+O importador trata conservadoramente:
+
+- `35M45`, `24M23`, `2T23` e demais códigos válidos do contrato atual;
+- múltiplos dias;
+- múltiplos códigos na mesma matéria;
+- linhas repetidas por extração de PDF;
+- nome quebrado em linhas;
+- ordem vertical `matéria → local → horário`;
+- local depois do código;
+- local ausente;
+- cabeçalhos/rodapés comuns;
+- códigos inválidos, invertidos, repetidos ou não contíguos como revisão obrigatória.
+
+Usuário que já possui matérias continua no comportamento acadêmico existente; a Etapa 2 não transformou reimportação em uma reforma estrutural.
+
+Fonte SIGAA recomendada continua:
 
 ```text
 Componente Curricular | Local | Horário
 ```
 
-Aceitar:
+Aceitos:
 
 - PDF com texto pesquisável/selecionável;
 - TXT.
 
-Produção não depende de OCR.
+Sem OCR em produção.
 
-Fluxo obrigatório:
+Gate final: `docs/ETAPA_2_GATE_FINAL.md`.
+
+### Validação
+
+- PR #29: caracterização do importador atual;
+- merge da caracterização: `0270d48ba51e910514ee99ae7b7bb18861668fd1`;
+- PR #30: importação acadêmica confiável;
+- merge técnico final: `1542ec1e1f932fdcc75b32d097ddee0089ee2034`;
+- suíte da PR: **302 testes passando**;
+- regressão pós-merge da `main`: **success**, run #244.
+
+CI verde comprova regressão do repositório; não prova sozinho deploy Cloudflare.
+
+---
+
+## 5. Próxima etapa — Etapa 3
+
+Documento existente: `docs/ETAPA_3_ASSISTENTES_DE_TEMPO.md`.
+
+A Etapa 3 possui dois assistentes irmãos.
+
+### 3A — Assistente Geral de Tempo
+
+Transformar em execução persistente o contrato linguístico já preparado:
 
 ```text
-arquivo
-→ extração
-→ validação
-→ prévia
-→ confirmação explícita
-→ cadastro no modelo atual
+me lembra de desligar o ovo daqui a 5 minutos
+me avisa daqui a 20 minutos
+me lembra daqui a 1 hora de tirar a roupa do varal
+cronometra 30 minutos
+inicia um timer de 45 segundos
 ```
 
-O Butler deve preferir marcar uma linha como ambígua a cadastrar matéria errada.
+Requisitos:
 
----
+- alertas rápidos não viram tarefas normais;
+- persistem sem depender da conversa aberta;
+- sobrevivem a restart/redeploy;
+- usar Durable Object/alarm/infra temporal existente, nunca `sleep()` no Worker;
+- idempotência de disparo;
+- cancelamento seguro;
+- dois usuários isolados;
+- política de Day-off definida.
 
-## 6. Sequência atual da Etapa 2
+### 3B — Modo Estudo
+
+Exemplo:
 
 ```text
-2.1 Caracterização do importador atual
-→ parser SIGAA + testes do comportamento que já funciona
+Matéria: Cálculo I
+Tópicos:
+1. Limites
+2. Derivadas
+3. Integrais
 
-2.2 Extração SIGAA mais robusta
-→ variações de PDF/TXT, espaços, quebras de linha, códigos e locais
-
-2.3 Validação/confiança
-→ reconhecido / precisa conferir / não reconhecido
-→ evitar duplicatas e falsos positivos
-
-2.4 Prévia clara
-→ mostrar exatamente matérias, dias, horários e locais que serão cadastrados
-
-2.5 Cadastro inicial seguro
-→ somente após confirmação
-→ mesmo modelo atual
-→ isolamento por usuário
-
-2.6 Onboarding + corpus real
-→ orientar novo usuário sobre onde pegar a grade e como exportar
-→ cadastro manual continua disponível
+25 min foco / 5 min pausa
 ```
 
-**Não há etapa de migration/modelo acadêmico prevista neste escopo.**
+Invariante obrigatório:
+
+**o tópico só avança quando o usuário explicitamente disser que concluiu ou pulou.**
+
+Fim de timer, pausa ou passagem de tempo nunca concluem conteúdo automaticamente.
 
 ---
 
-## 7. Autoridades acadêmicas atuais
+## 6. Scheduler e redundância
 
-- `app.py`: cadastro-base, parser SIGAA, importação/preview/persistência atual;
-- `academic_polish.py`: edição guiada real e onboarding SIGAA via monkeypatch instalado;
-- `academic_intelligence.py`: consultas naturais, provas e lembretes de prova;
-- `exam_phrase_patch.py` / `exam_cancel_patch.py`: criação/cancelamento natural de prova;
-- `attendance_patch.py`: base de faltas/presença explícita;
-- `attendance_enhancement.py`: relatórios/limite e callback aprimorado;
-- `attendance_management.py`: editar limite e excluir/corrigir falta;
-- `attendance_production_fix.py`: T-10/T0, heartbeat e menu acadêmico final;
-- `attendance_alarm.py`: contingência Durable Object para avisos acadêmicos.
-
-A Etapa 2 só deve mexer nessas autoridades quando necessário para melhorar a importação de novos usuários.
-
----
-
-## 8. Invariantes acadêmicos
-
-- aula prevista nunca implica presença;
-- `vou` não grava presença fictícia;
-- falta só por ação explícita;
-- importação sempre tem prévia;
-- imagem/scan não entra como PDF textual;
-- dados isolados por usuário;
-- cadastro manual permanece disponível;
-- bloco ambíguo não deve ser inventado;
-- o modelo acadêmico atual deve permanecer estável durante esta etapa.
-
----
-
-## 9. Linguagem natural consolidada
-
-A Etapa 1 deixou ativos:
-
-- `language_primitives.py` — famílias/relações/referências/polaridade sem CRUD;
-- `short_context.py` — contexto de 30 min, referências e listas posicionais;
-- `correction_patch.py` — auto-reparo recente seguro;
-- `compound_router.py` — mensagens compostas e lote confirmado;
-- `temporal_language.py` — classifica alertas relativos/timers para a futura Etapa 3.
-
-Quick timers não devem virar tarefas normais antes da Etapa 3.
-
----
-
-## 10. Scheduler e performance
-
-Scheduler possui redundância:
+Após o incidente de 30/08/2026 existem duas linhas temporais:
 
 ```text
 Cron Trigger
@@ -230,13 +225,53 @@ Cron Trigger
 Durable Objects (PersonalAlarm / AttendanceAlarm)
 ```
 
-`notification_log` protege idempotência.
+Ambas convergem para regras autoritativas e `notification_log` protege idempotência.
 
-O caminho quente já recebeu cache por update, gates lexicais e reconciliação de alarms pós-resposta. Se latência voltar a ser problema, instrumentar por handler/D1/Telegram antes de otimizar novamente.
+No webhook, reconciliação de alarms usa trabalho pós-resposta para não bloquear respostas interativas.
+
+Detalhes: `docs/SCHEDULER_REDUNDANCY.md`.
 
 ---
 
-## 11. Banco e migrations
+## 7. Performance
+
+O caminho quente já recebeu:
+
+- cache por update de `telegram_chat_id → user_id`;
+- cache por update de `user_sessions`;
+- gates lexicais antes de D1;
+- DDL de presença removido do dispatcher geral;
+- reconciliação de Durable Objects fora do tempo de resposta do webhook.
+
+Se a latência voltar a ser um problema, o próximo passo é instrumentar **tempo por handler/D1/Telegram**, não otimizar aleatoriamente.
+
+---
+
+## 8. Funcionalidades operacionais relevantes
+
+Ativas:
+
+- tarefas/pendências;
+- compromissos;
+- lembretes pessoais;
+- agenda Hoje/Amanhã/7 dias;
+- matérias/provas/presença/faltas;
+- importação acadêmica por PDF textual/TXT;
+- rotinas e metas;
+- mercado/itens faltando;
+- musculação/progresso;
+- Ler/Ver Depois: Livros, Filmes, Cursos e Outras;
+- Day-off;
+- resumos matinal/semanal;
+- clima Open-Meteo com comentário humano;
+- administração do proprietário;
+- scheduler redundante.
+
+`🎓 Cursos` em Ler/Ver Depois continua sendo backlog simples, não o módulo de Cursos/Trilhas da Etapa 4.
+
+---
+
+## 9. Banco e migrations
 
 Migrations formais conhecidas:
 
@@ -252,41 +287,21 @@ Migrations formais conhecidas:
 0009_ru_menu.sql
 ```
 
-A lista anterior do handoff parava em `0008`; isso foi corrigido durante a 2.1.
-
-**A Etapa 2 atual não exige nova migration acadêmica.**
+A Etapa 2 não adicionou migration.
 
 Migration continua sendo fonte formal; `ensure_schema()` é defesa operacional, não substituto.
 
 ---
 
-## 12. Validação
+## 10. Instrução para a próxima IA
 
-Fechamento técnico da Etapa 1:
+1. confirmar commits posteriores a `1542ec1e1f932fdcc75b32d097ddee0089ee2034`;
+2. ler `docs/ETAPA_3_ASSISTENTES_DE_TEMPO.md` e a Trilha Definitiva;
+3. iniciar **Etapa 3 — Auxiliares de Tempo / Modo Estudo**;
+4. começar pela infraestrutura persistente do Assistente Geral de Tempo ou pela ordem indicada no documento da Etapa 3, sem criar roadmap paralelo;
+5. preservar o invariante de progresso explícito do Modo Estudo;
+6. não transformar alertas rápidos em `daily_items` de tarefa;
+7. não reabrir o modelo acadêmico sem nova decisão explícita do produto;
+8. não religar Broad NLU/Library histórica como atalho.
 
-- merge `f08bff2e4edf5303f8b79a5a420ecd80356043fa`;
-- regressão pós-merge da `main`: success.
-
-Handoff documental:
-
-- merge `e3220d95aed43b1e5730709e56aa07d6716e77d9`.
-
-Etapa 2.1 trabalha na branch `refactor/etapa-2-1-inventario-academico`.
-
-Os testes de caracterização já cobrem parser SIGAA, múltiplos dias, blocos M/T/N, localização opcional, falsos positivos básicos e onboarding.
-
-CI verde comprova regressão do repositório; não prova sozinho deploy Cloudflare.
-
----
-
-## 13. Instrução para a próxima IA
-
-1. confirmar commits posteriores;
-2. ler `docs/ETAPA_2_1_INVENTARIO_ACADEMICO.md`;
-3. preservar o modelo acadêmico atual;
-4. fechar 2.1 e iniciar **2.2 — Extração SIGAA mais robusta**;
-5. não criar migration/modelo acadêmico novo sem nova decisão explícita do produto;
-6. focar novos usuários/primeira grade;
-7. não religar NLU/Library histórica como atalho.
-
-**Próximo trabalho oficial: concluir 2.1 e melhorar a confiabilidade do parser/importador SIGAA para novos usuários.**
+**Próximo trabalho oficial: Etapa 3 — Assistente Geral de Tempo + Modo Estudo.**

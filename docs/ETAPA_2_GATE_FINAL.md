@@ -1,7 +1,7 @@
 # Butler — Etapa 2: Gate final da importação acadêmica confiável
 
 **Data-base:** 31/08/2026  
-**Status:** concluída tecnicamente; aguardando merge/pós-merge  
+**Status:** ✅ concluída  
 **Escopo confirmado:** confiança da primeira importação acadêmica, sem reformular o modelo atual
 
 ## Objetivo
@@ -140,7 +140,9 @@ Sem OCR em produção para print/foto/PDF escaneado.
 - ausência de migration/schema novo;
 - instalação do fluxo no runtime.
 
-Primeiro gate da PR #30: **302 testes passando**.
+Gate da PR #30: **302 testes passando**.  
+Merge técnico da Etapa 2: `1542ec1e1f932fdcc75b32d097ddee0089ee2034`.  
+Regressão pós-merge da `main`: **success** (run #244).
 
 ## Gate de saída
 
@@ -158,10 +160,10 @@ Primeiro gate da PR #30: **302 testes passando**.
 - [x] isolamento por `user_id` mantido;
 - [x] onboarding SIGAA atual preservado;
 - [x] regressão completa da PR verde;
-- [ ] merge da PR #30;
-- [ ] regressão pós-merge da `main` verde;
-- [ ] `STATUS_ATUAL`/Trilha apontando Etapa 3.
+- [x] PR #30 mesclada;
+- [x] regressão pós-merge da `main` verde;
+- [x] handoff atualizado para Etapa 3.
 
 ## Próxima etapa
 
-Após o fechamento dos três últimos gates: **Etapa 3 — Auxiliares de Tempo / Modo Estudo**.
+**Etapa 3 — Auxiliares de Tempo / Modo Estudo**.
