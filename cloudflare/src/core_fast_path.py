@@ -9,6 +9,7 @@ import app
 import language_primitives as language
 import runtime_guard
 from colloquial_reminder_fastpath import handle_message as handle_colloquial_reminder
+from compound_router import handle_message as handle_compound_message, is_compound_action
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery
 from operational_informal_fastpath import handle_message as handle_informal_action
@@ -40,29 +41,18 @@ EXACT_BUTTONS = {
     "📚 Minhas matérias", "🧘 Rotinas", "🎯 Metas",
 }
 
-# Ações do núcleo agora entram pelo contrato comum. CORE_HINTS fica restrito a
-# consultas/domínios que ainda não são atos linguísticos genéricos da Etapa 1.
 CORE_ACTION_FAMILIES = {
-    "reminder",
-    "create_task",
-    "create_appointment",
-    "create_routine",
-    "complete",
-    "cancel",
-    "reschedule",
+    "reminder", "create_task", "create_appointment", "create_routine",
+    "complete", "cancel", "reschedule",
 }
 
 CORE_HINTS = (
-    # agenda
     "minha agenda", "o que tenho hoje", "o que tenho amanha", "o que tenho amanhã",
     "o que tenho agendado", "agenda de hoje", "agenda de amanha", "agenda de amanhã",
-    # acadêmico
     "prova de", "tenho prova", "marca a prova", "marca prova", "anota a prova", "agenda prova",
     "minhas faltas", "quantas faltas", "minhas materias", "minhas matérias",
-    # mercado
     "item faltando", "o que esta faltando", "o que está faltando", "bota na lista",
     "coloca na lista", "adiciona na lista", "quero adicionar", "acabou", "cabou", "to sem", "tô sem", "comprar",
-    # musculação
     "treino de hoje", "qual treino", "comecar os trabalhos", "começar os trabalhos",
     "registrar serie", "registrar série", "finalizar treino", "nao consegui treinar", "não consegui treinar",
     "historico de cargas", "histórico de cargas", "cargas anteriores", "progresso de cargas",
@@ -73,19 +63,8 @@ def _norm(text):
     return language.normalize_text(text)
 
 
-def _looks_compound(n):
-    groups = 0
-    checks = (
-        ("tarefa", "lembra", "lembre", "avisa", "avise", "recorda", "recorde", "compromisso", "agenda"),
-        ("rotina",),
-        ("treino", "musculacao", "serie"),
-        ("materia", "aula", "prova", "faltar", "faltas"),
-        ("lista", "item faltando", "acabou", "to sem", "comprar"),
-    )
-    for terms in checks:
-        if any(term in n for term in terms):
-            groups += 1
-    return groups >= 2 and len(n) > 90
+def _looks_compound(text):
+    return is_compound_action(text)
 
 
 def _looks_temporal_followup(n):
@@ -111,7 +90,7 @@ def _has_core_action(text):
 
 def is_core_candidate(text):
     n = _norm(text)
-    if not n or _looks_compound(n):
+    if not n or _looks_compound(text):
         return False
     stripped = language.normalize_text(language.strip_butler(text))
     if stripped in CORE_BUTTONS:
@@ -128,9 +107,13 @@ async def handle_message(db, token, message):
     if await handle_global_navigation(db, token, message):
         return True
 
-    # Clima é contextual e também é dono dos atalhos de agenda Hoje/Amanhã,
-    # porque nesses dois casos precisa anexar a previsão sem duplicar mensagens.
+    # Clima e atalhos de agenda continuam com precedência própria.
     if await handle_weather_context(db, token, message):
+        return True
+
+    # Primeira fatia da 1.5: mensagens com múltiplas ações claras recebem preview
+    # estrutural antes de qualquer parser poder registrar somente um pedaço delas.
+    if await handle_compound_message(db, token, message):
         return True
 
     if _looks_temporal_followup(n):
@@ -144,7 +127,6 @@ async def handle_message(db, token, message):
     if not is_core_candidate(text):
         return False
 
-    # Lembrete natural possui uma única autoridade de criação na Etapa 1.2.
     if await handle_colloquial_reminder(db, token, message):
         return True
     if await handle_exam_phrase(db, token, message):
