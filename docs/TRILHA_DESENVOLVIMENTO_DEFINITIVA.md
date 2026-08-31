@@ -1,7 +1,7 @@
 # Butler — Trilha Definitiva de Desenvolvimento
 
 **Roadmap mestre de evolução do produto e da arquitetura**  
-**Versão:** 1.3  
+**Versão:** 1.4  
 **Data-base:** 31/08/2026  
 **Status:** oficial  
 **Fase atual:** **Etapa 1 — Linguagem natural + estabilidade de conversa real**  
@@ -116,6 +116,8 @@ ETAPA 7  🧭 Resumo/contexto/priorização             ⏳
 ETAPA 8  🧠 Memória + Library seletiva             ⏳
              ↓
 ETAPA 9  🔒 Hardening                              ⏳
+             ↓
+ETAPA 10 🌐 Abertura pública + capacidade/escala   ⏳
 ```
 
 Correções urgentes de produção podem ocorrer a qualquer momento, mas não alteram automaticamente a etapa oficial.
@@ -789,6 +791,188 @@ Voz, web/app e outras superfícies só entram depois de a base atual estar está
 - [ ] dívida técnica crítica reduzida;
 - [ ] compatibilidades antigas justificadas ou removidas;
 - [ ] documentação de operação/deploy completa.
+
+**Concluir Hardening não libera automaticamente o bot ao público. A abertura pública depende do gate de capacidade da Etapa 10.**
+
+---
+
+# ETAPA 10 — 🌐 Abertura pública, capacidade e escala
+
+## Objetivo
+
+Antes da liberação pública irrestrita, medir e otimizar o Butler para suportar **o maior número possível de usuários ativos com segurança, previsibilidade e custo controlado**.
+
+A capacidade não deve ser estimada apenas por usuários cadastrados ou pelo limite teórico de requests do Worker. Deve considerar o sistema real:
+
+```text
+mensagens Telegram
+→ Worker
+→ handlers
+→ D1
+→ Durable Objects
+→ scheduler/cron
+→ Telegram Bot API
+```
+
+Documento detalhado: `ETAPA_10_ABERTURA_PUBLICA_ESCALA.md`.
+
+## Verificação obrigatória
+
+A etapa deve revisar e medir pelo menos:
+
+- limites e preços vigentes do Cloudflare no momento da execução;
+- Workers requests/CPU;
+- D1 rows read, rows written e armazenamento;
+- índices e scans completos;
+- queries executadas em toda mensagem;
+- queries e jobs executados a cada minuto;
+- crescimento de históricos e `notification_log`;
+- Durable Objects e alarmes;
+- custo real do scheduler sem eventos;
+- hot path de tarefas, agenda, acadêmico, presença, rotinas, RU, musculação e demais domínios;
+- limites atuais da Telegram Bot API;
+- broadcast `/aviso`, `429`, retries e `retry_after`;
+- rate limiting e proteção contra abuso;
+- isolamento e privacidade multiusuário;
+- onboarding de usuário público sem dados do proprietário;
+- backup, restore e recuperação de incidente;
+- observabilidade e alertas antes das quotas.
+
+## Auditoria de banco e scheduler
+
+D1 deve ser tratado como possível gargalo até medição provar o contrário.
+
+Auditar:
+
+```text
+scan global
+N+1 queries
+SELECTs repetidos
+filtros sem índice
+queries globais por mensagem
+queries globais por minuto
+jobs que percorrem todos os usuários
+retenção de históricos
+```
+
+Casos conhecidos, como verificações globais de Day-off, devem ser reavaliados junto com tudo que tiver sido criado até esta etapa.
+
+O custo de um minuto sem eventos relevantes deve ser próximo do mínimo possível e não crescer linearmente com a base inteira sem necessidade.
+
+## Modelo de capacidade
+
+Criar três perfis medidos:
+
+- uso leve;
+- uso moderado;
+- uso intenso.
+
+Para cada um medir ou estimar com dados reais:
+
+```text
+mensagens/dia
+Worker requests/dia
+D1 reads/dia
+D1 writes/dia
+Durable Object requests/dia
+Telegram sends/dia
+armazenamento/mês
+```
+
+A conclusão deve informar uma faixa segura, por exemplo quantos usuários ativos leves, moderados e intensos o plano atual suporta antes de atingir a margem definida.
+
+## Testes de carga
+
+Criar simulador/replay de tráfego e subir progressivamente a concorrência e a base sintética.
+
+Degraus iniciais sugeridos:
+
+```text
+10
+50
+100
+250
+500
+1.000
+2.500
+5.000
+...
+```
+
+Os números são pontos de teste, não promessa de capacidade.
+
+Medir:
+
+- sucesso/erro;
+- p50/p95/p99 de latência;
+- timeouts;
+- CPU;
+- D1 reads/writes;
+- 429 do Telegram;
+- custo estimado;
+- comportamento do cron sob carga.
+
+Também testar crescimento de banco com históricos plausíveis, para evitar otimizações que só funcionam enquanto existem poucos registros.
+
+## Estratégia de abertura
+
+Depois dos testes sintéticos, liberar por ondas e comparar previsão com consumo real:
+
+```text
+uso interno
+→ beta fechado
+→ dezenas de usuários
+→ centenas
+→ aumento progressivo
+→ público irrestrito
+```
+
+Cada aumento depende da margem observada, não apenas de uma meta numérica.
+
+Se necessário, manter temporariamente teto de cadastros ou lista de espera para proteger usuários já ativos.
+
+## Free × pago
+
+Antes de contratar mais capacidade, otimizar gargalos justificáveis. Quando a mudança de plano fizer sentido, documentar:
+
+```text
+quota que motivou a mudança
+custo projetado
+capacidade antes/depois
+custo por usuário ativo
+margem de segurança
+```
+
+Upgrade não substitui otimização: consulta ruim continua cara com quota maior.
+
+## Gate final para abertura pública
+
+- [ ] limites/preços atuais do Cloudflare conferidos novamente;
+- [ ] consumo real de Workers, D1 e Durable Objects mensurado;
+- [ ] hot path auditado;
+- [ ] scheduler/cron auditado;
+- [ ] scans globais desnecessários removidos ou justificados;
+- [ ] índices importantes comprovados por medição;
+- [ ] capacidade leve/moderada/intensa calculada;
+- [ ] testes de carga executados;
+- [ ] teste com banco grande executado;
+- [ ] limites atuais do Telegram revisados;
+- [ ] 429/retry/broadcast tratados;
+- [ ] rate limiting/antiabuso definidos;
+- [ ] isolamento multiusuário auditado;
+- [ ] onboarding público validado;
+- [ ] observabilidade de capacidade ativa;
+- [ ] alertas antes das quotas definidos;
+- [ ] degradação controlada definida;
+- [ ] backup/restore e rollback praticáveis;
+- [ ] beta por ondas executado;
+- [ ] estimativa comparada com consumo real;
+- [ ] número máximo seguro de usuários ativos documentado com margem;
+- [ ] decisão Free × pago documentada;
+- [ ] regressão completa verde;
+- [ ] deploy público validado separadamente.
+
+**O Butler só é considerado pronto para abertura pública irrestrita quando este gate estiver fechado.**
 
 ---
 
