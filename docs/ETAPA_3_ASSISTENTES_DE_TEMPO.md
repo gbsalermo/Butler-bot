@@ -1,39 +1,45 @@
 # Butler — Etapa 3: Assistentes de Tempo
 
-**Status:** planejamento oficial complementar ao roadmap mestre  
-**Data-base:** 30/08/2026  
-**Relacionados:** Etapa 1 (linguagem), Etapa 2 (acadêmico), Etapa 3 (Modo Estudo)
+**Status:** ✅ concluída em 31/08/2026  
+**Data-base:** 31/08/2026  
+**Entregas:** 3A Assistente Geral de Tempo + 3B Modo Estudo
 
-## 1. Decisão
+## 1. Resultado
 
-A Etapa 3 deixa de ser pensada apenas como um Pomodoro acadêmico e passa a reunir dois usos do mesmo núcleo temporal persistente:
+A Etapa 3 passou a reunir dois domínios que compartilham o mesmo relógio persistente, mas mantêm regras próprias:
 
 ```text
 Assistente Geral de Tempo
 → alertas relativos curtos
 → cronômetros
-→ contagens regressivas
+→ cancelamento
 
-Auxiliar de Estudos / Modo Estudo
-→ ciclos de foco
-→ pausas
-→ check-ins
+Modo Estudo
+→ focus
+→ break
+→ long_break
 → tópico atual
+→ progresso explícito
 ```
 
-Eles compartilham infraestrutura de tempo, mas **não compartilham regras de domínio**.
+Infraestrutura compartilhada:
 
-O fim de um cronômetro apenas dispara um alerta. O fim de um bloco de estudo também **não conclui tópico**; a conclusão continua explícita.
+```text
+D1
+→ PersonalAlarm (Durable Object)
+→ Telegram
+→ notification_log
+```
+
+Não existe `sleep()` no Worker.
 
 ---
 
-## 2. Assistente Geral de Tempo
+## 2. 3A — Assistente Geral de Tempo ✅
 
-### Objetivo
+Documento detalhado: `ETAPA_3A_ASSISTENTE_GERAL_TEMPO.md`.
 
-Permitir pedidos rápidos, normalmente no mesmo dia e com horizonte curto, sem obrigar o usuário a criar uma tarefa ou compromisso tradicional.
-
-Exemplos principais:
+Exemplos ativos:
 
 ```text
 me lembra de desligar o ovo daqui a 5 minutos
@@ -41,260 +47,212 @@ tenho que ligar para alguém daqui a 10 minutos
 me lembra daqui a 1 hora de tirar a roupa do varal
 cronometra 30 minutos pra mim
 inicia um timer de 45 segundos
-me avisa em 20 minutos de olhar o forno
 ```
 
-O comportamento esperado é mais próximo de relógio/cronômetro do que de agenda.
-
-### Diferença para tarefa e compromisso
+Prioridade semântica:
 
 ```text
-Tarefa/compromisso
-→ planejamento de agenda
-→ possui data/horário operacional
-→ aparece em listas/resumos quando aplicável
-
-Alerta rápido/cronômetro
-→ duração relativa a partir de agora
-→ normalmente minutos ou poucas horas
-→ não deve poluir a lista de tarefas
-→ expira após disparar
-```
-
-A frase pode usar linguagem de tarefa (`tenho que`, `preciso`), mas um prazo explicitamente relativo e curto pode mudar o domínio final.
-
-Exemplo:
-
-```text
-tenho que ligar para João daqui a 10 minutos
-```
-
-Destino desejado:
-
-```text
-quick_alert
-alvo: ligar para João
-delay: 600 segundos
-```
-
-não:
-
-```text
-tarefa permanente na agenda
-```
-
----
-
-## 3. Formas de linguagem previstas
-
-### Alertas relativos
-
-```text
-daqui a 5 minutos
-em 10 minutos
-daqui a 1 hora
-em 2 horas
-```
-
-Comandos:
-
-```text
-me lembra...
-me lembre...
-me avisa...
-me avise...
-não deixa eu esquecer...
-me dá um toque...
-tenho que ... daqui a X
-preciso ... daqui a X
-devo ... em X
-```
-
-### Cronômetros explícitos
-
-```text
-cronometra 30 minutos
-cronometre 5 minutos
-inicia um timer de 10 minutos
-começa um cronômetro de 1 hora
-faz um cronômetro de 15 minutos
-```
-
-A Etapa 1 já deve reconhecer essas construções estruturalmente, mas **não precisa executar o timer antes da Etapa 3**.
-
----
-
-## 4. Prioridade semântica futura
-
-Quando a Etapa 3 estiver ativa:
-
-```text
-cronômetro explícito
+timer explícito
 → timer
 
-pedido de lembrete + tempo relativo
+pedido/ação + tempo relativo curto
 → quick_alert
 
-linguagem de tarefa + tempo relativo curto
-→ quick_alert, quando a intenção temporal estiver clara
-
 horário/data de agenda
-→ tarefa/compromisso/lembrete tradicional
+→ mecanismo tradicional de tarefa/compromisso/lembrete
 ```
 
-Casos ambíguos devem confirmar, não adivinhar.
+Alertas rápidos não entram em `daily_items`.
+
+Persistência formal:
+
+```text
+0010_quick_timers.sql
+quick_timers
+```
+
+Horizonte do domínio rápido:
+
+```text
+1 segundo .. 24 horas
+```
+
+Acima disso o Butler orienta usar lembrete normal.
+
+Cancelamento:
+
+```text
+cancelar timer
+cancelar timer #12
+```
+
+Múltiplos timers por usuário são permitidos e um usuário não acessa timers de outro.
+
+Day-off não bloqueia quick timer explicitamente criado.
+
+Merge 3A:
+
+```text
+PR #32
+1165175c8868ff26a6b278473581519a8463191b
+```
+
+Regressão pós-merge da `main`: success, run #247.
+
+---
+
+## 3. 3B — Modo Estudo ✅
+
+Documento detalhado: `ETAPA_3B_MODO_ESTUDO.md`.
 
 Exemplo:
 
 ```text
-me lembra de falar com João em 3 horas
+modo estudo Cálculo I: limites, derivadas, integrais
 ```
 
-Pode ser alerta rápido.
-
-Já:
+Configuração opcional:
 
 ```text
-me lembra de falar com João amanhã às 15h
+modo estudo 50/10/20 Cálculo I: limites, derivadas
 ```
 
-continua no mecanismo tradicional de lembrete com data/hora.
+Padrão:
+
+```text
+25 min foco
+5 min pausa
+15 min pausa longa
+a cada 4 blocos → pausa longa
+```
+
+Persistência formal:
+
+```text
+0011_study_mode.sql
+study_sessions
+study_topics
+study_events
+```
+
+### Invariante permanente
+
+**O tópico só avança quando o usuário explicitamente disser que concluiu ou pulou.**
+
+Portanto:
+
+```text
+fim do foco
+≠ conclusão
+
+fim da pausa
+≠ conclusão
+
+restart
+≠ conclusão
+
+Day-off
+≠ conclusão
+```
+
+Fim do foco apenas inicia uma pausa. Se o tópico continuar pendente, o próximo foco volta para ele.
+
+Ações:
+
+```text
+concluí o tópico
+pular tópico
+não terminei
+status estudo
+pausar estudo
+retomar estudo
+cancelar estudo
+histórico de estudo
+```
+
+Pausa, cancelamento e retomada nunca alteram o status do tópico por inferência.
+
+Sessões registram fatos reais em `study_events`, inclusive qual tópico estava ligado ao bloco de foco.
+
+O nome de uma matéria acadêmica existente pode ser reaproveitado quando a correspondência for única, mas o Modo Estudo também aceita assuntos livres e não exige FK com `subjects`.
+
+Uma sessão explicitamente iniciada continua recebendo seus avisos durante Day-off; isso não cria progresso automático.
+
+Merge 3B:
+
+```text
+PR #33
+83fe6e17a96c8b8734ba211d43f046670b3e9985
+```
+
+Regressão da PR após correções: **330 testes passando**.  
+Regressão pós-merge da `main`: **success**, run #251.
 
 ---
 
-## 5. Modelo conceitual
+## 4. PersonalAlarm após a Etapa 3
+
+O relógio persistente pessoal considera candidatos de:
 
 ```text
-QuickTimer
-- user_id
-- kind: timer | quick_alert
-- label
-- delay_seconds
-- fire_at
-- status: active | fired | cancelled
-- created_at
-- fired_at
-- cancelled_at
+tarefas/compromissos/lembretes
+quick timers
+Modo Estudo
+rotinas
+resumos
 ```
 
-O schema real pode ser diferente, mas precisa permitir:
+No disparo relevante:
 
-- persistência;
-- cancelamento;
-- idempotência;
-- isolamento por usuário;
-- recuperação após restart;
-- múltiplos timers simultâneos.
+```text
+quick timers
+→ study phases
+→ reliable reminders
+→ routines
+→ summaries
+→ rearme
+```
+
+O Cron continua participando da reconciliação dos Durable Objects, evitando transformar um único alarm em ponto único de falha.
+
+Idempotência continua baseada em `notification_log`, somada ao status do domínio quando aplicável.
 
 ---
 
-## 6. Infraestrutura
+## 5. Gate final da Etapa 3
 
-Não usar `sleep()` em memória.
+### Assistente Geral de Tempo
 
-Reutilizar a infraestrutura de Durable Objects/alarmes persistentes já adotada pelo Butler sempre que isso mantiver uma única autoridade temporal confiável.
+- [x] alerta relativo em segundos/minutos/horas;
+- [x] cronômetro explícito;
+- [x] vários timers ativos;
+- [x] cancelamento;
+- [x] persistência D1;
+- [x] idempotência;
+- [x] não polui tarefas;
+- [x] prioridade semântica testada;
+- [x] isolamento multiusuário;
+- [x] Durable Object/rearme persistente;
+- [x] Day-off definido.
 
-Requisitos:
+### Modo Estudo
 
-- alerta sobrevive a restart do Worker;
-- não dispara duas vezes;
-- pode ser cancelado;
-- usuário A não interfere no usuário B;
-- cron principal não é ponto único de falha;
-- timer pode ser criado a qualquer momento pelo webhook e já sair armado.
+- [x] foco/pausa/pausa longa;
+- [x] configuração de duração;
+- [x] tópicos ordenados;
+- [x] conclusão explícita;
+- [x] pulo explícito;
+- [x] fim do timer não conclui conteúdo;
+- [x] pausa/retomada/cancelamento seguros;
+- [x] histórico persistido;
+- [x] dois usuários isolados;
+- [x] PersonalAlarm integrado;
+- [x] Day-off definido;
+- [x] regressão completa verde no PR;
+- [x] regressão pós-merge verde na `main`.
 
----
+## Próximo trabalho oficial
 
-## 7. UX futura
+**Etapa 4 — Cursos e trilhas de estudo.**
 
-Exemplo:
-
-```text
-Usuário: me lembra de desligar o ovo daqui a 5 minutos
-
-Butler:
-⏱️ Fechado. Em 5 minutos eu te aviso para desligar o ovo.
-
-[❌ Cancelar timer]
-```
-
-Disparo:
-
-```text
-⏰ 5 minutos.
-Desliga o ovo.
-```
-
-Cronômetro puro:
-
-```text
-Usuário: cronometra 30 minutos pra mim
-
-Butler:
-⏱️ Cronômetro iniciado: 30 minutos.
-
-[⏹️ Parar]
-```
-
-Final:
-
-```text
-⏰ Tempo! 30 minutos encerrados.
-```
-
----
-
-## 8. Integração com Modo Estudo
-
-O Modo Estudo consome o mesmo conceito de alarme persistente, mas cria ciclos estruturados:
-
-```text
-focus
-break
-long_break
-```
-
-O Assistente Geral de Tempo não conhece tópicos, progresso ou conclusão acadêmica.
-
-Isso evita misturar:
-
-```text
-cronômetro da cozinha
-≠
-bloco de estudo de Cálculo
-```
-
-mesmo que ambos usem um alarme de 25 minutos por baixo.
-
----
-
-## 9. Gate complementar da Etapa 3
-
-Além do gate já definido para Modo Estudo:
-
-- [ ] criar alerta relativo em minutos/horas;
-- [ ] criar cronômetro explícito;
-- [ ] vários timers ativos por usuário quando necessário;
-- [ ] cancelar timer/alerta;
-- [ ] disparo persistente e idempotente;
-- [ ] não transformar timer rápido em tarefa permanente;
-- [ ] tempo relativo curto possui prioridade semântica testada;
-- [ ] restart não perde contagem;
-- [ ] dois usuários não compartilham timers;
-- [ ] Modo Estudo e timer geral compartilham infraestrutura sem compartilhar regras de progresso.
-
----
-
-## 10. Preparação já iniciada na Etapa 1
-
-A Etapa 1 passa a possuir corpus específico de tempo relativo e cronômetros.
-
-Arquivos previstos/ativos:
-
-```text
-cloudflare/src/temporal_language.py
-cloudflare/tests/fixtures/stage1_relative_time_corpus.json
-cloudflare/tests/test_stage1_relative_time_corpus.py
-```
-
-Nesta fase a camada apenas reconhece intenção e duração. A criação real do timer permanece para a Etapa 3.
+A categoria `🎓 Cursos` de Ler/Ver Depois continua sendo apenas backlog simples até a implementação da Etapa 4.
