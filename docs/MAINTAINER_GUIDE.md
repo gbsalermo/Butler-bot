@@ -1,20 +1,23 @@
 # Guia de manutenção do Butler
 
-Este guia existe para que outra pessoa consiga alterar o Butler sem depender do histórico das conversas que originaram o projeto.
+Este guia existe para que outra pessoa ou IA consiga alterar o Butler sem depender do histórico das conversas que originaram o projeto.
 
 ## 1. Comece por estes arquivos
 
 Leia nesta ordem:
 
-1. `README.md` — visão geral;
-2. `docs/ARCHITECTURE.md` — arquitetura **real de produção**;
-3. `cloudflare/src/entry.py` — prioridade dos handlers;
-4. `cloudflare/src/worker.py` — entrypoint e cron;
-5. `cloudflare/src/README.md` — mapa de módulos;
-6. `cloudflare/migrations/` — evolução do D1;
-7. testes em `cloudflare/tests/`.
+1. `docs/STATUS_ATUAL.md` — fase, subetapa, decisões recentes e próximo passo;
+2. `docs/BUTLER_DOSSIE_MESTRE.md` — visão completa do produto;
+3. `docs/ARCHITECTURE.md` — arquitetura **real de produção**;
+4. `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` — ordem oficial de evolução;
+5. documento da subetapa atual, hoje `docs/ETAPA_1_4_CORRECOES.md`;
+6. `cloudflare/src/entry.py` — prioridade dos handlers;
+7. `cloudflare/src/worker.py` — entrypoint, cron e reconciliação de Durable Objects;
+8. `cloudflare/src/README.md` — mapa de módulos;
+9. `cloudflare/migrations/` — evolução do D1;
+10. testes em `cloudflare/tests/`.
 
-`CONTINUIDADE.md` é útil para decisões históricas, mas não deve ser usado sozinho para inferir o dispatcher atual.
+`CONTINUIDADE.md` registra decisões duradouras. `AUDIT_MAIN_2026-08.md` e `INVENTARIO_ETAPA_0.md` são snapshots históricos e não devem ser usados sozinhos para inferir o runtime atual.
 
 ## 2. Qual runtime devo editar?
 
@@ -22,9 +25,9 @@ Leia nesta ordem:
 
 Edite `cloudflare/`.
 
-A implantação real usa Telegram Webhook + Cloudflare Python Worker + D1.
+A implantação real usa Telegram Webhook + Cloudflare Python Worker + D1 + Durable Objects.
 
-### Legado/fallback
+### Legado/preservado
 
 `src/` na raiz usa polling + SQLite. Não é a produção atual.
 
@@ -61,9 +64,37 @@ Exemplo:
 
 é um lembrete, não uma consulta à biblioteca de jogos.
 
-Na prática, a precedência hoje é garantida mais pela ordem dos handlers de `entry.py` e pelos fast paths do que pelo antigo `context_router.py`.
+Na prática, a precedência é garantida pela ordem de `entry.py`, pelas famílias linguísticas compartilhadas e pelos fast paths conservadores — não pelo antigo `context_router.py`.
 
-## 5. Estados de conversa
+Na Etapa 1.4, `correction_patch` precisa vir antes dos parsers de criação, porque `não, 16h` deve corrigir o item recém-criado, não criar outro.
+
+## 5. Linguagem natural e contexto curto
+
+A Etapa 1 introduziu autoridades explícitas:
+
+```text
+language_primitives.py
+→ famílias linguísticas e polaridade
+→ sem D1, Telegram ou CRUD
+
+short_context.py
+→ contexto curto expirável e isolado por usuário
+
+correction_patch.py
+→ correção segura do item recém-criado
+```
+
+Regras:
+
+- reconhecimento linguístico não autoriza escrita sozinho;
+- contexto velho não pode sequestrar mudança de assunto;
+- contexto é isolado por `user_id`;
+- a janela inicial do contexto curto é de 30 minutos;
+- referências posicionais devem usar a ordem que o usuário viu;
+- correção silenciosa só usa alvo marcado como recém-criado/corrigido;
+- broad NLU e memória pessoal genérica continuam desativadas.
+
+## 6. Estados de conversa
 
 Estados ficam principalmente em `user_sessions`.
 
@@ -71,7 +102,7 @@ Convenções existentes:
 
 - `guard_*` — `runtime_guard.py`;
 - `later_*` — Ler/Ver Depois;
-- estados de tarefa/compromisso — `app.py` e patches especializados;
+- estados de tarefa/compromisso — `app.py` e módulos especializados;
 - estados acadêmicos/presença — módulos `academic_*` e `attendance_*`.
 
 Ao criar estado novo:
@@ -83,7 +114,7 @@ Ao criar estado novo:
 5. teste troca de assunto;
 6. nunca compartilhe estado entre usuários.
 
-## 6. SQL/D1
+## 7. SQL/D1
 
 Todo acesso deve incluir o usuário quando a entidade for pessoal.
 
@@ -102,17 +133,11 @@ Para mudanças de schema:
 - `ensure_schema()` pode existir como proteção de implantação incremental, mas não substitui a migration;
 - documente qual módulo é dono da tabela.
 
-## 7. Patches e monkeypatches
+As subetapas 1.1–1.4 reutilizam estruturas existentes e não adicionaram migration até o snapshot de 31/08/2026.
+
+## 8. Patches e monkeypatches
 
 O projeto acumulou módulos que modificam símbolos de outros módulos em runtime.
-
-Exemplos:
-
-```python
-app.ensure_user = fast_ensure_user
-conversation_layer._pre_send_item_reminders = ...
-routine_integration.send_message = _checked_send
-```
 
 Antes de criar um novo patch:
 
@@ -122,25 +147,26 @@ Antes de criar um novo patch:
 4. registre a posição necessária na sequência de `install_*()` de `entry.py`;
 5. adicione teste que demonstre o comportamento final após todas as instalações.
 
-**Evite criar `*_fix2.py`, `*_final.py` ou novas camadas paralelas.** A próxima limpeza arquitetural deve consolidar patches no módulo dono quando houver cobertura suficiente.
+**Evite criar `*_fix2.py`, `*_final.py` ou novas camadas paralelas.** A estratégia atual é consolidar domínio por domínio quando houver cobertura suficiente.
 
-## 8. Como comentar código neste projeto
+## 9. Como comentar código neste projeto
 
 Comentários devem explicar **por quê**, prioridade, invariantes ou riscos — não repetir a linha seguinte.
 
 Bom:
 
 ```python
-# Precisa rodar depois de quality_patch: esta política desativa o scheduler
-# de itens legado e deixa reliable_reminders como única autoridade.
-install_reminder_policy()
+# Auto-reparo vem antes dos parsers de criação para que uma correção temporal
+# do turno anterior não seja interpretada como um item novo.
+if await handle_correction_message(...):
+    return True
 ```
 
 Ruim:
 
 ```python
 # chama a função
-install_reminder_policy()
+await handle_correction_message(...)
 ```
 
 ### Todo módulo novo deve começar com docstring
@@ -167,11 +193,9 @@ Priorize funções que:
 - fazem deduplicação/idempotência;
 - possuem regras de negócio não óbvias.
 
-## 9. Menus
+## 10. Menus
 
-Existem menus-base em `app.py` e menus operacionais em `operational_menu.py`.
-
-O menu visível de produção deve ser considerado autoritativo em `operational_menu.py`. Patches que alteram `app.MAIN_KB`/`app.COTIDIANO_KB` existem para fluxos de fallback e precisam permanecer coerentes.
+O menu visível de produção é autoritativo em `operational_menu.py`. Patches que sincronizam `app.MAIN_KB`/`app.COTIDIANO_KB` existem para fluxos de fallback e precisam permanecer coerentes.
 
 Ao adicionar botão:
 
@@ -181,25 +205,49 @@ Ao adicionar botão:
 - teste clique e texto digitado com o mesmo nome;
 - confirme que estados temporários não capturam o botão por engano.
 
-## 10. Lembretes e scheduler
+Ler/Ver Depois possui atualmente as categorias visíveis **Livros, Filmes, Cursos e Outras**. Isso não significa que a Etapa 4 de Cursos/Trilhas esteja implementada.
 
-Nunca crie um segundo scheduler para a mesma obrigação sem uma estratégia explícita de supressão.
+## 11. Lembretes, scheduler e Durable Objects
+
+Nunca crie um segundo scheduler para a mesma obrigação sem estratégia explícita de idempotência e autoridade.
 
 Hoje:
 
 - `reliable_reminders.py` é autoridade de tarefas/compromissos/lembretes simples;
-- `reminder_policy.py` desliga o item scheduler antigo da `conversation_layer`;
-- `scheduled_delivery_guard.py` exige confirmação real do Telegram antes de considerar entrega válida;
-- `notification_log` é a principal barreira de duplicidade.
+- `scheduled_delivery_guard.py` protege entrega crítica;
+- `notification_log` é a principal barreira de duplicidade;
+- `PersonalAlarm` fornece contingência persistente para eventos pessoais;
+- `AttendanceAlarm` permanece separado para aula/presença;
+- Cron Trigger continua primeira linha, mas não deve ser tratado como ponto único de falha.
+
+**`reminder_policy.py` não existe mais.** Ele foi removido na Etapa 0 após a eliminação do scheduler duplicado que neutralizava.
+
+Após webhook, a reconciliação dos Durable Objects deve continuar fora do caminho crítico com `ctx.waitUntil(...)`. No cron, a reconciliação permanece síncrona.
 
 Ao alterar horário de aviso, atualize também:
 
-- `/health`;
-- documentação;
-- chaves/supressões legadas quando necessário;
+- `/health` quando aplicável;
+- `docs/SCHEDULER_REDUNDANCY.md` se mudar a arquitetura temporal;
+- documentação de domínio;
+- chaves/idempotência;
 - teste correspondente.
 
-## 11. Dados do proprietário
+## 12. Desempenho do caminho quente
+
+`performance_patch.py` mantém cache **somente durante um update** para:
+
+- `telegram_chat_id → user_id`;
+- `user_sessions`.
+
+Não transforme isso em cache global persistente sem desenho explícito de invalidação.
+
+Outras decisões de latência já tomadas:
+
+- gates lexicais antes de consultar contexto/D1 quando a mensagem é irrelevante;
+- DDL de presença fora do dispatcher geral;
+- sincronização global de alarms fora da resposta interativa.
+
+## 13. Dados do proprietário
 
 O projeto suporta usuários genéricos, mas ainda possui bootstrap pessoal versionado em `owner_profile.py` e `settings.py`.
 
@@ -210,7 +258,7 @@ Regras:
 - novos defaults genéricos não devem depender do bootstrap pessoal;
 - se o projeto for distribuído para terceiros, migrar esses dados para configuração/seed privado antes.
 
-## 12. Fast paths
+## 14. Fast paths
 
 Fast paths existem para ações claras e frequentes.
 
@@ -219,12 +267,20 @@ Eles devem ser conservadores. Um fast path amplo demais impede handlers especial
 Ao adicionar frase natural:
 
 - prefira família semântica, não uma frase única;
+- use `language_primitives.py` quando a regra for compartilhável;
 - teste negativas próximas;
 - teste palavras de outro domínio dentro do conteúdo;
 - teste seguimento temporal (`hoje`, `amanhã`, `15h`);
-- teste mudança brusca de assunto.
+- teste mudança brusca de assunto;
+- teste sequência de turnos quando houver contexto.
 
-## 13. Testes
+## 15. Clima
+
+`weather_service.py` continua responsável pelos dados objetivos e Open-Meteo. `weather_personality.py` pode enriquecer a apresentação, mas não deve inventar temperatura, chuva, vento ou probabilidade.
+
+Falha meteorológica não pode derrubar agenda/resumo.
+
+## 16. Testes
 
 Na pasta `cloudflare/`:
 
@@ -245,9 +301,10 @@ Teste pelo menos:
 - frase parecida que não deve acionar;
 - usuário A e usuário B quando há estado/memória;
 - repetição/idempotência quando há scheduler;
-- navegação/cancelamento quando há wizard.
+- navegação/cancelamento quando há wizard;
+- sequência completa quando houver contexto/correção.
 
-## 14. Logs e exceções
+## 17. Logs e exceções
 
 O Worker deliberadamente isola alguns schedulers para que uma falha não derrube os demais.
 
@@ -258,8 +315,9 @@ Não faça `except Exception: pass` em caminhos críticos novos. Quando tolerar 
 - nunca logue token;
 - não marque notificação como entregue se o envio falhou.
 
-## 15. Checklist antes do PR
+## 18. Checklist antes do PR
 
+- [ ] Li `docs/STATUS_ATUAL.md` e continuei a etapa correta?
 - [ ] Alterei o runtime correto?
 - [ ] Verifiquei a ordem de handlers?
 - [ ] Verifiquei monkeypatches sobre o mesmo símbolo?
@@ -270,3 +328,4 @@ Não faça `except Exception: pass` em caminhos críticos novos. Quando tolerar 
 - [ ] O comportamento declarado no `/health` continua verdadeiro?
 - [ ] README/arquitetura ainda correspondem ao código?
 - [ ] Não criei outra camada paralela sem necessidade?
+- [ ] Diferenciei regressão/CI de deploy real na Cloudflare?
