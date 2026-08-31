@@ -1,7 +1,7 @@
 # Butler — Etapa 2.1: Inventário e autoridades do domínio acadêmico
 
 **Data-base:** 31/08/2026  
-**Status:** inventário inicial concluído; consolidação ainda não implementada  
+**Status:** inventário e caracterização concluídos; aguardando gate final da PR  
 **Etapa anterior:** Etapa 1 concluída
 
 ## Objetivo
@@ -241,6 +241,22 @@ code
 
 O parser é relativamente puro e pode servir como primeiro adaptador, mas hoje ainda está dentro de `app.py`.
 
+### Caracterização protegida por teste
+
+`cloudflare/tests/test_stage2_1_academic_inventory.py` fixa o contrato atual útil do parser/edição:
+
+- `35M45` expande para terça + quinta;
+- `M45` converte para 10:00–12:00;
+- manhã/tarde/noite usam os blocos horários atuais;
+- `code` permanece presente na saída;
+- `location` é opcional;
+- texto livre sem código SIGAA não é inventado como grade;
+- edição aceita faixas horárias válidas e rejeita intervalos invertidos/horas inválidas;
+- aliases de dia da semana usados pela edição ficam caracterizados;
+- onboarding continua informando fonte SIGAA recomendada, PDF/TXT e ausência de OCR.
+
+Esses testes **não** legitimam a persistência destrutiva atual; ela é um problema que a Etapa 2 deve remover.
+
 ### Preview
 
 Já existe uma boa decisão que deve ser preservada:
@@ -332,6 +348,10 @@ Não é urgente, mas deve haver uma autoridade clara ao fim da Etapa 2.
 
 A disciplina final deve preferir migration formal para estruturas permanentes.
 
+### P2 — handoff documental estava uma migration atrás
+
+O repositório já possui `0009_ru_menu.sql`. `docs/STATUS_ATUAL.md` ainda listava apenas `0001–0008`; a 2.1 corrige esse snapshot para `0001–0009`.
+
 ---
 
 ## 5. Autoridades-alvo da Etapa 2
@@ -366,7 +386,7 @@ Nomes finais dos módulos podem aproveitar os arquivos existentes; não criar to
 
 ---
 
-## 6. Ordem proposta dentro da Etapa 2
+## 6. Ordem dentro da Etapa 2
 
 ### 2.1 Inventário/autoridade
 
@@ -377,9 +397,10 @@ Nomes finais dos módulos podem aproveitar os arquivos existentes; não criar to
 - [x] presença/faltas mapeadas;
 - [x] provas mapeadas;
 - [x] riscos de reimportação identificados;
-- [ ] adicionar regressões de caracterização do parser/fluxos críticos;
-- [ ] registrar correção documental da migration 0009;
-- [ ] fechar PR 2.1.
+- [x] regressões de caracterização do parser/fluxos críticos adicionadas;
+- [x] correção documental da migration 0009 registrada;
+- [ ] regressão completa da PR verde;
+- [ ] PR 2.1 mesclada.
 
 ### 2.2 Identidade/modelo acadêmico
 
@@ -438,4 +459,4 @@ Alinhar primeiro acesso, menu acadêmico, README e exemplos SIGAA.
 
 ## Próximo passo
 
-Fechar a 2.1 com testes de caracterização e então desenhar **2.2 — identidade/modelo acadêmico**, antes de criar qualquer migration nova.
+Passando o gate da PR, a 2.1 será encerrada. Depois: desenhar **2.2 — identidade/modelo acadêmico** antes de criar qualquer migration nova.
