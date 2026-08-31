@@ -111,7 +111,7 @@ Sistemas Digitais I 35M45 PAV II sala 05
 vira duas sessões:
 
 ```text
-terça-feira  10:00–12:00  PAV II sala 05
+terça-feira   10:00–12:00  PAV II sala 05
 quinta-feira 10:00–12:00  PAV II sala 05
 ```
 
