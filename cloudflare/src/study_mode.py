@@ -190,8 +190,6 @@ def is_study_candidate(text):
     if not n:
         return False
     if any(re.search(pattern, n) for pattern in START_PREFIXES):
-        # "quero estudar amanhã" continua sendo planejamento normal; linguagem
-        # livre só vira Modo Estudo quando houver `agora` ou `modo estudo`.
         if n.startswith(("quero estudar", "vou estudar", "vamos estudar")):
             return "agora" in n
         return True
@@ -233,18 +231,14 @@ def _parse_topics(text):
         return []
     if _norm(raw) in {"sessao livre", "sem topicos", "estudo livre"}:
         return ["Sessão livre"]
-
     if re.search(r"[,;\n]", raw):
         chunks = [x.strip(" .-–—") for x in re.split(r"[,;\n]+", raw) if x.strip(" .-–—")]
-        # Trata naturalmente "limites, derivadas e integrais" sem quebrar todo
-        # título que possua a conjunção `e`.
         if chunks and re.search(r"\s+e\s+", chunks[-1], flags=re.I):
             left, right = re.split(r"\s+e\s+", chunks[-1], maxsplit=1, flags=re.I)
             if left.strip() and right.strip():
                 chunks[-1:] = [left.strip(), right.strip()]
     else:
         chunks = [raw.strip(" .-–—")]
-
     out = []
     seen = set()
     for item in chunks:
@@ -263,12 +257,11 @@ def _parse_start(text):
     config, error = _parse_config(text)
     if error:
         return {"error": error}
-
     raw = language.strip_butler(text).strip()
     raw = re.sub(r"\b\d{1,3}\s*/\s*\d{1,2}(?:\s*/\s*\d{1,2})?\b", " ", raw)
     for pattern in (
         r"^modo\s+estudo\b",
-        r"^(?:inicia|inicie|iniciar|começa|comece|comecar|começar)\s+(?:o\s+)?modo\s+estudo\b",
+        r"^(?:inicia|inicie|iniciar|comeca|começa|comece|comecar|começar)\s+(?:o\s+)?modo\s+estudo\b",
         r"^(?:quero|vou)\s+estudar\b",
         r"^vamos\s+estudar\b",
     ):
@@ -278,7 +271,6 @@ def _parse_start(text):
             break
     raw = re.sub(r"\bagora\b", " ", raw, flags=re.I)
     raw = re.sub(r"\s+", " ", raw).strip(" ,.-")
-
     if ":" in raw:
         subject, topics_text = raw.split(":", 1)
         subject = subject.strip(" ,.-")
@@ -286,7 +278,6 @@ def _parse_start(text):
     else:
         subject = raw.strip(" ,.-")
         topics = []
-
     return {"subject": subject, "topics": topics, **config}
 
 
@@ -295,9 +286,7 @@ async def _canonical_subject(db, uid, subject):
     if not subject:
         return subject
     try:
-        rows = await _rows(
-            db.prepare("SELECT name FROM subjects WHERE user_id=? AND active=1 ORDER BY name").bind(uid)
-        )
+        rows = await _rows(db.prepare("SELECT name FROM subjects WHERE user_id=? AND active=1 ORDER BY name").bind(uid))
     except Exception:
         return subject
     wanted = language.normalize_text(subject)
@@ -305,8 +294,7 @@ async def _canonical_subject(db, uid, subject):
     if exact:
         return exact[0]
     matches = [
-        _row(r, "name")
-        for r in rows
+        _row(r, "name") for r in rows
         if wanted in language.normalize_text(_row(r, "name"))
         or language.normalize_text(_row(r, "name")) in wanted
     ]
@@ -315,24 +303,18 @@ async def _canonical_subject(db, uid, subject):
 
 async def _active_session(db, uid):
     return await db.prepare(
-        "SELECT * FROM study_sessions WHERE user_id=? AND status IN ('active','paused') "
-        "ORDER BY id DESC LIMIT 1"
+        "SELECT * FROM study_sessions WHERE user_id=? AND status IN ('active','paused') ORDER BY id DESC LIMIT 1"
     ).bind(int(uid)).first()
 
 
 async def _current_topic(db, session_id):
     return await db.prepare(
-        "SELECT * FROM study_topics WHERE session_id=? AND status='pending' "
-        "ORDER BY position,id LIMIT 1"
+        "SELECT * FROM study_topics WHERE session_id=? AND status='pending' ORDER BY position,id LIMIT 1"
     ).bind(int(session_id)).first()
 
 
 async def _topics(db, session_id):
-    return await _rows(
-        db.prepare(
-            "SELECT * FROM study_topics WHERE session_id=? ORDER BY position,id"
-        ).bind(int(session_id))
-    )
+    return await _rows(db.prepare("SELECT * FROM study_topics WHERE session_id=? ORDER BY position,id").bind(int(session_id)))
 
 
 async def _log(db, session_id, event_type, topic_id=None, detail=None):
@@ -352,14 +334,12 @@ async def _create_session(db, uid, subject, topics, config, *, now=None):
     subject = await _canonical_subject(db, uid, subject)
     focus_minutes = int(config["focus_minutes"])
     phase_ends = now + timedelta(minutes=focus_minutes)
-
     result = await db.prepare(
         "INSERT INTO study_sessions(user_id,subject_name,focus_minutes,break_minutes,long_break_minutes,long_break_every,status,phase,phase_ends_at,cycles_completed,updated_at) "
         "VALUES(?,?,?,?,?,?,'active','focus',?,0,CURRENT_TIMESTAMP)"
     ).bind(
         int(uid), subject, focus_minutes, int(config["break_minutes"]),
-        int(config["long_break_minutes"]), int(config["long_break_every"]),
-        phase_ends.isoformat(),
+        int(config["long_break_minutes"]), int(config["long_break_every"]), phase_ends.isoformat(),
     ).run()
     session_id = None
     meta = getattr(result, "meta", None)
@@ -371,36 +351,22 @@ async def _create_session(db, uid, subject, topics, config, *, now=None):
             except Exception:
                 pass
     if session_id is None:
-        row = await db.prepare(
-            "SELECT id FROM study_sessions WHERE user_id=? ORDER BY id DESC LIMIT 1"
-        ).bind(int(uid)).first()
+        row = await db.prepare("SELECT id FROM study_sessions WHERE user_id=? ORDER BY id DESC LIMIT 1").bind(int(uid)).first()
         session_id = int(_row(row, "id"))
-
     for pos, title in enumerate(topics, 1):
         await db.prepare(
             "INSERT INTO study_topics(session_id,position,title,status) VALUES(?,?,?,'pending')"
         ).bind(session_id, pos, title).run()
-
     topic = await _current_topic(db, session_id)
     await _log(db, session_id, "session_started", detail={"subject": subject})
-    await _log(
-        db,
-        session_id,
-        "focus_started",
-        int(_row(topic, "id")) if topic else None,
-        {"minutes": focus_minutes},
-    )
+    await _log(db, session_id, "focus_started", int(_row(topic, "id")) if topic else None, {"minutes": focus_minutes})
     return await db.prepare("SELECT * FROM study_sessions WHERE id=?").bind(session_id).first(), topic
 
 
 def _phase_label(phase):
     return {
-        "focus": "foco",
-        "break": "pausa",
-        "long_break": "pausa longa",
-        "paused": "pausado",
-        "completed": "concluído",
-        "cancelled": "cancelado",
+        "focus": "foco", "break": "pausa", "long_break": "pausa longa",
+        "paused": "pausado", "completed": "concluído", "cancelled": "cancelado",
     }.get(phase, phase or "-")
 
 
@@ -411,9 +377,7 @@ def _remaining_text(session, *, now=None):
         return None
     seconds = max(0, int((end - now).total_seconds()))
     minutes, sec = divmod(seconds, 60)
-    if minutes:
-        return f"{minutes} min {sec:02d}s"
-    return f"{sec}s"
+    return f"{minutes} min {sec:02d}s" if minutes else f"{sec}s"
 
 
 async def _status_text(db, session, *, now=None):
@@ -436,7 +400,7 @@ async def _status_text(db, session, *, now=None):
     return "\n".join(lines)
 
 
-async def _set_break_after_focus(db, session, *, now=None, reason="timer"):
+async def _set_break_after_focus(db, session, *, now=None, reason="timer", focus_topic_id=None):
     now = now or _now_utc()
     sid = int(_row(session, "id"))
     cycles = int(_row(session, "cycles_completed", 0) or 0) + 1
@@ -446,20 +410,17 @@ async def _set_break_after_focus(db, session, *, now=None, reason="timer"):
     minutes = int(_row(session, "long_break_minutes" if is_long else "break_minutes"))
     ends = now + timedelta(minutes=minutes)
     await db.prepare(
-        "UPDATE study_sessions SET cycles_completed=?,phase=?,phase_ends_at=?,updated_at=CURRENT_TIMESTAMP "
-        "WHERE id=? AND status='active'"
+        "UPDATE study_sessions SET cycles_completed=?,phase=?,phase_ends_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='active'"
     ).bind(cycles, phase, ends.isoformat(), sid).run()
-    topic = await _current_topic(db, sid)
-    await _log(
-        db, sid, "focus_finished", int(_row(topic, "id")) if topic else None,
-        {"reason": reason, "cycles_completed": cycles},
-    )
+    current_topic = await _current_topic(db, sid)
+    event_topic_id = focus_topic_id if focus_topic_id is not None else (int(_row(current_topic, "id")) if current_topic else None)
+    await _log(db, sid, "focus_finished", event_topic_id, {"reason": reason, "cycles_completed": cycles})
     await _log(
         db, sid, "long_break_started" if is_long else "break_started",
-        int(_row(topic, "id")) if topic else None,
+        int(_row(current_topic, "id")) if current_topic else None,
         {"minutes": minutes},
     )
-    return phase, minutes, topic
+    return phase, minutes, current_topic
 
 
 async def _finish_session_if_empty(db, session_id, *, now=None):
@@ -467,9 +428,14 @@ async def _finish_session_if_empty(db, session_id, *, now=None):
     topic = await _current_topic(db, session_id)
     if topic:
         return False
+    current = await db.prepare("SELECT status FROM study_sessions WHERE id=?").bind(int(session_id)).first()
+    status = _row(current, "status")
+    if status == "completed":
+        return True
+    if status not in {"active", "paused"}:
+        return False
     await db.prepare(
-        "UPDATE study_sessions SET status='completed',phase='completed',phase_ends_at=NULL,completed_at=?,updated_at=CURRENT_TIMESTAMP "
-        "WHERE id=? AND status IN ('active','paused')"
+        "UPDATE study_sessions SET status='completed',phase='completed',phase_ends_at=NULL,completed_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('active','paused')"
     ).bind(now.isoformat(), int(session_id)).run()
     await _log(db, session_id, "session_completed")
     return True
@@ -482,7 +448,6 @@ async def _mark_topic(db, session, action, *, now=None):
     if not topic:
         await _finish_session_if_empty(db, sid, now=now)
         return "✅ Não há tópico pendente nessa sessão."
-
     topic_id = int(_row(topic, "id"))
     title = _row(topic, "title")
     if action == "completed":
@@ -497,19 +462,16 @@ async def _mark_topic(db, session, action, *, now=None):
         ).bind(now.isoformat(), topic_id, sid).run()
         await _log(db, sid, "topic_skipped", topic_id)
         verb = "pulado"
-
     if await _finish_session_if_empty(db, sid, now=now):
         return f"✅ {title} {verb}. Todos os tópicos terminaram; sessão concluída."
-
     next_topic = await _current_topic(db, sid)
     phase = _row(session, "phase")
     if _row(session, "status") == "active" and phase == "focus":
-        phase, minutes, _ = await _set_break_after_focus(db, session, now=now, reason="explicit_topic_change")
-        pause_name = "pausa longa" if phase == "long_break" else "pausa"
-        return (
-            f"✅ {title} {verb}. Próximo: {_row(next_topic,'title')}. "
-            f"☕ Começando {pause_name} de {minutes} min antes do próximo foco."
+        phase, minutes, _ = await _set_break_after_focus(
+            db, session, now=now, reason="explicit_topic_change", focus_topic_id=topic_id
         )
+        pause_name = "pausa longa" if phase == "long_break" else "pausa"
+        return f"✅ {title} {verb}. Próximo: {_row(next_topic,'title')}. ☕ Começando {pause_name} de {minutes} min antes do próximo foco."
     if phase in {"break", "long_break"}:
         return f"✅ {title} {verb}. Depois da pausa, o próximo foco será {_row(next_topic,'title')}."
     return f"✅ {title} {verb}. Próximo tópico: {_row(next_topic,'title')}."
@@ -550,8 +512,7 @@ async def _cancel_session(db, session, *, now=None):
     now = now or _now_utc()
     sid = int(_row(session, "id"))
     await db.prepare(
-        "UPDATE study_sessions SET status='cancelled',phase='cancelled',phase_ends_at=NULL,cancelled_at=?,updated_at=CURRENT_TIMESTAMP "
-        "WHERE id=? AND status IN ('active','paused')"
+        "UPDATE study_sessions SET status='cancelled',phase='cancelled',phase_ends_at=NULL,cancelled_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('active','paused')"
     ).bind(now.isoformat(), sid).run()
     await _log(db, sid, "session_cancelled")
     return "⏹️ Modo Estudo encerrado. Nada foi marcado como concluído por isso."
@@ -560,8 +521,7 @@ async def _cancel_session(db, session, *, now=None):
 async def _history_text(db, uid):
     sessions = await _rows(
         db.prepare(
-            "SELECT id,subject_name,status,cycles_completed,created_at,completed_at,cancelled_at "
-            "FROM study_sessions WHERE user_id=? ORDER BY id DESC LIMIT 5"
+            "SELECT id,subject_name,status,cycles_completed,created_at,completed_at,cancelled_at FROM study_sessions WHERE user_id=? ORDER BY id DESC LIMIT 5"
         ).bind(int(uid))
     )
     if not sessions:
@@ -572,9 +532,7 @@ async def _history_text(db, uid):
         done = sum(_row(t, "status") == "completed" for t in topics)
         skipped = sum(_row(t, "status") == "skipped" for t in topics)
         lines.append(
-            f"• {_row(session,'subject_name')} — {_row(session,'status')} — "
-            f"{done}/{len(topics)} concluído(s), {skipped} pulado(s), "
-            f"{int(_row(session,'cycles_completed',0) or 0)} foco(s) encerrado(s)"
+            f"• {_row(session,'subject_name')} — {_row(session,'status')} — {done}/{len(topics)} concluído(s), {skipped} pulado(s), {int(_row(session,'cycles_completed',0) or 0)} foco(s) encerrado(s)"
         )
     return "\n".join(lines)
 
@@ -584,16 +542,10 @@ async def _start_or_prompt(db, token, chat_id, uid, text):
     if parsed.get("error"):
         await send_message(token, chat_id, f"⏱️ {parsed['error']} Use, por exemplo, `modo estudo 25/5/15 Cálculo: limites, derivadas`.")
         return True
-
     active = await _active_session(db, uid)
     if active:
-        await send_message(
-            token,
-            chat_id,
-            "📚 Já existe uma sessão de estudo aberta. Use `status estudo`, `pausar estudo` ou `cancelar estudo` antes de iniciar outra.",
-        )
+        await send_message(token, chat_id, "📚 Já existe uma sessão de estudo aberta. Use `status estudo`, `pausar estudo` ou `cancelar estudo` antes de iniciar outra.")
         return True
-
     payload = {
         "focus_minutes": parsed["focus_minutes"],
         "break_minutes": parsed["break_minutes"],
@@ -609,23 +561,12 @@ async def _start_or_prompt(db, token, chat_id, uid, text):
     subject = await _canonical_subject(db, uid, subject)
     if not topics:
         await app.set_state(db, uid, "study_setup_topics", {**payload, "subject": subject})
-        await send_message(
-            token,
-            chat_id,
-            f"📚 {subject}. Quais tópicos? Separe por vírgulas.\nEx.: `limites, derivadas, integrais`\nOu mande `sessão livre`.",
-            reply_markup={"keyboard": [["❌ Cancelar ação"]], "resize_keyboard": True},
-        )
+        await send_message(token, chat_id, f"📚 {subject}. Quais tópicos? Separe por vírgulas.\nEx.: `limites, derivadas, integrais`\nOu mande `sessão livre`.", reply_markup={"keyboard": [["❌ Cancelar ação"]], "resize_keyboard": True})
         return True
-
     session, topic = await _create_session(db, uid, subject, topics, payload)
     await send_message(
-        token,
-        chat_id,
-        f"📚 Modo Estudo iniciado — {_row(session,'subject_name')}\n"
-        f"🎯 Tópico: {_row(topic,'title')}\n"
-        f"⏱️ {_row(session,'focus_minutes')} min de foco / {_row(session,'break_minutes')} min de pausa.\n\n"
-        "Quando o foco acabar eu aviso, mas não vou marcar o tópico como concluído sozinho. "
-        "Diga `concluí o tópico` ou `pular tópico` quando for verdade.",
+        token, chat_id,
+        f"📚 Modo Estudo iniciado — {_row(session,'subject_name')}\n🎯 Tópico: {_row(topic,'title')}\n⏱️ {_row(session,'focus_minutes')} min de foco / {_row(session,'break_minutes')} min de pausa.\n\nQuando o foco acabar eu aviso, mas não vou marcar o tópico como concluído sozinho. Diga `concluí o tópico` ou `pular tópico` quando for verdade.",
     )
     return True
 
@@ -635,31 +576,25 @@ async def handle_message(db, token, message):
     chat_id = (message.get("chat") or {}).get("id")
     if chat_id is None or not is_study_candidate(text):
         return False
-
     uid = await _uid(db, int(chat_id))
     if uid is None:
         return False
     await ensure_schema(db)
     n = _norm(text)
-
     if any(re.search(pattern, n) for pattern in START_PREFIXES):
         return await _start_or_prompt(db, token, int(chat_id), uid, text)
-
     state, _ = await app.get_state(db, uid)
     if state in {"study_setup_subject", "study_setup_topics"} and n in CANCEL_PHRASES:
         await app.clear_state(db, uid)
         await send_message(token, int(chat_id), "Certo. Configuração do Modo Estudo cancelada.")
         return True
-
     if n in HISTORY_PHRASES:
         await send_message(token, int(chat_id), await _history_text(db, uid))
         return True
-
     session = await _active_session(db, uid)
     if not session:
         await send_message(token, int(chat_id), "📚 Não há Modo Estudo ativo agora.")
         return True
-
     if n in STATUS_PHRASES:
         await send_message(token, int(chat_id), await _status_text(db, session))
         return True
@@ -680,11 +615,7 @@ async def handle_message(db, token, message):
         return True
     if n in NOT_DONE_PHRASES:
         topic = await _current_topic(db, int(_row(session, "id")))
-        await send_message(
-            token,
-            int(chat_id),
-            f"📌 {_row(topic,'title') if topic else 'O tópico'} continua pendente. Tempo decorrido não é conclusão; no próximo foco seguimos dele.",
-        )
+        await send_message(token, int(chat_id), f"📌 {_row(topic,'title') if topic else 'O tópico'} continua pendente. Tempo decorrido não é conclusão; no próximo foco seguimos dele.")
         return True
     return False
 
@@ -694,21 +625,12 @@ async def _advance_due_phase(db, session, *, now=None):
     sid = int(_row(session, "id"))
     phase = _row(session, "phase")
     topic = await _current_topic(db, sid)
-
     if phase == "focus":
         new_phase, minutes, topic = await _set_break_after_focus(db, session, now=now, reason="timer")
         return {
-            "phase": new_phase,
-            "minutes": minutes,
-            "topic": topic,
-            "message": (
-                f"⏰ Foco encerrado em {_row(session,'subject_name')}"
-                + (f" — {_row(topic,'title')}" if topic else "")
-                + ".\nO relógio acabou; o tópico não. Não marquei nada como concluído.\n"
-                + f"☕ {'Pausa longa' if new_phase == 'long_break' else 'Pausa'} de {minutes} min começando agora."
-            ),
+            "phase": new_phase, "minutes": minutes, "topic": topic,
+            "message": f"⏰ Foco encerrado em {_row(session,'subject_name')}" + (f" — {_row(topic,'title')}" if topic else "") + ".\nO relógio acabou; o tópico não. Não marquei nada como concluído.\n" + f"☕ {'Pausa longa' if new_phase == 'long_break' else 'Pausa'} de {minutes} min começando agora.",
         }
-
     if phase in {"break", "long_break"}:
         if await _finish_session_if_empty(db, sid, now=now):
             return {"phase": "completed", "message": "✅ Sessão de estudo concluída."}
@@ -720,12 +642,7 @@ async def _advance_due_phase(db, session, *, now=None):
         ).bind(ends.isoformat(), sid).run()
         await _log(db, sid, "break_finished", int(_row(topic, "id")) if topic else None)
         await _log(db, sid, "focus_started", int(_row(topic, "id")) if topic else None, {"minutes": focus, "reason": "after_break"})
-        return {
-            "phase": "focus",
-            "minutes": focus,
-            "topic": topic,
-            "message": f"☕ Pausa acabou. Voltando para {_row(topic,'title')} — {focus} min de foco.",
-        }
+        return {"phase": "focus", "minutes": focus, "topic": topic, "message": f"☕ Pausa acabou. Voltando para {_row(topic,'title')} — {focus} min de foco."}
     return None
 
 
@@ -734,8 +651,7 @@ async def dispatch_due_study(db, token, user_id=None, *, now=None):
     now = now or _now_utc()
     sql = (
         "SELECT s.*,u.telegram_chat_id FROM study_sessions s JOIN users u ON u.id=s.user_id "
-        "WHERE s.status='active' AND s.phase IN ('focus','break','long_break') "
-        "AND s.phase_ends_at IS NOT NULL AND s.phase_ends_at<=?"
+        "WHERE s.status='active' AND s.phase IN ('focus','break','long_break') AND s.phase_ends_at IS NOT NULL AND s.phase_ends_at<=?"
     )
     params = [now.isoformat()]
     if user_id is not None:
@@ -746,46 +662,28 @@ async def dispatch_due_study(db, token, user_id=None, *, now=None):
         due = await _rows(db.prepare(sql).bind(*params))
     except Exception:
         return
-
     for session in due:
         sid = int(_row(session, "id"))
         uid = int(_row(session, "user_id"))
         phase = _row(session, "phase")
         phase_end = _row(session, "phase_ends_at")
         key = f"study:{sid}:{phase}:{phase_end}"
-        sent = await db.prepare(
-            "SELECT id FROM notification_log WHERE user_id=? AND notification_key=?"
-        ).bind(uid, key).first()
-
+        sent = await db.prepare("SELECT id FROM notification_log WHERE user_id=? AND notification_key=?").bind(uid, key).first()
         if sent:
             await _advance_due_phase(db, session, now=now)
             continue
-
-        # Calcula a mensagem sem alterar tópicos. A mudança de fase ocorre após a
-        # entrega; se Telegram falhar, o alarm pode tentar novamente.
         if phase == "focus":
             topic = await _current_topic(db, sid)
             cycles = int(_row(session, "cycles_completed", 0) or 0) + 1
             every = max(1, int(_row(session, "long_break_every", DEFAULT_LONG_BREAK_EVERY) or DEFAULT_LONG_BREAK_EVERY))
             is_long = cycles % every == 0
             minutes = int(_row(session, "long_break_minutes" if is_long else "break_minutes"))
-            message = (
-                f"⏰ Foco encerrado em {_row(session,'subject_name')}"
-                + (f" — {_row(topic,'title')}" if topic else "")
-                + ".\nO relógio acabou; o tópico não. Não marquei nada como concluído.\n"
-                + f"☕ {'Pausa longa' if is_long else 'Pausa'} de {minutes} min começando agora."
-            )
+            message = f"⏰ Foco encerrado em {_row(session,'subject_name')}" + (f" — {_row(topic,'title')}" if topic else "") + ".\nO relógio acabou; o tópico não. Não marquei nada como concluído.\n" + f"☕ {'Pausa longa' if is_long else 'Pausa'} de {minutes} min começando agora."
         else:
             topic = await _current_topic(db, sid)
-            if topic:
-                message = f"☕ Pausa acabou. Voltando para {_row(topic,'title')} — {_row(session,'focus_minutes')} min de foco."
-            else:
-                message = "✅ Sessão de estudo concluída."
-
+            message = f"☕ Pausa acabou. Voltando para {_row(topic,'title')} — {_row(session,'focus_minutes')} min de foco." if topic else "✅ Sessão de estudo concluída."
         await quality_patch.send_message(token, int(_row(session, "telegram_chat_id")), message)
-        await db.prepare(
-            "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
-        ).bind(uid, key).run()
+        await db.prepare("INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)").bind(uid, key).run()
         await _advance_due_phase(db, session, now=now)
 
 
@@ -793,9 +691,7 @@ async def next_study_event(db, uid, *, now=None):
     now = now or _now_utc()
     try:
         row = await db.prepare(
-            "SELECT phase_ends_at FROM study_sessions WHERE user_id=? AND status='active' "
-            "AND phase IN ('focus','break','long_break') AND phase_ends_at IS NOT NULL "
-            "ORDER BY phase_ends_at,id LIMIT 1"
+            "SELECT phase_ends_at FROM study_sessions WHERE user_id=? AND status='active' AND phase IN ('focus','break','long_break') AND phase_ends_at IS NOT NULL ORDER BY phase_ends_at,id LIMIT 1"
         ).bind(int(uid)).first()
     except Exception:
         return None
@@ -816,20 +712,17 @@ def install():
     async def handle_state_with_study(db, token, chat, uid, owner, state, payload, message):
         if state not in {"study_setup_subject", "study_setup_topics"}:
             return await original_handle_state(db, token, chat, uid, owner, state, payload, message)
-
         text = (message.get("text") or "").strip()
         n = _norm(text)
         if text in {"❌ Cancelar ação", "/cancelar"} or n in {"cancelar", "cancelar acao"}:
             await app.clear_state(db, uid)
             await send_message(token, chat, "Certo. Configuração do Modo Estudo cancelada.")
             return True
-
         await ensure_schema(db)
         if await _active_session(db, uid):
             await app.clear_state(db, uid)
             await send_message(token, chat, "Já existe uma sessão de estudo aberta. A configuração nova foi descartada.")
             return True
-
         if state == "study_setup_subject":
             subject = re.sub(r"\s+", " ", text).strip(" ,.-")
             if len(subject) < 2 or len(subject) > 120:
@@ -839,7 +732,6 @@ def install():
             await app.set_state(db, uid, "study_setup_topics", {**payload, "subject": subject})
             await send_message(token, chat, f"📚 {subject}. Quais tópicos? Separe por vírgulas ou mande `sessão livre`.")
             return True
-
         topics = _parse_topics(text)
         if not topics:
             await send_message(token, chat, "Não consegui separar os tópicos. Ex.: `limites, derivadas, integrais`.")
@@ -847,14 +739,7 @@ def install():
         subject = payload.get("subject") or "Estudo"
         await app.clear_state(db, uid)
         session, topic = await _create_session(db, uid, subject, topics, payload)
-        await send_message(
-            token,
-            chat,
-            f"📚 Modo Estudo iniciado — {_row(session,'subject_name')}\n"
-            f"🎯 Tópico: {_row(topic,'title')}\n"
-            f"⏱️ {_row(session,'focus_minutes')} min de foco / {_row(session,'break_minutes')} min de pausa.\n\n"
-            "O timer não conclui tópico. Você me diz quando terminou.",
-        )
+        await send_message(token, chat, f"📚 Modo Estudo iniciado — {_row(session,'subject_name')}\n🎯 Tópico: {_row(topic,'title')}\n⏱️ {_row(session,'focus_minutes')} min de foco / {_row(session,'break_minutes')} min de pausa.\n\nO timer não conclui tópico. Você me diz quando terminou.")
         return True
 
     app.handle_state = handle_state_with_study
