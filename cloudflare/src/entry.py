@@ -24,6 +24,7 @@ from attendance_production_fix import dispatch_class_attendance_reliable, handle
 from companion_safe_fallback import handle_message as handle_fallback_message, is_priority_farewell
 from conversation_layer import handle_callback as handle_context_callback, handle_message as handle_context_message, install as install_conversation_layer
 from core_fast_path import handle_message as handle_core_fast_path
+from correction_patch import handle_message as handle_correction_message
 from day_off_policy import expire_stale_day_offs
 from exam_cancel_patch import handle_message as handle_exam_cancel, install as install_exam_cancel
 from exam_phrase_patch import handle_message as handle_exam_phrase
@@ -210,8 +211,12 @@ async def dispatch_message(db, token, message):
     ):
         return True
 
+    # Auto-reparo temporal vem antes dos parsers de criação/fallback. Ele só
+    # consome um texto se houver marcador explícito de correção + contexto recente
+    # marcado como item recém-criado/corrigido.
     if await _run_message_handlers(
         (
+            handle_correction_message,
             handle_explicit_simple_reminder,
             handle_reference,
             handle_task_context,
@@ -280,6 +285,7 @@ class Default(WorkerEntrypoint):
                     "generic_personal_memory_disabled": True,
                     "natural_action_phrases": True,
                     "short_context_actions": True,
+                    "temporal_self_repair": True,
                     "routine_agenda": True,
                     "routine_editing": True,
                     "routine_checkpoint_editing": True,
