@@ -8,11 +8,15 @@ nos módulos de tarefa/compromisso/lembrete.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 
 import language_primitives as language
+from nlu import parse_date
+from settings import UTC_OFFSET_HOURS
 
 CONTEXT_MAX_AGE_MINUTES = 30
+LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
 
 
 def _row(row, key, default=None):
@@ -131,6 +135,26 @@ def referenced_candidate_id(payload: dict | None, text: str | None) -> int | Non
     return None
 
 
+def reference_due_date_qualifier(text: str | None, *, today=None):
+    """Extrai data apenas quando ela qualifica a referência, não a nova ação.
+
+    `muda ela pra sexta` usa sexta como destino e não como filtro do item atual.
+    Já `cancela aquela de amanhã` exige que o alvo atual seja realmente de amanhã.
+    """
+    if "reschedule" in set(language.detect_action_families(text)):
+        return None
+    normalized = language.normalize_text(language.strip_butler(text), keep_temporal=True)
+    match = re.search(
+        r"\b(?:essa|esse|aquela|aquele|a ultima|o ultimo|a anterior|o anterior)\s+(?:de|da|do)\s+"
+        r"(hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b",
+        normalized,
+    )
+    if not match:
+        return None
+    base = today or datetime.now(timezone.utc).astimezone(LOCAL_TZ).date()
+    return parse_date(match.group(1), base)
+
+
 async def remember(db, uid: int, kind: str, target_id: int | None = None, detail: dict | None = None, *, candidate_ids: list[int] | None = None):
     """Grava contexto por usuário mantendo um pequeno histórico de alvos distintos."""
     history_ids: list[int] = []
@@ -201,4 +225,11 @@ async def resolve_daily_item(db, uid: int, text: str | None, *, kind: str | None
     if kind:
         sql += " AND kind=?"
         params.append(kind)
-    return await db.prepare(sql).bind(*params).first()
+    row = await db.prepare(sql).bind(*params).first()
+    if not row:
+        return None
+
+    qualifier = reference_due_date_qualifier(text)
+    if qualifier is not None and _row(row, "due_date") != qualifier.isoformat():
+        return None
+    return row
