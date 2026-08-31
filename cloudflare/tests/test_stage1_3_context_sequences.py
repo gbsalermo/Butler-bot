@@ -1,8 +1,8 @@
 import asyncio
-import json
 from datetime import datetime, timezone
 
 import conversation_layer
+import language_primitives as language
 import short_context
 
 
@@ -119,6 +119,16 @@ def test_visible_list_then_second_item_uses_same_order_user_saw():
 
     item = asyncio.run(scenario())
     assert item["id"] == 44
+
+
+def test_third_item_is_visible_to_common_reference_detector_and_resolver():
+    refs = language.detect_references("cancela a terceira")
+    assert any(ref["kind"] == "ordinal" and ref["value"] == "a terceira" for ref in refs)
+    assert short_context.ordinal_index("cancela a terceira") == 2
+    assert short_context.referenced_candidate_id(
+        {"id": 31, "candidate_ids": [31, 44, 58]},
+        "cancela a terceira",
+    ) == 58
 
 
 def test_two_users_keep_independent_recent_context():
