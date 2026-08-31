@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import compound_router
 
@@ -57,6 +57,13 @@ def test_context_or_alternative_never_becomes_batch():
         "tenho dentista amanhã ou tenho reunião sexta às 15h"
     )
     assert compound_router.build_batch_plan(alternative, now=_now()) is None
+
+
+def test_batch_confirmation_expires_after_short_window():
+    fresh = {"prepared_at": _now().isoformat()}
+    stale = {"prepared_at": (_now() - timedelta(minutes=11)).isoformat()}
+    assert compound_router._batch_is_fresh(fresh, now=_now()) is True
+    assert compound_router._batch_is_fresh(stale, now=_now()) is False
 
 
 class _Result:
@@ -134,7 +141,10 @@ def test_confirmation_persists_whole_batch_with_single_insert(monkeypatch):
 
     async def fake_get_state(_db, uid):
         assert uid == 7
-        return compound_router.BATCH_STATE, {"plans": plans}
+        return compound_router.BATCH_STATE, {
+            "plans": plans,
+            "prepared_at": _now().isoformat(),
+        }
 
     async def fake_clear(_db, uid):
         cleared.append(uid)
