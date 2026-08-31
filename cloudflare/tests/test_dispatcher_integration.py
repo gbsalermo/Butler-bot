@@ -105,3 +105,46 @@ def test_cron_subsystems_keep_authoritative_order(monkeypatch):
         "summaries",
         "legacy",
     ]
+
+
+def test_general_dispatch_does_not_run_attendance_ddl_before_handlers(monkeypatch):
+    """Migration 0003 é a fonte do schema; conversa comum não pode pagar DDL."""
+    calls = []
+
+    early_false = (
+        "handle_start_reset",
+        "handle_admin_announcement_preview",
+        "handle_admin_diagnostics",
+        "handle_alert_diagnostics",
+        "handle_production_usability",
+        "handle_operational_menu",
+        "handle_routine_ui",
+        "handle_routine_editing",
+        "handle_attendance_production_ui",
+        "handle_global_navigation",
+        "handle_core_fast_path",
+    )
+    for name in early_false:
+        monkeypatch.setattr(entry, name, _handler(name, calls, False))
+
+    monkeypatch.setattr(entry, "is_priority_farewell", lambda _text: False)
+    monkeypatch.setattr(
+        entry,
+        "handle_attendance_management",
+        _handler("attendance_management", calls, True),
+    )
+
+    class _NoDB:
+        def prepare(self, sql):
+            raise AssertionError(f"dispatcher geral não deveria executar SQL antes do handler: {sql}")
+
+    handled = asyncio.run(
+        entry.dispatch_message(
+            _NoDB(),
+            "token",
+            {"text": "faltas", "chat": {"id": 10}},
+        )
+    )
+
+    assert handled is True
+    assert calls[-1] == "attendance_management"

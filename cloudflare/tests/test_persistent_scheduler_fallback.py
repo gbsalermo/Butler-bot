@@ -111,7 +111,7 @@ def test_day_off_skips_today_but_keeps_tomorrow_alarm_alive():
     assert next_event == _local(2026, 8, 31, 7, 0)
 
 
-def test_post_webhook_rearms_persistent_alarms(monkeypatch):
+def test_post_webhook_rearms_persistent_alarms_without_blocking_response(monkeypatch):
     calls = []
 
     async def fake_core_fetch(self, request):
@@ -128,12 +128,58 @@ def test_post_webhook_rearms_persistent_alarms(monkeypatch):
     monkeypatch.setattr(worker, "sync_attendance_alarms", fake_attendance)
     monkeypatch.setattr(worker, "sync_personal_alarms", fake_personal)
 
+    class _Ctx:
+        def __init__(self):
+            self.tasks = []
+
+        def waitUntil(self, awaitable):
+            self.tasks.append(awaitable)
+
     async def scenario():
         instance = worker.Default()
         instance.env = object()
-        request = type("Request", (), {"method": "POST"})()
-        return await instance.fetch(request)
+        instance.ctx = _Ctx()
+        request = type(
+            "Request",
+            (),
+            {"method": "POST", "url": "https://butler/telegram/webhook"},
+        )()
+        response = await instance.fetch(request)
+        calls_before_background = list(calls)
+        await asyncio.gather(*instance.ctx.tasks)
+        return response, calls_before_background, list(calls)
 
-    response = asyncio.run(scenario())
+    response, before, after = asyncio.run(scenario())
     assert response == "ok"
-    assert calls == ["core", "attendance", "personal"]
+    assert before == ["core"]
+    assert after == ["core", "attendance", "personal"]
+
+
+def test_non_webhook_post_does_not_start_global_alarm_sync(monkeypatch):
+    calls = []
+
+    async def fake_core_fetch(self, request):
+        calls.append("core")
+        return "ok"
+
+    monkeypatch.setattr(entry.Default, "fetch", fake_core_fetch)
+
+    class _Ctx:
+        def __init__(self):
+            self.tasks = []
+
+        def waitUntil(self, awaitable):
+            self.tasks.append(awaitable)
+
+    async def scenario():
+        instance = worker.Default()
+        instance.env = object()
+        instance.ctx = _Ctx()
+        request = type("Request", (), {"method": "POST", "url": "https://butler/other"})()
+        response = await instance.fetch(request)
+        return response, instance.ctx.tasks
+
+    response, tasks = asyncio.run(scenario())
+    assert response == "ok"
+    assert tasks == []
+    assert calls == ["core"]

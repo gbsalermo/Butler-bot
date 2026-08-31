@@ -18,7 +18,7 @@ from admin_announcement_flow import handle_callback as handle_admin_announcement
 from admin_diagnostics import handle_message as handle_admin_diagnostics
 from alert_diagnostics import handle_message as handle_alert_diagnostics
 from attendance_patch import handle_message as handle_attendance_message, install as install_attendance
-from attendance_enhancement import ensure_schema as ensure_attendance_schema, handle_callback as handle_attendance_callback, install as install_attendance_enhancement
+from attendance_enhancement import handle_callback as handle_attendance_callback, install as install_attendance_enhancement
 from attendance_management import handle_message as handle_attendance_management, install as install_attendance_management
 from attendance_production_fix import dispatch_class_attendance_reliable, handle_message as handle_attendance_production_ui, install as install_attendance_production_fix
 from companion_safe_fallback import handle_message as handle_fallback_message, is_priority_farewell
@@ -88,7 +88,7 @@ BASE_BUTTONS = {
     "🚀 Começar os trabalhos", "📅 Treino de hoje", "📝 Registrar série",
     "😕 Não consegui treinar hoje", "✅ Finalizar treino", "📈 Progresso",
     "🔄 Reiniciar treinos", "📥 Importar treino por PDF/texto", "🔁 Substituir exercício",
-    "📌 Ler/ver depois", "➕ Adicionar à lista", "📚 Livros", "🎬 Filmes", "🗂️ Outras",
+    "📌 Ler/ver depois", "➕ Adicionar à lista", "📚 Livros", "🎬 Filmes", "🎓 Cursos", "🗂️ Outras",
     "✏️ Editar item", "🗑️ Remover item", "⬅️ Voltar ao cotidiano",
     "❌ Cancelar ação", "/cancelar",
 }
@@ -102,7 +102,9 @@ def _optional_env(env, name):
 
 
 async def _attendance_tick(db, token):
-    await ensure_attendance_schema(db)
+    # O schema formal já existe em migration 0003. DDL defensivo não pertence ao
+    # tick de cada minuto; os fluxos específicos de presença ainda mantêm seus
+    # guards locais para compatibilidade.
     await dispatch_class_attendance_reliable(db, token)
 
 
@@ -190,7 +192,10 @@ async def dispatch_message(db, token, message):
     if await handle_core_fast_path(db, token, message):
         return True
 
-    await ensure_attendance_schema(db)
+    # A migration 0003 é a fonte formal do schema de presença. Antes da correção
+    # de latência, toda mensagem que chegava até aqui executava três DDLs
+    # (CREATE TABLE/INDEX IF NOT EXISTS), mesmo sem qualquer relação com presença.
+    # O guard defensivo permanece nos fluxos específicos, não no dispatcher geral.
     if await _run_message_handlers(
         (
             handle_attendance_management,
@@ -321,6 +326,7 @@ class Default(WorkerEntrypoint):
                     "attendance_limit_per_subject": True,
                     "attendance_duration_based": True,
                     "attendance_schema_guard": True,
+                    "attendance_schema_hot_path": False,
                     "attendance_humor_thresholds": [30, 50, 75, 100],
                     "attendance_lost_when_over_limit": True,
                     "attendance_edit_limit": True,
