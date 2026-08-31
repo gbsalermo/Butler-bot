@@ -53,30 +53,6 @@ def context_is_fresh(created_at: str | None, *, now: datetime | None = None, max
     return 0 <= age_seconds <= max_age_minutes * 60
 
 
-def should_consume_context(text: str | None) -> bool:
-    """Contexto antigo nunca vence uma mensagem nova por simples coincidência.
-
-    Só abrimos a porta do contexto quando há uma referência explícita ou um
-    follow-up curtíssimo já conhecido. Ações novas de criação são barreira.
-    """
-    normalized = language.normalize_text(language.strip_butler(text))
-    if not normalized:
-        return False
-
-    families = set(language.detect_action_families(text))
-    if families.intersection({"reminder", "create_task", "create_appointment", "scheduled_event", "create_routine", "planned_activity", "timer"}):
-        return False
-
-    if language.detect_references(text):
-        return True
-
-    return normalized in {
-        "certo", "ok", "feito", "pronto", "ja foi",
-        "adiar", "adia", "depois", "mais tarde", "agora nao",
-        "nao agora", "daqui a pouco", "mantem", "pendente",
-    }
-
-
 def ordinal_index(text: str | None) -> int | None:
     normalized = language.normalize_text(language.strip_butler(text))
     mapping = {
@@ -90,20 +66,52 @@ def ordinal_index(text: str | None) -> int | None:
     return None
 
 
+def should_consume_context(text: str | None) -> bool:
+    """Contexto antigo nunca vence uma mensagem nova por simples coincidência.
+
+    Só abrimos a porta do contexto quando há uma referência explícita, uma
+    posição ordinal clara ou um follow-up curtíssimo já conhecido. Ações novas
+    de criação são barreira.
+    """
+    normalized = language.normalize_text(language.strip_butler(text))
+    if not normalized:
+        return False
+
+    families = set(language.detect_action_families(text))
+    if families.intersection({"reminder", "create_task", "create_appointment", "scheduled_event", "create_routine", "planned_activity", "timer"}):
+        return False
+
+    if language.detect_references(text) or ordinal_index(text) is not None:
+        return True
+
+    return normalized in {
+        "certo", "ok", "feito", "pronto", "ja foi",
+        "adiar", "adia", "depois", "mais tarde", "agora nao",
+        "nao agora", "daqui a pouco", "mantem", "pendente",
+    }
+
+
 def referenced_candidate_id(payload: dict | None, text: str | None) -> int | None:
     """Resolve referência puramente a partir do payload recente, quando seguro."""
     payload = payload or {}
-    refs = language.detect_references(text)
-    if not refs:
-        return payload.get("id") if should_consume_context(text) else None
-
     candidates = [int(x) for x in (payload.get("candidate_ids") or []) if str(x).isdigit()]
+
     idx = ordinal_index(text)
     if idx is not None:
         return candidates[idx] if idx < len(candidates) else None
 
+    refs = language.detect_references(text)
+    if not refs:
+        return payload.get("id") if should_consume_context(text) else None
+
     kinds = {ref.get("kind") for ref in refs}
     values = {ref.get("value") for ref in refs}
+
+    if values.intersection({"a ultima", "o ultimo"}):
+        try:
+            return int(payload.get("id"))
+        except Exception:
+            return None
 
     if "alternative" in kinds:
         current = payload.get("id")
