@@ -1,7 +1,7 @@
 # Butler — Trilha Definitiva de Desenvolvimento
 
 **Roadmap mestre de evolução do produto e da arquitetura**  
-**Versão:** 1.2  
+**Versão:** 1.3  
 **Data-base:** 31/08/2026  
 **Status:** oficial  
 **Fase atual:** **Etapa 1 — Linguagem natural + estabilidade de conversa real**  
@@ -104,6 +104,8 @@ ETAPA 2  🎓 Acadêmico completo + importação        ⏳
 ETAPA 3  ⏱️ Auxiliares de Tempo / Modo Estudo     ⏳
              ↓
 ETAPA 4  📚 Cursos e trilhas de estudo             ⏳
+             ↓
+FECHAMENTO 4  🧭 Reformulação do menu por áreas    ⏳
              ↓
 ETAPA 5  📥 Caixa de entrada                       ⏳
              ↓
@@ -519,7 +521,7 @@ Baixa confiança → prévia/confirmação.
 
 A categoria `🎓 Cursos` já existe em Ler/Ver Depois como **captura simples**. Ela não é esta Etapa 4.
 
-## Gate de saída
+## Gate funcional da Etapa 4
 
 - [ ] estrutura Curso → Módulo → Conteúdo;
 - [ ] progresso explícito;
@@ -527,6 +529,42 @@ A categoria `🎓 Cursos` já existe em Ler/Ver Depois como **captura simples**.
 - [ ] importação com prévia/confirmação;
 - [ ] integração com Modo Estudo sem acoplamento rígido;
 - [ ] histórico preservado ao editar conteúdo.
+
+## Fechamento obrigatório da Etapa 4 — reformulação do menu por áreas da vida
+
+Depois que o escopo funcional acima estiver concluído, o Butler deve passar por uma revisão completa da arquitetura de informação do menu **antes de iniciar a Etapa 5**.
+
+Objetivo: reorganizar a navegação por áreas humanas da vida — organização, universidade/estudos, casa/cotidiano, saúde/treino, interesses e Butler/configurações — em vez de continuar acumulando módulos soltos na raiz e em submenus pouco previsíveis.
+
+A revisão deve:
+
+- inventariar todos os menus e pontos de entrada ativos ao fim da Etapa 4;
+- comparar pelo menos dois protótipos antes de alterar o runtime;
+- preservar atalhos de alta frequência, como `Hoje`, quando fizer sentido;
+- manter linguagem natural independente do menu;
+- esconder ações exclusivas do proprietário para usuários comuns;
+- manter `Voltar` e `Cancelar` consistentes;
+- manter Day-off protegido contra toque acidental;
+- evitar profundidade excessiva;
+- adicionar regressões de navegação.
+
+Documento detalhado: `ETAPA_4_FECHAMENTO_REFORMULACAO_MENU_AREAS_DA_VIDA.md`.
+
+### Gate final para liberar a Etapa 5
+
+- [ ] gate funcional da Etapa 4 concluído;
+- [ ] inventário dos menus concluído;
+- [ ] dois protótipos comparados;
+- [ ] layout final validado;
+- [ ] menu reorganizado por áreas da vida;
+- [ ] ações frequentes continuam rápidas;
+- [ ] linguagem natural continua independente da navegação;
+- [ ] usuário comum não vê ações exclusivas do proprietário;
+- [ ] voltar/cancelar funcionam nos fluxos revisados;
+- [ ] regressões de navegação verdes;
+- [ ] documentação atualizada com o mapa final.
+
+**A Etapa 5 não começa antes desse gate final.**
 
 ---
 
