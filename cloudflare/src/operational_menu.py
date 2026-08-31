@@ -40,6 +40,21 @@ ROUTINE_DIRECT_BUTTONS = {
     "🗑️ Remover rotina",
 }
 
+GOAL_DIRECT_TEXTS = {
+    "🎯 Metas",
+    "➕ Nova meta",
+    "📋 Minhas metas",
+    "✅ Registrar progresso",
+    "🔗 Vincular rotina",
+    "✏️ Editar meta",
+    "🏁 Concluir meta",
+    "🗑️ Remover meta",
+    "🔥 Hábito",
+    "📈 Numérica",
+    "🏁 Projeto",
+    "⬅️ Voltar às metas",
+}
+
 
 def _kb(rows):
     return {"keyboard": rows, "resize_keyboard": True}
@@ -73,11 +88,24 @@ async def _uid(db, chat_id):
     return int(_row(row, "id")) if row else None
 
 
-async def _appointment_list(db, uid):
-    """Pendentes sempre aparecem; resolvidos/cancelados só por 24h.
+def _looks_goal_related(text, state=None):
+    if state and state.startswith("goal_"):
+        return True
+    if text in GOAL_DIRECT_TEXTS:
+        return True
 
-    O histórico completo continua preservado em daily_items.
-    """
+    n = goal_operational._norm(text)
+    if "meta" in n or "objetivo" in n:
+        return True
+    if n.startswith("quero perder ") and "kg" in n:
+        return True
+    if n.startswith(("quero terminar projeto ", "quero terminar o projeto ", "quero finalizar projeto ", "quero concluir projeto ")):
+        return True
+    return False
+
+
+async def _appointment_list(db, uid):
+    """Pendentes sempre aparecem; resolvidos/cancelados só por 24h."""
     rs = await _rows(db.prepare("""
         SELECT id,title,due_date,due_time,status,completed_at,cancelled_at
         FROM daily_items
@@ -126,21 +154,28 @@ def install():
 
 
 async def handle_message(db, token, message):
-    # Metas ficam na frente porque possuem estados/guias próprios.
-    if await goal_natural_patch.handle_message(db, token, message):
-        return True
-    if await goal_deadline_patch.handle_message(db, token, message):
-        return True
-    if await goal_polish.handle_message(db, token, message):
-        return True
-    if await goal_operational.handle_message(db, token, message):
-        return True
-
     text = (message.get("text") or "").strip()
     chat_id = (message.get("chat") or {}).get("id")
     if chat_id is None:
         return False
     chat_id = int(chat_id)
+
+    # Usuário + estado já vêm do cache por update quando production_usability
+    # passou antes deste handler. Mesmo assim, o helper continua seguro isolado.
+    uid = await _uid(db, chat_id)
+    state, _ = await runtime_guard._state(db, uid) if uid else (None, {})
+
+    # Metas tinham quatro handlers executados para qualquer texto. Agora só entram
+    # quando a conversa realmente está no domínio de metas.
+    if _looks_goal_related(text, state):
+        if await goal_natural_patch.handle_message(db, token, message):
+            return True
+        if await goal_deadline_patch.handle_message(db, token, message):
+            return True
+        if await goal_polish.handle_message(db, token, message):
+            return True
+        if await goal_operational.handle_message(db, token, message):
+            return True
 
     if text == "🏠 Cotidiano":
         await send_message(
@@ -155,11 +190,9 @@ async def handle_message(db, token, message):
         await send_message(token, chat_id, "O que vamos adicionar?", reply_markup=_kb(ADD_KB))
         return True
 
-    uid = await _uid(db, chat_id)
     if not uid:
         return False
 
-    # Fontes autoritativas: esses botões não passam por parser informal.
     if text == "✅ Tarefas":
         await send_message(token, chat_id, await _task_list(db, uid), reply_markup=_kb(runtime_guard.TASK_KB))
         return True
@@ -182,7 +215,6 @@ async def handle_message(db, token, message):
         await send_message(token, chat_id, await app.grocery_text(db, uid), reply_markup=_kb(app.GROCERY_KB))
         return True
 
-    # Rotinas mais usadas entram direto no handler especializado, sem percorrer o dispatcher inteiro.
     if text in ROUTINE_DIRECT_BUTTONS:
         return await runtime_guard.handle_pre_dispatch(db, token, message)
 
