@@ -1,15 +1,29 @@
 """Analisador conservador de frases compostas — Etapa 1.5.
 
-Esta versão substitui o roteador histórico que misturava acadêmico, receitas,
-memória e pets. Aqui a camada é neutra: segmenta, classifica relações e reconhece
-atos operacionais, mas não executa múltiplos CRUDs silenciosamente.
+A camada segmenta e classifica relações sem efeitos colaterais. Quando todas as
+ações independentes pertencem a um subconjunto seguro do Core e já possuem os
+dados mínimos, ela pode preparar um lote para confirmação explícita. O lote só
+é persistido depois do botão ``✅ Registrar tudo``.
 """
 
 import re
+from datetime import datetime, timedelta, timezone
 
+import app
 import language_primitives as language
+import short_context
+from colloquial_reminder_fastpath import _clean_title as _clean_reminder_title
+from nlu import parse_date, parse_time, validate_future
+from operational_informal_fastpath import _clean_title as _clean_operational_title
+from settings import UTC_OFFSET_HOURS
 from telegram_api import send_message
 
+LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
+BATCH_STATE = "compound_batch_confirm"
+CONFIRM_LABEL = "✅ Registrar tudo"
+CANCEL_LABEL = "❌ Cancelar lote"
+MAX_BATCH_ACTIONS = 5
+BATCH_MAX_AGE_MINUTES = 10
 
 RELATION_LABELS = {
     "addition": "adição",
@@ -37,9 +51,25 @@ FAMILY_LABELS = {
     "timer": "⏱️ temporizador",
 }
 
-# Cláusulas causais/condicionais não viram uma segunda ação automaticamente.
 CONTEXT_RELATIONS = {"cause", "condition", "concession"}
 NON_AUTOMATIC_RELATIONS = CONTEXT_RELATIONS | {"alternative"}
+BATCH_FAMILIES = {"reminder", "create_task", "create_appointment"}
+
+
+def _now():
+    return datetime.now(timezone.utc).astimezone(LOCAL_TZ)
+
+
+def _row(row, key, default=None):
+    if row is None:
+        return default
+    try:
+        return getattr(row, key)
+    except Exception:
+        try:
+            return row[key]
+        except Exception:
+            return default
 
 
 def _normalized(text):
@@ -47,7 +77,6 @@ def _normalized(text):
 
 
 def _strip_leading_temporal(segment):
-    """Remove apenas moldura temporal inicial para revelar o verbo principal."""
     value = (segment or "").strip()
     previous = None
     while value and value != previous:
@@ -63,12 +92,10 @@ def _strip_leading_temporal(segment):
 
 
 def _segment_families(segment):
-    candidate = _strip_leading_temporal(segment)
-    return language.detect_action_families(candidate)
+    return language.detect_action_families(_strip_leading_temporal(segment))
 
 
 def analyze_compound(text):
-    """Retorna estrutura sem efeitos colaterais e sem acessar D1."""
     normalized = _normalized(text)
     if not normalized:
         return {"segments": [], "action_segments": [], "is_compound_action": False}
@@ -83,13 +110,7 @@ def analyze_compound(text):
         start, end = int(relation["start"]), int(relation["end"])
         piece = normalized[cursor:start].strip()
         if piece:
-            segments.append(
-                {
-                    "text": piece,
-                    "relation": pending_relation,
-                    "connector": pending_connector,
-                }
-            )
+            segments.append({"text": piece, "relation": pending_relation, "connector": pending_connector})
         pending_relation = relation["relation"]
         pending_connector = relation["connector"]
         cursor = end
@@ -98,7 +119,6 @@ def analyze_compound(text):
     if tail:
         segments.append({"text": tail, "relation": pending_relation, "connector": pending_connector})
 
-    # Sem conector útil não existe estrutura composta para esta camada.
     if len(segments) < 2:
         return {"segments": segments, "action_segments": [], "is_compound_action": False}
 
@@ -139,31 +159,239 @@ def _primary_family(segment):
     return families[0] if families else None
 
 
-def preview_text(analysis):
+def _plan_title(segment_text, family):
+    if family == "reminder":
+        return _clean_reminder_title(segment_text)
+    kind = "tarefa" if family == "create_task" else "compromisso"
+    return _clean_operational_title(segment_text, kind)
+
+
+def build_batch_plan(analysis, *, now=None):
+    actions = analysis.get("automatic_actions") or []
+    if len(actions) < 2 or len(actions) > MAX_BATCH_ACTIONS:
+        return None
+    if analysis.get("requires_choice"):
+        return None
+
+    current = now or _now()
+    today = current.date()
+    plans = []
+    for segment in actions:
+        family = _primary_family(segment)
+        if family not in BATCH_FAMILIES:
+            return None
+
+        text = segment.get("text") or ""
+        due = parse_date(text, today)
+        tm = parse_time(text)
+        if due is None or (family == "reminder" and tm is None):
+            return None
+
+        ok, _ = validate_future(due, tm, current.replace(tzinfo=None))
+        if not ok:
+            return None
+
+        title = _plan_title(text, family).strip()
+        if not title:
+            return None
+
+        if family == "reminder":
+            plans.append(
+                {
+                    "family": family,
+                    "kind": "tarefa",
+                    "title": title[:160],
+                    "details": "simple_reminder",
+                    "due_date": due.isoformat(),
+                    "due_time": tm,
+                }
+            )
+        else:
+            plans.append(
+                {
+                    "family": family,
+                    "kind": "tarefa" if family == "create_task" else "compromisso",
+                    "title": title[:160],
+                    "details": None,
+                    "due_date": due.isoformat(),
+                    "due_time": tm,
+                }
+            )
+    return plans
+
+
+def _batch_is_fresh(payload, *, now=None):
+    prepared_at = (payload or {}).get("prepared_at")
+    if not prepared_at:
+        return False
+    try:
+        prepared = datetime.fromisoformat(str(prepared_at))
+    except Exception:
+        return False
+    if prepared.tzinfo is None:
+        prepared = prepared.replace(tzinfo=LOCAL_TZ)
+    current = now or _now()
+    age = (current - prepared.astimezone(LOCAL_TZ)).total_seconds()
+    return 0 <= age <= BATCH_MAX_AGE_MINUTES * 60
+
+
+def _render_plan_line(plan, position):
+    label = FAMILY_LABELS.get(plan.get("family"), "• ação")
+    when = plan["due_date"][8:10] + "/" + plan["due_date"][5:7]
+    if plan.get("due_time"):
+        when += f" às {plan['due_time']}"
+    return f"{position}. {label} — {plan['title']} — {when}"
+
+
+def preview_text(analysis, plan=None):
     actions = analysis.get("automatic_actions") or []
     out = ["🧩 Entendi mais de uma ação na mesma mensagem:"]
+    if plan:
+        out.extend(_render_plan_line(item, position) for position, item in enumerate(plan, 1))
+        out.append("\nEstá tudo definido. Confirma que eu registre o lote inteiro?")
+        return "\n".join(out)
+
     for position, segment in enumerate(actions, 1):
         family = _primary_family(segment)
         label = FAMILY_LABELS.get(family, "• ação")
         relation = segment.get("relation")
-        relation_text = ""
-        if relation:
-            relation_text = f" ({RELATION_LABELS.get(relation, relation)})"
+        relation_text = f" ({RELATION_LABELS.get(relation, relation)})" if relation else ""
         out.append(f"{position}. {label}{relation_text} — {segment['text']}")
-    out.append("\nNão registrei tudo de uma vez para não transformar contexto em tarefa por engano. Por enquanto, manda essas ações separadas.")
+    out.append(
+        "\nReconheci mais de uma ação, mas pelo menos uma ainda precisa de informação "
+        "ou confirmação específica. Não registrei nada parcialmente; manda essas ações separadas."
+    )
     return "\n".join(out)
 
 
+async def _uid(db, chat_id):
+    row = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(int(chat_id)).first()
+    return int(_row(row, "id")) if row else None
+
+
+async def _confirm_batch(db, token, chat_id):
+    uid = await _uid(db, chat_id)
+    if uid is None:
+        return False
+    state, payload = await app.get_state(db, uid)
+    if state != BATCH_STATE:
+        await send_message(token, chat_id, "Não tenho nenhum lote pendente para registrar.")
+        return True
+    if not _batch_is_fresh(payload):
+        await app.clear_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "Esse lote expirou. Manda a mensagem de novo para eu recalcular tudo.",
+            reply_markup={"keyboard": app.MAIN_KB, "resize_keyboard": True},
+        )
+        return True
+
+    plans = (payload or {}).get("plans") or []
+    if len(plans) < 2 or len(plans) > MAX_BATCH_ACTIONS:
+        await app.clear_state(db, uid)
+        await send_message(token, chat_id, "Esse lote perdeu a validade. Manda a mensagem de novo.")
+        return True
+
+    current = _now()
+    for plan in plans:
+        try:
+            due = datetime.fromisoformat(plan["due_date"]).date()
+        except Exception:
+            await app.clear_state(db, uid)
+            await send_message(token, chat_id, "Esse lote ficou inválido. Manda a mensagem de novo.")
+            return True
+        ok, _ = validate_future(due, plan.get("due_time"), current.replace(tzinfo=None))
+        if not ok:
+            await app.clear_state(db, uid)
+            await send_message(token, chat_id, "O horário de uma das ações já passou. Manda o lote de novo para eu recalcular.")
+            return True
+
+    groups = []
+    bind_values = []
+    for plan in plans:
+        groups.append("(?,?,?,?,?,?,'pendente')")
+        bind_values.extend(
+            [uid, plan["kind"], plan["title"], plan.get("details"), plan["due_date"], plan.get("due_time")]
+        )
+
+    sql = (
+        "INSERT INTO daily_items(user_id,kind,title,details,due_date,due_time,status) VALUES "
+        + ",".join(groups)
+        + " RETURNING id"
+    )
+    result = await db.prepare(sql).bind(*bind_values).all()
+    rows = getattr(result, "results", None) or []
+    try:
+        rows = list(rows)
+    except Exception:
+        rows = rows.to_py() if hasattr(rows, "to_py") else []
+    ids = [int(_row(row, "id")) for row in rows if _row(row, "id") is not None]
+
+    await app.clear_state(db, uid)
+    if ids:
+        await short_context.remember_list(db, uid, "daily_item", ids, source="compound_created")
+
+    out = [f"✅ Fechado. Registrei {len(plans)} ações de uma vez:"]
+    out.extend(_render_plan_line(item, position) for position, item in enumerate(plans, 1))
+    await send_message(
+        token,
+        chat_id,
+        "\n".join(out),
+        reply_markup={"keyboard": app.MAIN_KB, "resize_keyboard": True},
+    )
+    return True
+
+
+async def _cancel_batch(db, token, chat_id):
+    uid = await _uid(db, chat_id)
+    if uid is not None:
+        state, _ = await app.get_state(db, uid)
+        if state == BATCH_STATE:
+            await app.clear_state(db, uid)
+    await send_message(
+        token,
+        chat_id,
+        "Beleza. Não registrei nada desse lote.",
+        reply_markup={"keyboard": app.MAIN_KB, "resize_keyboard": True},
+    )
+    return True
+
+
 async def handle_message(db, token, message):
-    """Preview seguro da primeira fatia da 1.5; não usa D1 nem executa CRUD."""
     text = (message.get("text") or "").strip()
     chat_id = (message.get("chat") or {}).get("id")
     if not text or chat_id is None or text.startswith("/"):
         return False
+    chat_id = int(chat_id)
+
+    if text == CONFIRM_LABEL:
+        return await _confirm_batch(db, token, chat_id)
+    if text == CANCEL_LABEL:
+        return await _cancel_batch(db, token, chat_id)
 
     analysis = analyze_compound(text)
     if not analysis.get("is_compound_action"):
         return False
 
-    await send_message(token, int(chat_id), preview_text(analysis))
+    plan = build_batch_plan(analysis)
+    if plan is None:
+        await send_message(token, chat_id, preview_text(analysis))
+        return True
+
+    uid = await _uid(db, chat_id)
+    if uid is None:
+        return False
+    await app.set_state(
+        db,
+        uid,
+        BATCH_STATE,
+        {"plans": plan, "prepared_at": _now().isoformat()},
+    )
+    await send_message(
+        token,
+        chat_id,
+        preview_text(analysis, plan),
+        reply_markup={"keyboard": [[CONFIRM_LABEL, CANCEL_LABEL]], "resize_keyboard": True},
+    )
     return True
