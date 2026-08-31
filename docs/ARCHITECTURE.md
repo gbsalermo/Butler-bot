@@ -1,6 +1,10 @@
 # Arquitetura do Butler — fonte de verdade de produção
 
-> Este documento descreve **o runtime operacional atual**. Para visão completa do produto use `docs/BUTLER_DOSSIE_MESTRE.md`; para evolução futura use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
+**Data-base:** 31/08/2026  
+**Fase funcional:** Etapa 1 — linguagem natural/conversa  
+**Subetapa atual:** 1.4 — correção e auto-reparo
+
+> Este documento descreve **o runtime operacional atual**. Para saber onde o projeto está e qual é o próximo trabalho, comece por `docs/STATUS_ATUAL.md`. Para visão completa do produto use `docs/BUTLER_DOSSIE_MESTRE.md`; para evolução futura use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
 
 ## 1. Runtime oficial
 
@@ -29,13 +33,15 @@ A raiz `src/` é o runtime histórico polling/SQLite. Está preservada como refe
 Entrypoint configurado pelo Cloudflare. Ele:
 
 - herda `entry.Default`;
-- sincroniza `AttendanceAlarm`;
-- sincroniza `PersonalAlarm`;
-- delega HTTP e o restante do cron para `entry.py`.
+- mantém `AttendanceAlarm` e `PersonalAlarm`;
+- no cron, sincroniza Durable Objects de forma síncrona antes de delegar;
+- após webhook, rearma os Durable Objects com `ctx.waitUntil(...)`, **fora do caminho crítico da resposta HTTP**.
+
+Essa última decisão evita fazer o Telegram esperar SELECTs globais e chamadas a Durable Objects antes do `200 OK`.
 
 ### `entry.py`
 
-Orquestrador autoritativo. Na Etapa 0 o fluxo foi extraído para funções testáveis:
+Orquestrador autoritativo. O fluxo é exposto em funções testáveis:
 
 ```text
 dispatch_callback(db, token, callback)
@@ -43,9 +49,9 @@ dispatch_message(db, token, message)
 dispatch_scheduled(db, token)
 ```
 
-`Default.fetch()` apenas resolve HTTP/webhook e delega; `Default.scheduled()` delega ao cron operacional.
+`Default.fetch()` resolve HTTP/webhook; `Default.scheduled()` delega ao cron operacional.
 
-A ordem dos handlers é parte do comportamento e é protegida por `cloudflare/tests/test_dispatcher_integration.py`.
+A ordem dos handlers é parte do comportamento e possui regressão em `cloudflare/tests/`.
 
 ### `app.py`
 
@@ -56,7 +62,7 @@ Núcleo-base herdado. Ainda contém:
 - operações-base de agenda, tarefas, mercado, finanças, metas e treino;
 - scheduler legado/compatibilidade.
 
-Vários símbolos são substituídos no bootstrap. Portanto, uma constante em `app.py` não é automaticamente a fonte final de produção.
+Vários símbolos são substituídos no bootstrap. Portanto, uma constante/função em `app.py` não é automaticamente a fonte final de produção.
 
 ---
 
@@ -65,24 +71,24 @@ Vários símbolos são substituídos no bootstrap. Portanto, uma constante em `a
 Ordem atual de `dispatch_message()`:
 
 ```text
-1. /start e reset
-2. prévia de aviso administrativo
-3. diagnóstico administrativo de usuários
-4. diagnóstico de alertas
-5. despedida prioritária
-6. usabilidade / Ler-Ver Depois
-7. menu operacional
-8. UI de rotinas
-9. edição de rotinas
+1.  start/reset
+2.  prévia de aviso administrativo
+3.  diagnóstico administrativo de usuários
+4.  diagnóstico de alertas
+5.  despedida prioritária
+6.  usabilidade / Ler-Ver Depois
+7.  menu operacional
+8.  UI de rotinas
+9.  edição de rotinas
 10. UI de presença
 11. navegação global
 12. core_fast_path
-13. ensure_schema de presença
-14. gestão de presença
-15. presença natural
-16. cancelamento de prova
-17. frases de prova
-18. acadêmico
+13. gestão de presença
+14. presença natural
+15. cancelamento de prova
+16. frases de prova
+17. acadêmico
+18. correction_patch / auto-reparo
 19. lembrete explícito simples
 20. referência curta
 21. contexto de tarefa
@@ -91,23 +97,22 @@ Ordem atual de `dispatch_message()`:
 24. quality
 25. musculação
 26. conversation_layer
-27. app.handle_message apenas para botão/estado guiado necessário
+27. app.handle_message somente para botão/estado guiado necessário
 28. fallback
 ```
 
 Um handler que retorna `True` consome a mensagem.
 
-`core_fast_path.py` chama transitivamente:
+### Mudanças relevantes desde a Etapa 0
 
-- `weather_context.py`;
-- `colloquial_reminder_fastpath.py`;
-- `operational_informal_fastpath.py`;
-- `routine_natural_fastpath.py`;
-- mercado, provas, tarefas, lembretes e musculação específicos.
+- DDL defensivo de presença **não roda mais no dispatcher geral**; migration 0003 é a fonte formal e guards locais permanecem onde necessários;
+- `correction_patch` foi inserido antes dos parsers de criação para permitir auto-reparo do turno anterior;
+- referências possuem gate lexical antes de consultar contexto/D1;
+- famílias linguísticas compartilhadas reduzem listas duplicadas de verbos/formulações.
 
 ### Consequência
 
-Quando uma frase cai no módulo errado, descubra primeiro **qual handler anterior a consumiu**. Não crie um regex novo antes de entender a precedência.
+Quando uma frase cai no módulo errado, descubra primeiro **qual handler anterior a consumiu**. Não crie regex ou patch novo antes de entender a precedência.
 
 ---
 
@@ -127,7 +132,7 @@ A precedência administrativa é proposital e coberta por regressão.
 
 ## 5. Bootstrap / instalações
 
-Sequência em `entry.py` após a Etapa 0:
+Sequência relevante em `entry.py`:
 
 ```text
 performance_patch
@@ -154,43 +159,114 @@ operational_menu
 production_usability_patch
 ```
 
+Nem todo módulo ativo exige `install()`: `correction_patch`, `reference_patch`, `language_primitives`, `short_context` e outros também participam por import/chamada direta ou integração transitiva.
+
 ### Relações relevantes
 
-- `quality_patch` **não define mais política temporal de tarefas/compromissos**; apenas ajusta checkpoint de rotina e trata formulações específicas de mercado;
-- `conversation_layer` **não envia mais lembretes de `daily_items`**;
-- `reminder_policy.py` foi removido porque o `noop` deixou de ser necessário;
+- `quality_patch` **não define política temporal de tarefas/compromissos**;
+- `conversation_layer` **não envia lembretes de `daily_items`**;
+- `reminder_policy.py` foi removido;
 - `scheduled_delivery_guard` protege canais de entrega crítica;
 - `operational_menu` define o menu principal e instala a família de metas;
-- `production_usability_patch` sincroniza menus-base de `app` e implementa Ler/Ver Depois.
+- `production_usability_patch` sincroniza menus-base e implementa Ler/Ver Depois;
+- o contrato de contexto curto foi unificado em `short_context.py`.
 
 ---
 
-## 6. Autoridade por domínio
+## 6. Linguagem natural — arquitetura ativa da Etapa 1
+
+A produção **não usa uma NLU ampla como roteador central**.
+
+### `language_primitives.py`
+
+Responsável por primitivas/famílias linguísticas compartilhadas e polaridade.
+
+Contrato:
+
+```text
+reconhece sinais linguísticos
+→ NÃO acessa D1
+→ NÃO envia Telegram
+→ NÃO executa CRUD
+```
+
+A escrita continua pertencendo ao módulo de domínio.
+
+### `short_context.py`
+
+Autoridade de contexto operacional curto.
+
+Características:
+
+- isolamento por `user_id`;
+- expiração inicial de 30 minutos;
+- histórico de alvos recentes;
+- listas posicionais na ordem vista pelo usuário;
+- barreira de mudança explícita de assunto;
+- adaptação de chamadores legados de `conversation_layer._remember/_context` para o mesmo contrato.
+
+### `reference_patch.py`
+
+Resolve referências como:
+
+```text
+essa / ela / ele
+a primeira / segunda / terceira
+a outra
+a anterior
+a última
+```
+
+A resolução identifica o alvo; a escrita continua no domínio.
+
+### `correction_patch.py`
+
+Primeira fatia ativa da Etapa 1.4.
+
+Exemplo:
+
+```text
+marca dentista amanhã às 15h
+→ não, 16h
+```
+
+Só corrige silenciosamente contexto marcado como `source=created` ou `source=corrected`. Contextos de lista não são elegíveis.
+
+### `temporal_language.py`
+
+Concentra primitivas de tempo relativo preparadas na Etapa 1. A execução de timers gerais persistentes pertence à Etapa 3 e não deve ser anunciada como pronta.
+
+---
+
+## 7. Autoridade por domínio
 
 | Domínio | Autoridade atual | Observação |
 |---|---|---|
-| Dispatcher | `entry.py` | mensagens, callbacks e cron testáveis |
-| Menu principal/Cotidiano | `operational_menu.py` | `app.MAIN_KB` é sincronizado como fallback |
-| Tarefas | `task_context_patch.py`, `runtime_guard.py`, `app.py` | fast paths conservadores complementam |
+| Dispatcher | `entry.py` | mensagens, callbacks e cron |
+| Menu principal/Cotidiano | `operational_menu.py` | `app.MAIN_KB` sincronizado como fallback |
+| Linguagem comum | `language_primitives.py` | sem efeitos colaterais |
+| Contexto curto | `short_context.py` | expiração, histórico e isolamento |
+| Auto-reparo | `correction_patch.py` | Etapa 1.4, primeira fatia |
+| Tarefas | `task_context_patch.py`, `runtime_guard.py`, `app.py` | fast paths complementam |
 | Compromissos | `operational_menu.py`, `app.py` | temporalidade em `reliable_reminders.py` |
-| Lembretes de `daily_items` | `reliable_reminders.py` | autoridade temporal única após Etapa 0 |
-| Lembretes naturais | `natural_behavior_patch.py`, `colloquial_reminder_fastpath.py` | criação; entrega continua em reliable |
-| Mercado | `grocery_phrase_patch.py`, `quality_patch.py`, `app.py` | política atual grava relatos claros de falta |
+| `daily_items` temporais | `reliable_reminders.py` | autoridade única |
+| Mercado | `grocery_phrase_patch.py`, `quality_patch.py`, `app.py` | relatos claros podem gravar direto |
 | Rotinas | `routine_integration.py`, `runtime_guard.py`, `routine_editing.py`, `routine_ui_patch.py` | quality só ajusta checkpoint |
 | Metas | `goal_operational.py` + família `goal_*` | instalada por `operational_menu` |
 | Acadêmico | `academic_intelligence.py`, `academic_polish.py`, `exam_*`, `attendance_*` | família ainda fragmentada |
 | Presença | `attendance_*`, `attendance_alarm.py` | eventos temporais próprios |
 | Musculação | `workout_progress_patch.py`, `app.py`, `protocol_mass_data.py` | proprietário × genérico |
-| Ler/Ver Depois | `production_usability_patch.py` | schema formal em migration 0008 |
-| Clima | `weather_context.py`, `weather_service.py` | Open-Meteo; agenda/resumo |
+| Ler/Ver Depois | `production_usability_patch.py` | Livros/Filmes/Cursos/Outras; migration 0008 |
+| Clima | `weather_context.py`, `weather_service.py`, `weather_personality.py` | dados objetivos + apresentação humana |
 | Resumos | `reliable_summaries.py` | manhã 07:00; domingo 20:00 |
 | Administração | `admin_diagnostics.py`, `admin_announcement_flow.py` | somente proprietário |
-| Alarmes persistentes | `attendance_alarm.py`, `personal_alarm.py` | Durable Objects sincronizados por worker |
+| Alarmes persistentes | `attendance_alarm.py`, `personal_alarm.py` | Durable Objects |
 | Day-off | `day_off_policy.py` + políticas dos schedulers | escopo diário |
+| Performance | `performance_patch.py` | cache por update e helpers compartilhados |
 
 ---
 
-## 7. Menu autoritativo
+## 8. Menu autoritativo
 
 `operational_menu.py`:
 
@@ -202,28 +278,69 @@ MAIN_KB
 🌙 Day-off
 ```
 
-`production_usability_patch.install()` mantém os fallbacks de `app.py` sincronizados. Na Etapa 0, `conversation_layer.py` deixou de possuir uma cópia própria do menu principal.
+`production_usability_patch.install()` mantém fallbacks de `app.py` sincronizados.
 
-Menus locais de domínio continuam em seus módulos; o objetivo é uma fonte única para navegação principal, não um arquivo monolítico de toda a UI.
+No submenu Ler/Ver Depois existem atualmente:
+
+```text
+📚 Livros
+🎬 Filmes
+🎓 Cursos
+🗂️ Outras
+```
+
+A categoria `Cursos` é apenas captura da lista; o domínio completo Cursos/Trilhas permanece planejado para a Etapa 4.
 
 ---
 
-## 8. Scheduler real
+## 9. Scheduler real e redundância
 
-O cron do Worker roda a cada minuto.
+O Cron Trigger roda a cada minuto e continua a linha primária.
 
-`worker.py` sincroniza primeiro os Durable Objects. Depois `dispatch_scheduled()` executa isoladamente:
+### Linha primária
 
 ```text
-day_off
-→ attendance
-→ daily_items / reliable_reminders
-→ routines
-→ summaries
-→ app.scheduled_tick (legado/compatibilidade)
+worker.py sincroniza Durable Objects
+→ dispatch_scheduled()
+   day_off
+   → attendance
+   → daily_items / reliable_reminders
+   → routines
+   → summaries
+   → app.scheduled_tick (legado/compatibilidade)
 ```
 
-`scheduler_runtime.run_isolated()` evita que uma falha cancele os subsistemas seguintes.
+`scheduler_runtime.run_isolated()` evita que uma falha cancele subsistemas seguintes.
+
+### Linha persistente de contingência
+
+Após o incidente de 30/08/2026, o Cron deixou de ser tratado como ponto único de falha:
+
+```text
+webhook/cron
+→ sync_personal_alarms()
+→ PersonalAlarm por usuário
+→ próximo evento persistido
+→ alarm()
+→ dispatchers autoritativos
+```
+
+`PersonalAlarm` considera:
+
+- tarefa com horário;
+- compromisso em T-5;
+- lembrete simples;
+- checkpoint de rotina;
+- resumo matinal;
+- fechamento semanal.
+
+`AttendanceAlarm` permanece separado para aula/presença.
+
+Depois de POST/webhook, o rearme usa `ctx.waitUntil(...)`. No cron, a sincronização continua síncrona.
+
+A redundância converge para as mesmas autoridades e `notification_log`; não deve duplicar mensagens.
+
+Detalhes: `docs/SCHEDULER_REDUNDANCY.md`.
 
 ### Política temporal de `daily_items`
 
@@ -231,24 +348,37 @@ day_off
 
 - tarefa com horário: no horário;
 - compromisso: 5 minutos antes;
-- lembrete pessoal simples: no horário, com janela curta;
+- lembrete simples: no horário, janela curta;
 - `notification_log`: idempotência;
-- supressão da chave do scheduler legado para evitar duplicação;
+- supressão da chave do scheduler legado;
 - entrega crítica validada quando aplicável.
-
-A Etapa 0 removeu as políticas duplicadas que viviam em `quality_patch`/`conversation_layer` e o neutralizador `reminder_policy.py`.
-
-### Outros eventos temporais
-
-- aula/presença: camada própria e alarmes persistentes;
-- rotinas: scheduler próprio;
-- resumo da manhã: 07:00;
-- semanal: domingo 20:00;
-- clima: falha degrada para resumo sem previsão, não derruba o cron.
 
 ---
 
-## 9. Banco e migrations
+## 10. Performance do caminho quente
+
+`performance_patch.py` reduz round-trips D1 durante um único update.
+
+Cache local ao request:
+
+```text
+telegram_chat_id → user_id
+user_sessions
+```
+
+O cache é reiniciado/limitado ao update e não deve ser interpretado como cache persistente global.
+
+Outras decisões de latência:
+
+- gate lexical antes de consultas de contexto;
+- DDL defensivo de presença removido do dispatcher geral;
+- sincronização global de Durable Objects fora da resposta HTTP interativa.
+
+Regressões específicas existem em `cloudflare/tests/test_request_hotpath_performance.py` e testes relacionados.
+
+---
+
+## 11. Banco e migrations
 
 Fonte formal: `cloudflare/migrations/`.
 
@@ -263,39 +393,17 @@ Fonte formal: `cloudflare/migrations/`.
 0008_later_items.sql
 ```
 
-### Escopo resumido
-
-- **0001:** usuários, estado, matérias, `daily_items`, mercado, metas, rotinas, finanças, musculação, eventos e notificações;
-- **0002:** `user_sessions` e logs de treino;
-- **0003:** configurações/faltas acadêmicas;
-- **0004:** contexto estruturado preservado;
-- **0005:** perfis avançados de meta;
-- **0006:** preferências de clima;
-- **0007:** confirmação idempotente de avisos administrativos;
-- **0008:** Ler/Ver Depois.
+As Etapas 1.1–1.4, até este snapshot, reutilizam estruturas existentes (`natural_events`, `user_sessions`, `daily_items`) e não adicionaram migration.
 
 Alguns módulos mantêm `ensure_schema()` defensivo para implantação incremental. Isso **não substitui migration**.
 
 `runtime_schema.py` permanece preservado como helper e não é catálogo/boot automático.
 
-### Regra
-
-Nova persistência exige: migration → backfill se necessário → índice quando justificado → teste → documentação.
-
 Migration destrutiva exige snapshot/export D1 e plano de rollback documentado.
 
 ---
 
-## 10. Contexto e memória
-
-### Ativo
-
-- `natural_events` para referências operacionais curtas;
-- `user_sessions` para estados guiados;
-- `conversation_layer.py` para contexto recente delimitado;
-- `reference_patch.py`/`task_context_patch.py` para ações contextuais.
-
-### Preservado fora do roteamento central
+## 12. Contexto/memória preservados fora do roteamento central
 
 ```text
 context_router.py
@@ -310,11 +418,13 @@ deterministic_memory.py
 general_memory.py
 ```
 
-Esses componentes são insumo futuro para as Etapas 1/7. Não devem ser alterados esperando efeito no bot sem religação explícita e teste de precedência.
+Esses componentes não devem ser alterados esperando efeito no bot sem religação explícita e teste de precedência.
+
+A Etapa 1 está reaproveitando conceitos de forma seletiva, mas a autoridade operacional nova é explicitada nos módulos ativos citados acima.
 
 ---
 
-## 11. Butler Library / conversa experimental
+## 13. Butler Library / conversa experimental
 
 Preservados, mas não ligados como dispatcher genérico:
 
@@ -332,57 +442,48 @@ cultural_background.py
 
 Exceção: `companion_safe_fallback.py` é alcançado pelo dispatcher para despedidas prioritárias/fallback seguro.
 
-O `/health` continua explicitando:
+O `/health` mantém flags explícitas de broad NLU, Library genérica, sugestões transversais e memória pessoal genérica desabilitadas.
+
+---
+
+## 14. Clima
+
+`weather_service.py`/`weather_context.py` mantêm os dados objetivos e integração com agenda. `weather_personality.py` acrescenta comentário mais humano à apresentação.
+
+Invariante:
 
 ```text
-broad_nlu_disabled
-generic_library_dispatch_disabled
-cross_domain_suggestions_disabled
-generic_personal_memory_disabled
+personalidade pode interpretar/apresentar
+≠
+personalidade inventar temperatura, chuva, vento ou probabilidade
 ```
 
----
-
-## 12. Limpeza da Etapa 0
-
-Removidos com prova de desuso:
-
-- `add_intent_patch.py` — não conectado ao runtime;
-- `reminder_policy.py` — `noop` sem função após consolidação.
-
-Consolidado:
-
-- menu principal: uma autoridade;
-- lembretes temporais: uma autoridade;
-- dispatcher/callback/cron: funções testáveis;
-- `later_items`: migration formal.
-
-Inventário detalhado: `docs/INVENTARIO_ETAPA_0.md`.
+Falha de Open-Meteo não pode impedir agenda/resumo.
 
 ---
 
-## 13. Runtime legado
+## 15. Runtime legado
 
-A raiz `src/` usa `python-telegram-bot`, polling e SQLite. Foi classificada como **PRESERVADO/LEGADO**, não removida na Etapa 0.
+A raiz `src/` usa `python-telegram-bot`, polling e SQLite. Foi classificada como **PRESERVADO/LEGADO**.
 
 Correção feita somente ali não altera produção Cloudflare.
 
 ---
 
-## 14. Configuração e segurança
+## 16. Configuração e segurança
 
 `settings.py` ainda contém configuração versionada do deploy pessoal.
 
 - `TIMEZONE_NAME` alinha clima/calendário;
 - localização meteorológica default vale como fallback do proprietário;
-- outros usuários configuram sua cidade;
+- outros usuários configuram cidade;
 - `TELEGRAM_WEBHOOK_SECRET` é suportado;
 - tokens nunca devem ser versionados;
-- mover perfil/seed pessoal para configuração privada continua dívida antes de distribuição ampla.
+- configuração pessoal deve migrar para seed/config privada antes de distribuição ampla.
 
 ---
 
-## 15. Testes
+## 17. Testes
 
 Workflow `.github/workflows/butler-regression.yml`:
 
@@ -391,7 +492,7 @@ compileall cloudflare/src
 pytest -q
 ```
 
-`tests/conftest.py` fornece stubs mínimos de `js`, `pyodide` e `workers` para permitir testes determinísticos; não simula rede real.
+`tests/conftest.py` fornece stubs mínimos de `js`, `pyodide` e `workers`; não simula rede real.
 
 Testes novos devem priorizar:
 
@@ -401,21 +502,25 @@ Testes novos devem priorizar:
 - dois usuários;
 - idempotência;
 - cancelar/voltar;
-- scheduler/callback repetido.
+- scheduler/callback repetido;
+- consultas D1 desnecessárias no caminho quente.
+
+CI/regressão verde não é prova de deploy Cloudflare.
 
 ---
 
-## 16. Como descobrir a fonte de verdade antes de editar
+## 18. Como descobrir a fonte de verdade antes de editar
 
 Pergunte nesta ordem:
 
-1. `worker.py`/`entry.py` chamam o módulo?
-2. há chamada transitiva a partir de módulo ativo?
-3. existe `install()` substituindo símbolo?
-4. um handler anterior consome a mensagem?
-5. há estado em `user_sessions` mudando o caminho?
-6. é webhook, callback, cron ou Durable Object?
-7. existe migration formal?
-8. o teste cobre produção ou só arquitetura preservada?
+1. `docs/STATUS_ATUAL.md` indica qual etapa está aberta?
+2. `worker.py`/`entry.py` chamam o módulo?
+3. há chamada transitiva a partir de módulo ativo?
+4. existe `install()` substituindo símbolo?
+5. um handler anterior consome a mensagem?
+6. há estado em `user_sessions` ou alvo em `short_context` mudando o caminho?
+7. é webhook, callback, cron ou Durable Object?
+8. existe migration formal?
+9. o teste cobre produção ou só arquitetura preservada?
 
-Sem respostas claras, não criar outro patch.
+Sem respostas claras, não criar outro patch nem outro roadmap.
