@@ -13,12 +13,11 @@ import re
 import language_primitives as language
 import quality_patch
 import temporal_language
-from settings import UTC_OFFSET_HOURS
-from telegram_api import answer_callback, send_message
+from telegram_api import send_message
 
-LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
 MIN_DELAY_SECONDS = 1
 MAX_DELAY_SECONDS = 24 * 60 * 60
+_SCHEMA_READY = False
 
 _RELATIVE_TEXT_RE = re.compile(
     r"\b(?:daqui\s+a|em)\s+\d+\s*(?:segundo|segundos|seg|minuto|minutos|min|hora|horas|h)\b",
@@ -54,6 +53,37 @@ async def _rows(stmt):
         return list(data)
     except Exception:
         return data.to_py() if hasattr(data, "to_py") else []
+
+
+async def ensure_schema(db):
+    """Defesa operacional apenas quando o domínio é usado.
+
+    A migration 0010 continua sendo a fonte formal. Este guard evita quebrar o
+    primeiro pedido caso o deploy do código chegue antes da aplicação da migration.
+    """
+    global _SCHEMA_READY
+    if _SCHEMA_READY:
+        return
+    await db.prepare("""
+        CREATE TABLE IF NOT EXISTS quick_timers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('timer','quick_alert')),
+            label TEXT NOT NULL,
+            delay_seconds INTEGER NOT NULL CHECK(delay_seconds > 0),
+            fire_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','fired','cancelled')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            fired_at TEXT,
+            cancelled_at TEXT,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """).run()
+    await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_quick_timers_user_status_fire "
+        "ON quick_timers(user_id,status,fire_at)"
+    ).run()
+    _SCHEMA_READY = True
 
 
 async def _uid(db, chat_id):
@@ -119,15 +149,8 @@ def parse_request(text):
     }
 
 
-def _cancel_markup(timer_id):
-    return {
-        "inline_keyboard": [[
-            {"text": "⏹️ Cancelar", "callback_data": f"qt:cancel:{int(timer_id)}"}
-        ]]
-    }
-
-
 async def create_timer(db, uid, kind, label, delay_seconds, *, now=None):
+    await ensure_schema(db)
     now = now or _now_utc()
     fire_at = now + timedelta(seconds=int(delay_seconds))
     result = await db.prepare(
@@ -155,6 +178,7 @@ async def create_timer(db, uid, kind, label, delay_seconds, *, now=None):
 
 
 async def _active_timers(db, uid):
+    await ensure_schema(db)
     return await _rows(
         db.prepare(
             "SELECT id,kind,label,delay_seconds,fire_at FROM quick_timers "
@@ -164,6 +188,7 @@ async def _active_timers(db, uid):
 
 
 async def _cancel_timer(db, uid, timer_id):
+    await ensure_schema(db)
     row = await db.prepare(
         "SELECT id,label,status FROM quick_timers WHERE id=? AND user_id=?"
     ).bind(int(timer_id), int(uid)).first()
@@ -178,26 +203,49 @@ async def _cancel_timer(db, uid, timer_id):
     return row, "cancelled"
 
 
+def _cancel_id(text):
+    normalized = language.normalize_text(language.strip_butler(text))
+    match = re.fullmatch(
+        r"(?:cancelar|cancela|parar|para)\s+(?:o\s+)?(?:timer|cronometro|alerta(?:\s+rapido)?)\s+#?(\d+)",
+        normalized,
+    )
+    return int(match.group(1)) if match else None
+
+
+def _is_generic_cancel(text):
+    normalized = language.normalize_text(language.strip_butler(text))
+    return normalized in {
+        "cancelar timer", "cancela o timer", "cancela timer", "parar timer",
+        "para o timer", "parar cronometro", "para o cronometro",
+        "cancelar cronometro", "cancelar alerta rapido", "cancela o alerta",
+    }
+
+
 async def handle_message(db, token, message):
     text = (message.get("text") or "").strip()
     chat_id = (message.get("chat") or {}).get("id")
     if chat_id is None or not text:
         return False
 
-    normalized = language.normalize_text(language.strip_butler(text))
-    cancel_request = normalized in {
-        "cancelar timer", "cancela o timer", "cancela timer", "parar timer",
-        "para o timer", "parar cronometro", "para o cronometro",
-        "cancelar cronometro", "cancelar alerta rapido", "cancela o alerta",
-    }
-
+    cancel_id = _cancel_id(text)
+    cancel_request = _is_generic_cancel(text)
     request = parse_request(text)
-    if request is None and not cancel_request:
+    if request is None and not cancel_request and cancel_id is None:
         return False
 
     uid = await _uid(db, int(chat_id))
     if uid is None:
         return False
+
+    if cancel_id is not None:
+        row, status = await _cancel_timer(db, uid, cancel_id)
+        if status == "cancelled":
+            await send_message(token, int(chat_id), f"⏹️ Cancelado: {_row(row,'label')}.")
+        elif status == "inactive":
+            await send_message(token, int(chat_id), "⏱️ Esse timer já terminou ou já foi cancelado.")
+        else:
+            await send_message(token, int(chat_id), "⏱️ Não achei esse timer ativo na sua conta.")
+        return True
 
     if cancel_request:
         active = await _active_timers(db, uid)
@@ -208,18 +256,14 @@ async def handle_message(db, token, message):
             row, _ = await _cancel_timer(db, uid, int(_row(active[0], "id")))
             await send_message(token, int(chat_id), f"⏹️ Cancelado: {_row(row,'label')}.")
             return True
-        rows = []
+        lines = ["⏱️ Tem mais de um timer ativo. Escolha pelo número:"]
         for item in active[:10]:
-            rows.append([{
-                "text": f"⏹️ {_row(item,'label')[:38]}",
-                "callback_data": f"qt:cancel:{int(_row(item,'id'))}",
-            }])
-        await send_message(
-            token,
-            int(chat_id),
-            "⏱️ Tem mais de um timer ativo. Qual você quer cancelar?",
-            reply_markup={"inline_keyboard": rows},
-        )
+            lines.append(
+                f"• #{int(_row(item,'id'))} — {_row(item,'label')} "
+                f"({_format_duration(_row(item,'delay_seconds'))})"
+            )
+        lines.append("\nEx.: `cancelar timer #12`")
+        await send_message(token, int(chat_id), "\n".join(lines))
         return True
 
     if request.get("invalid_range"):
@@ -239,45 +283,12 @@ async def handle_message(db, token, message):
         request["delay_seconds"],
     )
     duration = _format_duration(request["delay_seconds"])
+    suffix = f" (#{timer_id})" if timer_id is not None else ""
     if request["kind"] == "timer":
-        response = f"⏱️ Cronômetro iniciado: {duration}. Quando acabar eu te aviso."
+        response = f"⏱️ Cronômetro iniciado: {duration}{suffix}. Quando acabar eu te aviso."
     else:
-        response = (
-            f"⏱️ Fechado. Em {duration} eu te aviso para {request['label']}."
-        )
-    await send_message(
-        token,
-        int(chat_id),
-        response,
-        reply_markup=_cancel_markup(timer_id) if timer_id is not None else None,
-    )
-    return True
-
-
-async def handle_callback(db, token, callback):
-    data = callback.get("data") or ""
-    if not data.startswith("qt:cancel:"):
-        return False
-    chat_id = ((callback.get("message") or {}).get("chat") or {}).get("id")
-    if chat_id is None:
-        return True
-    uid = await _uid(db, int(chat_id))
-    if uid is None:
-        await answer_callback(token, callback.get("id"), "Usuário não encontrado.")
-        return True
-    try:
-        timer_id = int(data.rsplit(":", 1)[1])
-    except Exception:
-        await answer_callback(token, callback.get("id"), "Timer inválido.")
-        return True
-    row, status = await _cancel_timer(db, uid, timer_id)
-    if status == "cancelled":
-        await answer_callback(token, callback.get("id"), "Timer cancelado.")
-        await send_message(token, int(chat_id), f"⏹️ Cancelado: {_row(row,'label')}.")
-    elif status == "inactive":
-        await answer_callback(token, callback.get("id"), "Esse timer já terminou ou foi cancelado.")
-    else:
-        await answer_callback(token, callback.get("id"), "Timer não encontrado.")
+        response = f"⏱️ Fechado. Em {duration} eu te aviso para {request['label']}{suffix}."
+    await send_message(token, int(chat_id), response)
     return True
 
 
@@ -294,7 +305,12 @@ async def dispatch_due_quick_timers(db, token, user_id=None, *, now=None):
         sql += " AND qt.user_id=?"
         params.append(int(user_id))
     sql += " ORDER BY qt.fire_at,qt.id LIMIT 100"
-    due = await _rows(db.prepare(sql).bind(*params))
+    try:
+        due = await _rows(db.prepare(sql).bind(*params))
+    except Exception:
+        # Código pode chegar antes da migration; sem timer criado ainda, não há
+        # trabalho útil a fazer e o próximo pedido do domínio aplica o guard.
+        return
 
     for item in due:
         timer_id = int(_row(item, "id"))
@@ -331,10 +347,13 @@ async def dispatch_due_quick_timers(db, token, user_id=None, *, now=None):
 async def next_quick_timer(db, uid, *, now=None):
     """Retorna o próximo instante armável do usuário para ``PersonalAlarm``."""
     now = now or _now_utc()
-    row = await db.prepare(
-        "SELECT fire_at FROM quick_timers WHERE user_id=? AND status='active' "
-        "ORDER BY fire_at,id LIMIT 1"
-    ).bind(int(uid)).first()
+    try:
+        row = await db.prepare(
+            "SELECT fire_at FROM quick_timers WHERE user_id=? AND status='active' "
+            "ORDER BY fire_at,id LIMIT 1"
+        ).bind(int(uid)).first()
+    except Exception:
+        return None
     fire_at = _parse_fire_at(_row(row, "fire_at")) if row else None
     if fire_at is None:
         return None
