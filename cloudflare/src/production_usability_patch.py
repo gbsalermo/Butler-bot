@@ -11,6 +11,7 @@ import json
 import app
 import operational_menu
 from nlu import parse_date, parse_time, validate_future
+from performance_patch import reset_request_cache
 from telegram_api import send_message
 
 
@@ -46,6 +47,26 @@ CATEGORY_TITLES = {
 }
 CANCEL_KB = [["❌ Cancelar ação"]]
 
+LATER_ENTRY_TEXTS = {
+    "📌 Ler/ver depois",
+    "⬅️ Voltar ao cotidiano",
+    "➕ Adicionar à lista",
+    "📚 Livros",
+    "🎬 Filmes",
+    "🎓 Cursos",
+    "🗂️ Outras",
+    "✏️ Editar item",
+    "🗑️ Remover item",
+}
+LATER_SCHEMA_TEXTS = {
+    "📚 Livros",
+    "🎬 Filmes",
+    "🎓 Cursos",
+    "🗂️ Outras",
+    "✏️ Editar item",
+    "🗑️ Remover item",
+}
+
 
 def _kb(rows):
     return {"keyboard": rows, "resize_keyboard": True}
@@ -68,7 +89,7 @@ async def _send(token, chat_id, text, rows=None):
 
 
 async def ensure_schema(db):
-    """Garante defensivamente a tabela da lista; migration formal é preferível."""
+    """Garante defensivamente a tabela da lista apenas quando o fluxo a usa."""
     await db.prepare(
         """CREATE TABLE IF NOT EXISTS later_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,12 +108,6 @@ async def ensure_schema(db):
 
 
 def install():
-    """Sincroniza os fallbacks de ``app`` com o menu operacional autoritativo.
-
-    Antes desta auditoria este patch reconstruía ``COTIDIANO_KB`` e reintroduzia
-    Finanças ao voltar da lista Ler/Ver Depois, apesar de o menu operacional e o
-    ``/health`` declararem Finanças ocultas da navegação primária.
-    """
     app.MAIN_KB = [list(row) for row in operational_menu.MAIN_KB]
     app.COTIDIANO_KB = [list(row) for row in operational_menu.COTIDIANO_KB]
 
@@ -257,6 +272,10 @@ async def _handle_later_state(db, token, chat_id, uid, text, state, payload):
 
 
 async def handle_message(db, token, message):
+    # Primeiro handler comum do dispatcher: abre um cache novo por update para os
+    # módulos seguintes reaproveitarem usuário/estado.
+    reset_request_cache()
+
     text = (message.get("text") or "").strip()
     chat_id = int((message.get("chat") or {}).get("id") or 0)
     if not text or not chat_id:
@@ -265,8 +284,15 @@ async def handle_message(db, token, message):
     uid = await _resolve_user(db, chat_id)
     if uid is None:
         return False
-    await ensure_schema(db)
     state, payload = await app.get_state(db, uid)
+
+    relevant_state = state in {"natural_when", "natural_when_time"} or bool(state and state.startswith("later_"))
+    if not relevant_state and text not in LATER_ENTRY_TEXTS:
+        return False
+
+    # O DDL defensivo da lista só roda quando a própria lista está em uso.
+    if (state and state.startswith("later_")) or text in LATER_SCHEMA_TEXTS:
+        await ensure_schema(db)
 
     if await _handle_reminder_followup(db, token, chat_id, uid, text, state, payload):
         return True
@@ -282,7 +308,6 @@ async def handle_message(db, token, message):
         )
         return True
     if text == "⬅️ Voltar ao cotidiano":
-        # Usa app.COTIDIANO_KB, sincronizado no install() com operational_menu.
         await _send(token, chat_id, "🏠 Cotidiano", app.COTIDIANO_KB)
         return True
     if text == "➕ Adicionar à lista":
