@@ -132,7 +132,7 @@ async def handle_message(db, token, message):
 
     try:
         import conversation_layer
-        await conversation_layer._remember(db, uid, kind, iid)
+        await conversation_layer._remember(db, uid, kind, iid, {"source": "created"})
     except Exception:
         pass
 
