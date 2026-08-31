@@ -1,9 +1,8 @@
 """Analisador conservador de frases compostas — Etapa 1.5.
 
-A camada segmenta e classifica relações sem efeitos colaterais. Quando todas as
-ações independentes pertencem a um subconjunto seguro do Core e já possuem os
-dados mínimos, ela pode preparar um lote para confirmação explícita. O lote só
-é persistido depois do botão ``✅ Registrar tudo``.
+A decisão linguística usa texto normalizado; títulos, datas e previews usam o
+segmento original quando ele pode ser reconstruído com segurança. Isso evita
+perder acentos/capitalização no que será persistido.
 """
 
 import re
@@ -55,6 +54,14 @@ CONTEXT_RELATIONS = {"cause", "condition", "concession"}
 NON_AUTOMATIC_RELATIONS = CONTEXT_RELATIONS | {"alternative"}
 BATCH_FAMILIES = {"reminder", "create_task", "create_appointment"}
 
+_CONNECTOR_PATTERNS = {
+    "alem disso": r"\bal[eé]m\s+disso\b",
+    "porem": r"\bpor[eé]m\b",
+    "entao": r"\bent[aã]o\b",
+    "tambem": r"\btamb[eé]m\b",
+    "ate": r"\bat[eé]\b",
+}
+
 
 def _now():
     return datetime.now(timezone.utc).astimezone(LOCAL_TZ)
@@ -74,6 +81,39 @@ def _row(row, key, default=None):
 
 def _normalized(text):
     return language.normalize_text(language.strip_butler(text))
+
+
+def _connector_regex(connector):
+    if connector in _CONNECTOR_PATTERNS:
+        return _CONNECTOR_PATTERNS[connector]
+    words = [re.escape(word) for word in str(connector or "").split()]
+    return r"\b" + r"\s+".join(words) + r"\b"
+
+
+def _raw_segments(text, relations):
+    """Reconstrói os mesmos blocos sobre o texto original, preservando grafia."""
+    raw = language.strip_butler(text).strip()
+    if not raw or not relations:
+        return []
+
+    parts = []
+    cursor = 0
+    for relation in relations:
+        pattern = _connector_regex(relation.get("connector"))
+        match = re.search(pattern, raw[cursor:], flags=re.I)
+        if not match:
+            return []
+        start = cursor + match.start()
+        end = cursor + match.end()
+        piece = raw[cursor:start].strip(" ,.;:!?\n\t")
+        if piece:
+            parts.append(piece)
+        cursor = end
+
+    tail = raw[cursor:].strip(" ,.;:!?\n\t")
+    if tail:
+        parts.append(tail)
+    return parts
 
 
 def _strip_leading_temporal(segment):
@@ -122,6 +162,11 @@ def analyze_compound(text):
     if len(segments) < 2:
         return {"segments": segments, "action_segments": [], "is_compound_action": False}
 
+    raw_parts = _raw_segments(text, relations)
+    if len(raw_parts) == len(segments):
+        for segment, raw_text in zip(segments, raw_parts):
+            segment["raw_text"] = raw_text
+
     action_segments = []
     for index, segment in enumerate(segments):
         families = _segment_families(segment["text"])
@@ -159,6 +204,10 @@ def _primary_family(segment):
     return families[0] if families else None
 
 
+def _segment_source(segment):
+    return segment.get("raw_text") or segment.get("text") or ""
+
+
 def _plan_title(segment_text, family):
     if family == "reminder":
         return _clean_reminder_title(segment_text)
@@ -181,7 +230,7 @@ def build_batch_plan(analysis, *, now=None):
         if family not in BATCH_FAMILIES:
             return None
 
-        text = segment.get("text") or ""
+        text = _segment_source(segment)
         due = parse_date(text, today)
         tm = parse_time(text)
         if due is None or (family == "reminder" and tm is None):
@@ -256,7 +305,7 @@ def preview_text(analysis, plan=None):
         label = FAMILY_LABELS.get(family, "• ação")
         relation = segment.get("relation")
         relation_text = f" ({RELATION_LABELS.get(relation, relation)})" if relation else ""
-        out.append(f"{position}. {label}{relation_text} — {segment['text']}")
+        out.append(f"{position}. {label}{relation_text} — {_segment_source(segment)}")
     out.append(
         "\nReconheci mais de uma ação, mas pelo menos uma ainda precisa de informação "
         "ou confirmação específica. Não registrei nada parcialmente; manda essas ações separadas."
