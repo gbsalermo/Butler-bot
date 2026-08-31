@@ -192,9 +192,31 @@ async def remember(
     *,
     candidate_ids: list[int] | None = None,
 ):
-    """Grava contexto por usuário mantendo um pequeno histórico de alvos distintos."""
+    """Grava contexto por usuário mantendo histórico e lista ativa quando seguro.
+
+    Se um turno muda o foco para um item que já pertence à lista recém-exibida ou
+    recém-criada, preservamos ``candidate_ids``. Isso permite sequências como
+    `conclui a primeira` -> `cancela a segunda`. Um item novo fora daquela lista
+    nunca herda candidatos antigos.
+    """
     history_ids: list[int] = []
     previous = await latest(db, uid, allow_stale=False)
+
+    effective_candidates = [int(x) for x in (candidate_ids or [])]
+    if candidate_ids is None and previous and target_id is not None:
+        previous_candidates = []
+        for value in previous.get("candidate_ids") or []:
+            try:
+                previous_candidates.append(int(value))
+            except Exception:
+                continue
+        try:
+            current_target = int(target_id)
+        except Exception:
+            current_target = None
+        if current_target is not None and current_target in previous_candidates:
+            effective_candidates = previous_candidates
+
     if previous:
         for value in [previous.get("id"), *(previous.get("history_ids") or [])]:
             try:
@@ -211,7 +233,7 @@ async def remember(
         "domain": kind,
         "id": target_id,
         "detail": detail or {},
-        "candidate_ids": [int(x) for x in (candidate_ids or [])],
+        "candidate_ids": effective_candidates,
         "history_ids": ([int(target_id)] if target_id is not None else []) + history_ids,
         "context_version": 2,
     }
