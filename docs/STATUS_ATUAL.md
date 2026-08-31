@@ -4,16 +4,17 @@
 **Branch de produção:** `main`  
 **Etapa 1 — Linguagem natural:** ✅ concluída  
 **Etapa 2 — Importação acadêmica confiável:** ✅ concluída  
-**Próxima fase oficial:** **Etapa 3 — Auxiliares de Tempo / Modo Estudo**  
-**Snapshot técnico validado:** `1542ec1e1f932fdcc75b32d097ddee0089ee2034`
+**Etapa 3 — Auxiliares de Tempo / Modo Estudo:** ✅ concluída  
+**Próxima fase oficial:** **Etapa 4 — Cursos e trilhas de estudo**  
+**Snapshot técnico validado:** `83fe6e17a96c8b8734ba211d43f046670b3e9985`
 
-> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para runtime use `ARCHITECTURE.md`; para decisões duradouras use `CONTINUIDADE.md`; para ordem futura use `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`. O fechamento acadêmico está em `ETAPA_2_GATE_FINAL.md`.
+> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para runtime use `ARCHITECTURE.md`; para decisões duradouras use `CONTINUIDADE.md`; para ordem futura use `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`. Os fechamentos recentes estão em `ETAPA_2_GATE_FINAL.md`, `ETAPA_3A_ASSISTENTE_GERAL_TEMPO.md`, `ETAPA_3B_MODO_ESTUDO.md` e `ETAPA_3_ASSISTENTES_DE_TEMPO.md`.
 
 ---
 
 ## 1. O projeto em uma frase
 
-Butler é um assistente pessoal multiusuário via Telegram que combina organização cotidiana, universidade, tarefas, compromissos, lembretes, rotinas, metas, musculação, mercado, clima e acompanhamento temporal confiável, mantendo operações críticas determinísticas e linguagem natural conservadora.
+Butler é um assistente pessoal multiusuário via Telegram para cotidiano, universidade, estudos, projetos e organização pessoal, com Core determinístico, linguagem natural conservadora, persistência D1 e serviços temporais redundantes via Durable Objects.
 
 Produção:
 
@@ -37,8 +38,8 @@ A raiz `src/` continua histórica/preservada e não governa produção.
 0. 🧹 Arrumar a casa                         ✅ concluída
 1. 🗣️ Linguagem natural + conversa real     ✅ concluída
 2. 🎓 Importação acadêmica confiável         ✅ concluída
-3. ⏱️ Auxiliares de Tempo / Modo Estudo     ▶️ próxima etapa
-4. 📚 Cursos e trilhas de estudo             ⏳ planejada
+3. ⏱️ Auxiliares de Tempo / Modo Estudo     ✅ concluída
+4. 📚 Cursos e trilhas de estudo             ▶️ próxima etapa
    fechamento: menu por áreas da vida        ⏳ planejado
 5. 📥 Caixa de entrada                       ⏳ planejada
 6. 🗂️ Projetos e trabalho                    ⏳ planejada
@@ -48,23 +49,23 @@ A raiz `src/` continua histórica/preservada e não governa produção.
 10. 🌐 Abertura pública/capacidade/escala    ⏳ planejada
 ```
 
-O arquivo `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` continua sendo a autoridade da **ordem e dos gates**. Este `STATUS_ATUAL.md` é a autoridade do ponto de continuidade quando rótulos históricos de status em documentos maiores ainda não tiverem sido sincronizados.
+`TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` continua sendo a autoridade da ordem/gates. Este arquivo é o snapshot operacional do ponto de continuidade.
 
 ---
 
-## 3. Resultado consolidado da Etapa 1
+## 3. Etapa 1 — resultado consolidado
 
 A linguagem natural foi estruturada sem religar NLU ampla/opaca.
 
 Ativos:
 
 - `language_primitives.py` — famílias, relações, referências e polaridade sem CRUD;
-- `short_context.py` — contexto curto de 30 min, isolamento por usuário e referências posicionais;
-- `correction_patch.py` — auto-reparo recente seguro (`não, 16h`, `quinta não, sexta`, correção de título, `desfaz`);
-- `compound_router.py` — mensagens compostas, conjunções, preview e lote confirmado de 2–5 ações;
-- `temporal_language.py` — reconhecimento de alertas relativos/timers reservado para a Etapa 3.
+- `short_context.py` — contexto curto de 30 min, isolamento e referências posicionais;
+- `correction_patch.py` — correções como `não, 16h`, `quinta não, sexta`, correção de título e `desfaz`;
+- `compound_router.py` — mensagens compostas, conjunções, preview e lote confirmado;
+- `temporal_language.py` — classificação pura dos pedidos temporais rápidos.
 
-Invariante permanente:
+Invariante:
 
 ```text
 reconhecer linguagem ≠ autorizar escrita
@@ -74,11 +75,11 @@ Gate final: `docs/ETAPA_1_6_GATE_FINAL.md`.
 
 ---
 
-## 4. Resultado consolidado da Etapa 2
+## 4. Etapa 2 — resultado consolidado
 
 ### Decisão de produto
 
-O formato acadêmico atual foi validado como suficiente e **não foi remodelado**.
+O formato acadêmico atual foi validado como suficiente e não foi remodelado.
 
 Permanece:
 
@@ -88,136 +89,162 @@ subjects
 → ativa/trancada
 
 subject_sessions
-→ dia da semana
+→ dia
 → início
 → fim
 → local
 ```
 
-Não foram adicionados professor, carga horária, semestre, novo modelo de avaliações ou migration acadêmica.
+Etapa 2 focou apenas em aumentar a confiança da **primeira importação de novos usuários**.
 
-### Novo importador de primeiro acesso
-
-`academic_import.py` é a camada de confiança para **novo usuário sem matérias cadastradas**.
-
-Fluxo:
+`academic_import.py` agora faz:
 
 ```text
 PDF textual/TXT
-→ extração de texto existente
-→ parse_schedule_report
-→ validação + deduplicação
+→ reconstrução conservadora
+→ parse/validação
+→ deduplicação
 → prévia
 → confirmação explícita
 → subjects + subject_sessions atuais
 ```
 
-Se houver qualquer trecho acadêmico ambíguo:
+Qualquer trecho acadêmico ambíguo bloqueia toda a persistência daquela tentativa. O Butler prefere pedir correção a cadastrar uma grade incompleta como se estivesse correta.
 
-```text
-itens seguros + issue
-→ mostra o que entendeu
-→ mostra trecho problemático + motivo
-→ NÃO persiste nada
-```
-
-O importador trata conservadoramente:
-
-- `35M45`, `24M23`, `2T23` e demais códigos válidos do contrato atual;
-- múltiplos dias;
-- múltiplos códigos na mesma matéria;
-- linhas repetidas por extração de PDF;
-- nome quebrado em linhas;
-- ordem vertical `matéria → local → horário`;
-- local depois do código;
-- local ausente;
-- cabeçalhos/rodapés comuns;
-- códigos inválidos, invertidos, repetidos ou não contíguos como revisão obrigatória.
-
-Usuário que já possui matérias continua no comportamento acadêmico existente; a Etapa 2 não transformou reimportação em uma reforma estrutural.
-
-Fonte SIGAA recomendada continua:
+Fonte SIGAA recomendada:
 
 ```text
 Componente Curricular | Local | Horário
 ```
 
-Aceitos:
-
-- PDF com texto pesquisável/selecionável;
-- TXT.
-
 Sem OCR em produção.
 
-Gate final: `docs/ETAPA_2_GATE_FINAL.md`.
+Fechamento técnico:
 
-### Validação
+- PR #30;
+- merge `1542ec1e1f932fdcc75b32d097ddee0089ee2034`;
+- regressão pós-merge: success, run #244.
 
-- PR #29: caracterização do importador atual;
-- merge da caracterização: `0270d48ba51e910514ee99ae7b7bb18861668fd1`;
-- PR #30: importação acadêmica confiável;
-- merge técnico final: `1542ec1e1f932fdcc75b32d097ddee0089ee2034`;
-- suíte da PR: **302 testes passando**;
-- regressão pós-merge da `main`: **success**, run #244.
-
-CI verde comprova regressão do repositório; não prova sozinho deploy Cloudflare.
+Gate: `docs/ETAPA_2_GATE_FINAL.md`.
 
 ---
 
-## 5. Próxima etapa — Etapa 3
+## 5. Etapa 3 — resultado consolidado
 
-Documento existente: `docs/ETAPA_3_ASSISTENTES_DE_TEMPO.md`.
-
-A Etapa 3 possui dois assistentes irmãos.
+A Etapa 3 implementou dois domínios irmãos sobre o mesmo `PersonalAlarm`.
 
 ### 3A — Assistente Geral de Tempo
 
-Transformar em execução persistente o contrato linguístico já preparado:
+Exemplos:
 
 ```text
 me lembra de desligar o ovo daqui a 5 minutos
-me avisa daqui a 20 minutos
+tenho que ligar para alguém daqui a 10 minutos
 me lembra daqui a 1 hora de tirar a roupa do varal
 cronometra 30 minutos
-inicia um timer de 45 segundos
 ```
 
-Requisitos:
+Regras:
 
-- alertas rápidos não viram tarefas normais;
-- persistem sem depender da conversa aberta;
-- sobrevivem a restart/redeploy;
-- usar Durable Object/alarm/infra temporal existente, nunca `sleep()` no Worker;
-- idempotência de disparo;
-- cancelamento seguro;
-- dois usuários isolados;
-- política de Day-off definida.
+- tempo relativo curto tem prioridade sobre tarefa/lembrete tradicional quando a intenção está clara;
+- quick timer não entra em `daily_items`;
+- horizonte de 1 segundo a 24 horas;
+- múltiplos timers simultâneos;
+- cancelamento por texto/ID;
+- isolamento por usuário;
+- idempotência com `notification_log` + status próprio;
+- Day-off não bloqueia timer explicitamente criado.
+
+Persistência:
+
+```text
+0010_quick_timers.sql
+quick_timers
+```
+
+Merge:
+
+```text
+PR #32
+1165175c8868ff26a6b278473581519a8463191b
+```
+
+Pós-merge: success, run #247.
+
+Documento: `docs/ETAPA_3A_ASSISTENTE_GERAL_TEMPO.md`.
 
 ### 3B — Modo Estudo
 
 Exemplo:
 
 ```text
-Matéria: Cálculo I
-Tópicos:
-1. Limites
-2. Derivadas
-3. Integrais
-
-25 min foco / 5 min pausa
+modo estudo Cálculo I: limites, derivadas, integrais
 ```
 
-Invariante obrigatório:
+Padrão:
+
+```text
+25 min foco / 5 min pausa / 15 min pausa longa
+```
+
+Pode configurar, por exemplo:
+
+```text
+modo estudo 50/10/20 Física I: cinemática, dinâmica
+```
+
+Persistência:
+
+```text
+0011_study_mode.sql
+study_sessions
+study_topics
+study_events
+```
+
+Invariante obrigatório e já testado:
 
 **o tópico só avança quando o usuário explicitamente disser que concluiu ou pulou.**
 
-Fim de timer, pausa ou passagem de tempo nunca concluem conteúdo automaticamente.
+Portanto fim do timer, pausa, restart e Day-off nunca criam conclusão fictícia.
+
+Ações principais:
+
+```text
+concluí o tópico
+pular tópico
+não terminei
+status estudo
+pausar estudo
+retomar estudo
+cancelar estudo
+histórico de estudo
+```
+
+O fim do foco só inicia pausa. Se o tópico continuar pendente, o próximo foco volta para ele.
+
+O histórico usa eventos e estados persistidos; uma conclusão antecipada associa o fim do foco ao tópico realmente estudado.
+
+Merge:
+
+```text
+PR #33
+83fe6e17a96c8b8734ba211d43f046670b3e9985
+```
+
+Gate da PR: **330 testes passando**.  
+Regressão pós-merge: **success**, run #251.
+
+Documentos:
+
+- `docs/ETAPA_3B_MODO_ESTUDO.md`;
+- `docs/ETAPA_3_ASSISTENTES_DE_TEMPO.md`.
 
 ---
 
 ## 6. Scheduler e redundância
 
-Após o incidente de 30/08/2026 existem duas linhas temporais:
+Existem duas linhas temporais complementares:
 
 ```text
 Cron Trigger
@@ -225,9 +252,30 @@ Cron Trigger
 Durable Objects (PersonalAlarm / AttendanceAlarm)
 ```
 
-Ambas convergem para regras autoritativas e `notification_log` protege idempotência.
+`PersonalAlarm` hoje considera:
 
-No webhook, reconciliação de alarms usa trabalho pós-resposta para não bloquear respostas interativas.
+```text
+tarefas/compromissos/lembretes
+quick timers
+Modo Estudo
+rotinas
+resumos
+```
+
+No alarm:
+
+```text
+quick timers
+→ study phases
+→ reliable reminders
+→ routines
+→ summaries
+→ rearme
+```
+
+`notification_log` continua sendo a barreira central de idempotência.
+
+A reconciliação dos alarms ocorre fora do tempo crítico do webhook para preservar latência interativa.
 
 Detalhes: `docs/SCHEDULER_REDUNDANCY.md`.
 
@@ -235,15 +283,16 @@ Detalhes: `docs/SCHEDULER_REDUNDANCY.md`.
 
 ## 7. Performance
 
-O caminho quente já recebeu:
+O caminho quente já possui:
 
 - cache por update de `telegram_chat_id → user_id`;
 - cache por update de `user_sessions`;
 - gates lexicais antes de D1;
 - DDL de presença removido do dispatcher geral;
-- reconciliação de Durable Objects fora do tempo de resposta do webhook.
+- reconciliação de Durable Objects pós-resposta;
+- Modo Estudo faz gate linguístico antes de consultar usuário/D1.
 
-Se a latência voltar a ser um problema, o próximo passo é instrumentar **tempo por handler/D1/Telegram**, não otimizar aleatoriamente.
+Se a latência voltar a incomodar, instrumentar tempo por handler/D1/Telegram antes de nova otimização.
 
 ---
 
@@ -256,18 +305,20 @@ Ativas:
 - lembretes pessoais;
 - agenda Hoje/Amanhã/7 dias;
 - matérias/provas/presença/faltas;
-- importação acadêmica por PDF textual/TXT;
+- importação acadêmica confiável no primeiro acesso;
 - rotinas e metas;
-- mercado/itens faltando;
+- mercado;
 - musculação/progresso;
 - Ler/Ver Depois: Livros, Filmes, Cursos e Outras;
+- alertas rápidos/cronômetros;
+- Modo Estudo;
 - Day-off;
 - resumos matinal/semanal;
 - clima Open-Meteo com comentário humano;
 - administração do proprietário;
 - scheduler redundante.
 
-`🎓 Cursos` em Ler/Ver Depois continua sendo backlog simples, não o módulo de Cursos/Trilhas da Etapa 4.
+`🎓 Cursos` em Ler/Ver Depois continua sendo backlog simples. Não confundir com a Etapa 4.
 
 ---
 
@@ -285,23 +336,45 @@ Migrations formais conhecidas:
 0007_admin_pending_announcements.sql
 0008_later_items.sql
 0009_ru_menu.sql
+0010_quick_timers.sql
+0011_study_mode.sql
 ```
 
-A Etapa 2 não adicionou migration.
-
-Migration continua sendo fonte formal; `ensure_schema()` é defesa operacional, não substituto.
+Migration é fonte formal. `ensure_schema()` de domínio é somente defesa operacional.
 
 ---
 
-## 10. Instrução para a próxima IA
+## 10. Próxima etapa — Etapa 4
 
-1. confirmar commits posteriores a `1542ec1e1f932fdcc75b32d097ddee0089ee2034`;
-2. ler `docs/ETAPA_3_ASSISTENTES_DE_TEMPO.md` e a Trilha Definitiva;
-3. iniciar **Etapa 3 — Auxiliares de Tempo / Modo Estudo**;
-4. começar pela infraestrutura persistente do Assistente Geral de Tempo ou pela ordem indicada no documento da Etapa 3, sem criar roadmap paralelo;
-5. preservar o invariante de progresso explícito do Modo Estudo;
-6. não transformar alertas rápidos em `daily_items` de tarefa;
-7. não reabrir o modelo acadêmico sem nova decisão explícita do produto;
-8. não religar Broad NLU/Library histórica como atalho.
+**Cursos e trilhas de estudo.**
 
-**Próximo trabalho oficial: Etapa 3 — Assistente Geral de Tempo + Modo Estudo.**
+Objetivo geral já definido no roadmap:
+
+```text
+Curso
+→ módulos[]
+   → conteúdos/submódulos[]
+      → materiais[]
+      → atividades[]
+      → progresso
+```
+
+O progresso deve continuar explícito. Cursos autogeridos e cursos ao vivo possuem regras diferentes. O Modo Estudo da Etapa 3 será a infraestrutura operacional para executar sessões sobre um conteúdo de curso, sem misturar a identidade do curso com o cronômetro.
+
+Ao final da Etapa 4 existe o fechamento obrigatório de reorganização do menu por áreas da vida antes da Etapa 5.
+
+---
+
+## 11. Instrução para a próxima IA
+
+1. confirmar commits posteriores a `83fe6e17a96c8b8734ba211d43f046670b3e9985`;
+2. ler `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`;
+3. ler `docs/ETAPA_3_ASSISTENTES_DE_TEMPO.md` e os documentos 3A/3B;
+4. iniciar **Etapa 4 — Cursos e trilhas de estudo**, sem criar roadmap paralelo;
+5. preservar conclusão/progresso explícitos;
+6. integrar cursos ao Modo Estudo sem transformar tempo em progresso;
+7. manter `🎓 Cursos` de Ler/Ver Depois como backlog simples até a migração explícita de itens, se houver;
+8. não reabrir o modelo acadêmico sem nova decisão do produto;
+9. não religar Broad NLU/Library histórica como atalho.
+
+**Próximo trabalho oficial: Etapa 4 — Cursos e trilhas de estudo.**
