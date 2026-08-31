@@ -4,10 +4,10 @@
 **Branch de produção:** `main`  
 **Snapshot técnico validado da Etapa 1:** `f08bff2e4edf5303f8b79a5a420ecd80356043fa`  
 **Handoff documental da Etapa 1:** `e3220d95aed43b1e5730709e56aa07d6716e77d9`  
-**Fase oficial:** **Etapa 2 — Acadêmico completo + importação robusta**  
-**Subetapa em andamento:** **2.1 — Inventário e autoridades acadêmicas**
+**Fase oficial:** **Etapa 2 — Importação acadêmica confiável**  
+**Subetapa em andamento:** **2.1 — Caracterização do importador atual**
 
-> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para runtime use `ARCHITECTURE.md`; para decisões duradouras use `CONTINUIDADE.md`; para ordem futura use `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`. O inventário acadêmico atual está em `ETAPA_2_1_INVENTARIO_ACADEMICO.md`.
+> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para runtime use `ARCHITECTURE.md`; para decisões duradouras use `CONTINUIDADE.md`; para ordem futura use `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`. O escopo atualizado da Etapa 2 está em `ETAPA_2_1_INVENTARIO_ACADEMICO.md`.
 
 ---
 
@@ -36,7 +36,7 @@ A raiz `src/` continua histórica/preservada e não governa produção.
 ```text
 0. 🧹 Arrumar a casa                         ✅ concluída
 1. 🗣️ Linguagem natural + conversa real     ✅ concluída
-2. 🎓 Acadêmico + importação robusta         🚧 em andamento — 2.1
+2. 🎓 Importação acadêmica confiável         🚧 em andamento — 2.1
 3. ⏱️ Auxiliares de Tempo / Modo Estudo     ⏳ planejada
 4. 📚 Cursos e trilhas de estudo             ⏳ planejada
    fechamento: menu por áreas da vida        ⏳ planejado
@@ -63,51 +63,60 @@ Documento final: `docs/ETAPA_1_6_GATE_FINAL.md`.
 
 ---
 
-## 3. Etapa 2.1 — achados atuais
+## 3. Decisão de produto para a Etapa 2
 
-O modelo acadêmico formal atual é mínimo:
+O formato acadêmico atual foi validado como **suficiente e excelente para o uso desejado**.
+
+A Etapa 2 **não é mais uma reforma do modelo acadêmico**.
+
+Objetivo oficial:
+
+> aumentar a confiança ao extrair e cadastrar as matérias de novos usuários.
+
+Portanto ficam fora do escopo, salvo bug mínimo explicitamente aprovado:
+
+- redesenhar `subjects` ou `subject_sessions`;
+- adicionar professor/carga horária/semestre/observações;
+- criar novo modelo de avaliações/trabalhos;
+- refatorar presença/faltas;
+- criar migration acadêmica por melhoria arquitetural;
+- alterar o formato de matéria/horário que já funciona.
+
+Os achados de reimportação destrutiva e identidade de matéria permanecem documentados como observações técnicas, mas **não puxam esta etapa para uma reestruturação**.
+
+---
+
+## 4. Formato acadêmico que deve permanecer
 
 ```text
 subjects
-→ id, user_id, name, active, created_at
+→ nome
+→ ativa/trancada
 
 subject_sessions
-→ id, subject_id, weekday, start_time, end_time, location
+→ dia da semana
+→ horário inicial
+→ horário final
+→ local
 ```
 
-Presença/faltas já possuem estruturas próprias em `0003_attendance.sql`.
+O sistema atual já permite:
 
-O inventário identificou os seguintes riscos prioritários:
+- múltiplos horários por matéria;
+- cadastro manual;
+- edição de nome/dia/horário/local;
+- adicionar/remover aula;
+- trancar/remover matéria;
+- provas;
+- faltas/limite de faltas;
+- avisos acadêmicos;
+- consultas naturais.
 
-1. **P0 — importação destrutiva:** a confirmação atual da grade apaga todas as matérias/sessões do usuário e recria tudo;
-2. **P0 — histórico de faltas:** como faltas referenciam matéria/sessão com `ON DELETE CASCADE`, reimportar pode apagar histórico;
-3. **P0 — provas:** hoje usam `daily_items.details = exam:<subject_id>`; recriar matérias pode deixar provas semanticamente órfãs;
-4. **P1 — código SIGAA descartado:** `parse_schedule_text()` já extrai `code`, mas o schema não o persiste;
-5. **P1 — sessões sem unicidade formal:** importações incrementais podem duplicar aula;
-6. **P1 — edição existe por monkeypatch:** `academic_polish.py` governa a edição final apesar de `app.py` ainda conter fluxo-base antigo;
-7. **P1 — remover matéria é DELETE:** a política de arquivar/trancar/remover precisa ser definida antes da evolução do modelo.
-
-**Decisão:** não criar migration acadêmica nova antes de fechar a 2.2 — identidade/modelo acadêmico.
-
----
-
-## 4. Autoridades acadêmicas atuais
-
-- `app.py`: cadastro-base, parser SIGAA, importação/preview/persistência atual;
-- `academic_polish.py`: edição guiada real e onboarding SIGAA via monkeypatch instalado;
-- `academic_intelligence.py`: consultas naturais, provas e lembretes de prova;
-- `exam_phrase_patch.py` / `exam_cancel_patch.py`: criação/cancelamento natural de prova;
-- `attendance_patch.py`: base de faltas/presença explícita;
-- `attendance_enhancement.py`: relatórios/limite e callback aprimorado;
-- `attendance_management.py`: editar limite e excluir/corrigir falta;
-- `attendance_production_fix.py`: T-10/T0, heartbeat e menu acadêmico final;
-- `attendance_alarm.py`: contingência Durable Object para avisos acadêmicos.
-
-Ao fim da Etapa 2 deve haver autoridade mais explícita, sem depender de uma pilha crescente de monkeypatches.
+Nada disso precisa ser remodelado na Etapa 2.
 
 ---
 
-## 5. Contrato da importação que deve sobreviver
+## 5. Contrato da importação para novos usuários
 
 Fonte SIGAA recomendada:
 
@@ -122,61 +131,82 @@ Aceitar:
 
 Produção não depende de OCR.
 
-O fluxo já possui uma decisão correta que deve permanecer:
+Fluxo obrigatório:
 
 ```text
 arquivo
-→ parser
+→ extração
+→ validação
 → prévia
 → confirmação explícita
-→ persistência
+→ cadastro no modelo atual
 ```
 
-O que precisa mudar é a persistência: sair de `delete all + recreate` para plano de merge com identidade estável.
+O Butler deve preferir marcar uma linha como ambígua a cadastrar matéria errada.
 
 ---
 
-## 6. Próxima sequência da Etapa 2
+## 6. Sequência atual da Etapa 2
 
 ```text
-2.1 Inventário/autoridades
-→ caracterização do parser e fluxos críticos
+2.1 Caracterização do importador atual
+→ parser SIGAA + testes do comportamento que já funciona
 
-2.2 Identidade/modelo acadêmico
-→ external_code / campos / política de arquivar-remover
-→ identidade de sessão
-→ associação estável de avaliações
+2.2 Extração SIGAA mais robusta
+→ variações de PDF/TXT, espaços, quebras de linha, códigos e locais
 
-2.3 Migration + backfill
+2.3 Validação/confiança
+→ reconhecido / precisa conferir / não reconhecido
+→ evitar duplicatas e falsos positivos
 
-2.4 Importador normalizado
-→ adaptador SIGAA separado do modelo
+2.4 Prévia clara
+→ mostrar exatamente matérias, dias, horários e locais que serão cadastrados
 
-2.5 Preview de diferenças
-→ novo / alterado / mantido / removido
+2.5 Cadastro inicial seguro
+→ somente após confirmação
+→ mesmo modelo atual
+→ isolamento por usuário
 
-2.6 Merge confirmado
-→ preservar IDs/histórico
-
-2.7 Onboarding/documentação
+2.6 Onboarding + corpus real
+→ orientar novo usuário sobre onde pegar a grade e como exportar
+→ cadastro manual continua disponível
 ```
+
+**Não há etapa de migration/modelo acadêmico prevista neste escopo.**
 
 ---
 
-## 7. Invariantes acadêmicos
+## 7. Autoridades acadêmicas atuais
+
+- `app.py`: cadastro-base, parser SIGAA, importação/preview/persistência atual;
+- `academic_polish.py`: edição guiada real e onboarding SIGAA via monkeypatch instalado;
+- `academic_intelligence.py`: consultas naturais, provas e lembretes de prova;
+- `exam_phrase_patch.py` / `exam_cancel_patch.py`: criação/cancelamento natural de prova;
+- `attendance_patch.py`: base de faltas/presença explícita;
+- `attendance_enhancement.py`: relatórios/limite e callback aprimorado;
+- `attendance_management.py`: editar limite e excluir/corrigir falta;
+- `attendance_production_fix.py`: T-10/T0, heartbeat e menu acadêmico final;
+- `attendance_alarm.py`: contingência Durable Object para avisos acadêmicos.
+
+A Etapa 2 só deve mexer nessas autoridades quando necessário para melhorar a importação de novos usuários.
+
+---
+
+## 8. Invariantes acadêmicos
 
 - aula prevista nunca implica presença;
 - `vou` não grava presença fictícia;
 - falta só por ação explícita;
-- reimportação não pode apagar histórico silenciosamente;
-- importação sempre tem preview;
+- importação sempre tem prévia;
 - imagem/scan não entra como PDF textual;
 - dados isolados por usuário;
-- provas não podem perder a associação com matéria silenciosamente.
+- cadastro manual permanece disponível;
+- bloco ambíguo não deve ser inventado;
+- o modelo acadêmico atual deve permanecer estável durante esta etapa.
 
 ---
 
-## 8. Linguagem natural consolidada
+## 9. Linguagem natural consolidada
 
 A Etapa 1 deixou ativos:
 
@@ -190,7 +220,7 @@ Quick timers não devem virar tarefas normais antes da Etapa 3.
 
 ---
 
-## 9. Scheduler e performance
+## 10. Scheduler e performance
 
 Scheduler possui redundância:
 
@@ -206,7 +236,7 @@ O caminho quente já recebeu cache por update, gates lexicais e reconciliação 
 
 ---
 
-## 10. Banco e migrations
+## 11. Banco e migrations
 
 Migrations formais conhecidas:
 
@@ -222,13 +252,15 @@ Migrations formais conhecidas:
 0009_ru_menu.sql
 ```
 
-A lista anterior do handoff parava em `0008`; isso estava desatualizado e foi corrigido durante a 2.1.
+A lista anterior do handoff parava em `0008`; isso foi corrigido durante a 2.1.
 
-Migration é fonte formal; `ensure_schema()` é defesa operacional, não substituto.
+**A Etapa 2 atual não exige nova migration acadêmica.**
+
+Migration continua sendo fonte formal; `ensure_schema()` é defesa operacional, não substituto.
 
 ---
 
-## 11. Validação
+## 12. Validação
 
 Fechamento técnico da Etapa 1:
 
@@ -239,19 +271,22 @@ Handoff documental:
 
 - merge `e3220d95aed43b1e5730709e56aa07d6716e77d9`.
 
-Etapa 2.1 trabalha na branch `refactor/etapa-2-1-inventario-academico` e só deve ser mesclada após caracterização/regressão verde.
+Etapa 2.1 trabalha na branch `refactor/etapa-2-1-inventario-academico`.
+
+Os testes de caracterização já cobrem parser SIGAA, múltiplos dias, blocos M/T/N, localização opcional, falsos positivos básicos e onboarding.
 
 CI verde comprova regressão do repositório; não prova sozinho deploy Cloudflare.
 
 ---
 
-## 12. Instrução para a próxima IA
+## 13. Instrução para a próxima IA
 
 1. confirmar commits posteriores;
 2. ler `docs/ETAPA_2_1_INVENTARIO_ACADEMICO.md`;
-3. fechar o gate 2.1 antes de alterar schema;
-4. desenhar a **2.2 — identidade/modelo acadêmico** antes de migration;
-5. não preservar o comportamento destrutivo da importação como requisito;
-6. não religar NLU/Library histórica como atalho.
+3. preservar o modelo acadêmico atual;
+4. fechar 2.1 e iniciar **2.2 — Extração SIGAA mais robusta**;
+5. não criar migration/modelo acadêmico novo sem nova decisão explícita do produto;
+6. focar novos usuários/primeira grade;
+7. não religar NLU/Library histórica como atalho.
 
-**Próximo trabalho oficial: fechar a Etapa 2.1 e desenhar a identidade acadêmica da 2.2.**
+**Próximo trabalho oficial: concluir 2.1 e melhorar a confiabilidade do parser/importador SIGAA para novos usuários.**
