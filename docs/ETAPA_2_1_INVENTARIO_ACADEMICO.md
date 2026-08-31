@@ -47,15 +47,7 @@ Melhorar espaços/quebras de linha, locais, códigos de múltiplos dias, combina
 
 ## 2.3 — Validação/confiança
 
-Classificar cada bloco:
-
-```text
-✅ reconhecido
-⚠️ precisa conferir
-❌ não reconhecido
-```
-
-Evitar nome vazio, horário impossível, duplicata, código parcialmente reconhecido e linha ambígua.
+Classificar cada bloco como `✅ reconhecido`, `⚠️ precisa conferir` ou `❌ não reconhecido`, evitando nome vazio, horário impossível, duplicata, código parcialmente reconhecido e linha ambígua.
 
 ## 2.4 — Prévia clara
 
