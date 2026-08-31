@@ -8,6 +8,7 @@ import goal_polish
 import goal_deadline_patch
 import goal_routine_bridge
 import goal_natural_patch
+from owner_profile import is_owner
 from task_context_patch import _task_list
 from telegram_api import send_message
 
@@ -32,6 +33,19 @@ ADD_KB = [
     ["🧘 Rotinas", "🎯 Metas"],
     ["➕ Item faltando", "🏠 Menu principal"],
 ]
+
+RU_PUBLIC_KB = [
+    ["🍽️ Cardápio de hoje", "📅 Cardápio da semana"],
+    ["🗃️ Cardápios anteriores"],
+    ["⬅️ Voltar ao cotidiano"],
+]
+RU_OWNER_KB = [
+    ["🍽️ Cardápio de hoje", "📅 Cardápio da semana"],
+    ["📤 Atualizar cardápio RU", "🗃️ Cardápios anteriores"],
+    ["⬅️ Voltar ao cotidiano"],
+]
+RU_OPEN_TEXTS = {"🍽️ RU", "🍽️ Restaurante Universitário"}
+RU_IMPORT_STATES = {"ru_import_wait", "ru_import_confirm"}
 
 ROUTINE_DIRECT_BUTTONS = {
     "🧘 Rotinas",
@@ -89,6 +103,23 @@ async def _uid(db, chat_id):
     return int(_row(row, "id")) if row else None
 
 
+async def _ru_source_uid(db, fallback_uid):
+    """Cardápio RU é compartilhado: todos leem a importação feita pelo proprietário."""
+    row = await db.prepare("SELECT id FROM users WHERE is_owner=1 ORDER BY id LIMIT 1").first()
+    return int(_row(row, "id")) if row else fallback_uid
+
+
+def _ru_keyboard(chat_id):
+    return RU_OWNER_KB if is_owner(chat_id) else RU_PUBLIC_KB
+
+
+def _is_ru_import_request(text):
+    n = ru_menu._norm(text)
+    return text == "📤 Atualizar cardápio RU" or any(
+        marker in n for marker in ("atualizar cardapio ru", "importar cardapio ru", "novo cardapio do ru")
+    )
+
+
 def _looks_goal_related(text, state=None):
     if state and state.startswith("goal_"):
         return True
@@ -139,6 +170,9 @@ async def _appointment_list(db, uid):
 def install():
     app.MAIN_KB = [list(row) for row in MAIN_KB]
     app.COTIDIANO_KB = [list(row) for row in COTIDIANO_KB]
+    # Respostas internas do domínio nunca exibem a ação administrativa para usuários comuns.
+    # O proprietário recebe o botão de importação ao abrir explicitamente o menu RU.
+    ru_menu.RU_KB = [list(row) for row in RU_PUBLIC_KB]
     goal_operational.install()
     goal_polish.install()
     goal_deadline_patch.install()
@@ -165,11 +199,38 @@ async def handle_message(db, token, message):
     # passou antes deste handler. Mesmo assim, o helper continua seguro isolado.
     uid = await _uid(db, chat_id)
     state, state_payload = await runtime_guard._state(db, uid) if uid else (None, {})
+    owner = is_owner(chat_id)
 
-    # RU é um domínio operacional pequeno e fica acoplado ao menu autoritativo,
-    # antes dos fast paths genéricos, para consultas como "qual o almoço hoje?"
-    # não caírem em outro domínio e para o upload TXT poder continuar por estado.
-    if await ru_menu.handle_message(db, token, message, uid=uid, state=state, payload=state_payload):
+    # O cardápio é público para todos os usuários, mas a manutenção do TXT fica
+    # restrita ao proprietário. Abrir o menu explicitamente usa teclado dinâmico.
+    if text in RU_OPEN_TEXTS:
+        await send_message(
+            token,
+            chat_id,
+            "🍽️ Restaurante Universitário. Cardápio semanal sem precisar caçar a foto toda vez.",
+            reply_markup=_kb(_ru_keyboard(chat_id)),
+        )
+        return True
+
+    # Proteção dupla: mesmo que um usuário comum ainda tenha um teclado antigo em
+    # cache ou digite a frase manualmente, não consegue iniciar/continuar importação.
+    if (_is_ru_import_request(text) or state in RU_IMPORT_STATES) and not owner:
+        if state in RU_IMPORT_STATES and uid:
+            await app.clear_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "🍽️ O cardápio do RU é público, mas a atualização do arquivo está restrita ao administrador por enquanto.",
+            reply_markup=_kb(RU_PUBLIC_KB),
+        )
+        return True
+
+    # Todos consultam a mesma fonte: o cardápio importado pelo proprietário.
+    # Estado/payload de importação só são encaminhados quando o próprio owner fala.
+    ru_uid = await _ru_source_uid(db, uid) if uid else None
+    ru_state = state if owner else None
+    ru_payload = state_payload if owner else {}
+    if await ru_menu.handle_message(db, token, message, uid=ru_uid, state=ru_state, payload=ru_payload):
         return True
 
     # Metas tinham quatro handlers executados para qualquer texto. Agora só entram
