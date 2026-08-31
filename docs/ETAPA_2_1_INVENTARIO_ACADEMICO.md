@@ -1,226 +1,74 @@
-# Butler — Etapa 2.1: Inventário e autoridades do domínio acadêmico
+# Butler — Etapa 2: Importação acadêmica confiável
 
 **Data-base:** 31/08/2026  
-**Status:** inventário e caracterização concluídos; aguardando gate final da PR  
+**Status:** escopo corrigido após validação do produto  
 **Etapa anterior:** Etapa 1 concluída
 
-## Objetivo
+## Decisão de produto
 
-Mapear o domínio acadêmico que realmente governa produção antes de alterar schema, importação ou experiência de usuário.
+O modelo acadêmico atual do Butler já atende bem ao uso esperado e **não deve ser reformulado nesta etapa**.
 
-A Etapa 2 não deve transformar o problema em uma sequência de novos patches. Primeiro é necessário saber quem lê, quem escreve e qual dado precisa sobreviver a edição/reimportação.
+A Etapa 2 passa a ter um objetivo bem mais específico:
 
----
+> aumentar a confiança na extração e no cadastro inicial das matérias de novos usuários.
 
-## 1. Modelo formal atual
+Portanto, ficam fora do escopo desta etapa, salvo correção mínima de bug explicitamente aprovada:
 
-### `subjects`
+- redesenhar `subjects` / `subject_sessions`;
+- adicionar professor, carga horária, observações ou semestre;
+- criar modelo novo de avaliações/trabalhos;
+- refatorar presença/faltas;
+- alterar a experiência atual de edição manual de matérias;
+- criar migrations apenas por melhoria arquitetural;
+- substituir o formato acadêmico que já funciona.
 
-Definido em `0001_initial.sql`:
-
-```text
-id
-user_id
-name
-active
-created_at
-```
-
-Restrição atual:
-
-```text
-UNIQUE(user_id, name)
-```
-
-Não existem formalmente ainda:
-
-```text
-code
-professor
-course_load
-notes
-term/semester
-```
-
-### `subject_sessions`
-
-```text
-id
-subject_id
-weekday
-start_time
-end_time
-location
-```
-
-Uma matéria já pode possuir múltiplas sessões. Porém não existe `UNIQUE` para impedir duas sessões idênticas.
-
-### Presença/faltas
-
-`0003_attendance.sql` separa:
-
-```text
-subject_attendance_settings
-subject_absences
-```
-
-`subject_absences` referencia:
-
-```text
-user_id
-subject_id
-session_id
-class_date
-```
-
-com `ON DELETE CASCADE` para matéria/sessão.
-
-Isso significa que identidade estável de matéria e sessão é requisito para preservar histórico.
-
-### Provas
-
-Não há tabela acadêmica própria de avaliações.
-
-Hoje prova é representada em `daily_items`:
-
-```text
-kind = compromisso
-details = exam:<subject_id>
-title = Prova de <matéria>
-```
-
-A associação com matéria é textual (`details`), não FK.
+O formato atual deve ser **preservado**.
 
 ---
 
-## 2. Autoridades reais do runtime
+## 1. O que já funciona e deve continuar igual
 
-### `app.py`
-
-Ainda contém a implementação-base de:
-
-- menu acadêmico;
-- adicionar matéria;
-- remover matéria;
-- trancar matéria;
-- parser `parse_schedule_text()`;
-- importação PDF/TXT;
-- preview/estado `import_confirm`;
-- persistência da grade importada.
-
-O parser entende código SIGAA e retorna `code`, mas esse campo não é persistido porque `subjects` não possui coluna correspondente.
-
-### `academic_polish.py`
-
-É instalado no runtime e monkeypatcha:
+O Butler já representa matéria e aulas de forma suficiente para o produto atual:
 
 ```text
-app.handle_message
-app.handle_state
-app.agenda_text
+subjects
+→ nome
+→ ativa/trancada
+
+subject_sessions
+→ dia da semana
+→ horário inicial
+→ horário final
+→ local
 ```
 
-Na prática, hoje é a autoridade operacional da **edição guiada** de matéria/sessões e também acrescenta o onboarding/guia de importação SIGAA.
+Uma matéria pode ter múltiplos horários/localizações.
 
-Ele permite:
+Também já existem:
 
-- renomear matéria;
-- editar dia;
-- editar horário;
-- editar sala/local;
-- adicionar aula/sessão;
-- remover aula/sessão.
+- cadastro manual;
+- edição de nome/dia/horário/local;
+- adicionar/remover aula;
+- trancar/remover matéria;
+- provas;
+- faltas e limite de faltas;
+- avisos de aula;
+- consultas naturais;
+- importação por PDF textual/TXT.
 
-Portanto a mensagem-base antiga em `app.py` dizendo que edição ainda não existe não representa o comportamento final após `install()`.
-
-### `academic_intelligence.py`
-
-Governa parte relevante de:
-
-- consultas naturais de agenda acadêmica;
-- resolução de matéria por texto;
-- próxima aula;
-- listagem/criação de provas;
-- lembretes de prova;
-- menu acadêmico complementar.
-
-Também instala wrapper em `app.scheduled_tick` para `exam_reminders()`.
-
-### `exam_phrase_patch.py`
-
-Fast path natural para criação de prova. Usa `_subject_lookup()` e `_save_exam()` de `academic_intelligence`.
-
-### `exam_cancel_patch.py`
-
-Responsável pelo cancelamento de provas em linguagem/fluxo específico.
-
-### `attendance_patch.py`
-
-É a base da presença/faltas:
-
-- resolução de matéria;
-- cálculo de unidades de falta pela duração da sessão;
-- gravação idempotente por `user_id + session_id + class_date`;
-- relatório básico;
-- callback `vou/não vou` original.
-
-Importante: `vou` não salva presença. Só a ausência explícita é persistida.
-
-### `attendance_enhancement.py`
-
-Complementa/monkeypatcha a camada de presença:
-
-- relatório com percentual/alertas;
-- callback aprimorado;
-- solicitação do limite de faltas;
-- `ensure_schema()` defensivo.
-
-O schema formal já existe em migration 0003; o DDL local é compatibilidade operacional, não fonte formal.
-
-### `attendance_management.py`
-
-Governa:
-
-- editar limite;
-- excluir/corrigir falta com confirmação;
-- listagem de ausências recentes.
-
-### `attendance_production_fix.py`
-
-Governa a entrega temporal de aula/presença:
-
-- aviso T-10;
-- aviso no início da aula;
-- `notification_log` para idempotência;
-- heartbeat do scheduler acadêmico;
-- menu acadêmico final instalado em runtime.
-
-### `attendance_alarm.py`
-
-Durable Object de contingência para presença/aulas. Não substitui a autoridade de negócio; rearma/dispara o mesmo fluxo confiável.
+Nada disso precisa ser remodelado nesta etapa.
 
 ---
 
-## 3. Importação atual
+## 2. Fonte recomendada para novos usuários
 
-### Entrada
-
-O onboarding de `academic_polish.py` recomenda corretamente:
+A fonte oficial recomendada permanece a tabela do painel principal do SIGAA:
 
 ```text
 Componente Curricular | Local | Horário
 ```
 
-Formatos aceitos:
-
-- PDF textual/pesquisável;
-- TXT.
-
-Imagem/scan não usa OCR em produção.
-
-### Parser
-
-`app.parse_schedule_text()` procura códigos SIGAA como:
+Exemplos de códigos aceitos pelo parser atual:
 
 ```text
 35M45
@@ -228,7 +76,22 @@ Imagem/scan não usa OCR em produção.
 2T23
 ```
 
-E converte para sessões explícitas:
+Formatos aceitos:
+
+- PDF com texto pesquisável/selecionável;
+- TXT.
+
+Não usar OCR em produção para print, foto, imagem ou PDF escaneado.
+
+O onboarding atual que orienta `Imprimir → Salvar como PDF` diretamente do SIGAA deve ser mantido.
+
+---
+
+## 3. O que o inventário confirmou
+
+### Parser atual
+
+`app.parse_schedule_text()` já extrai:
 
 ```text
 name
@@ -239,224 +102,205 @@ location
 code
 ```
 
-O parser é relativamente puro e pode servir como primeiro adaptador, mas hoje ainda está dentro de `app.py`.
+Exemplo:
 
-### Caracterização protegida por teste
+```text
+Sistemas Digitais I 35M45 PAV II sala 05
+```
 
-`cloudflare/tests/test_stage2_1_academic_inventory.py` fixa o contrato atual útil do parser/edição:
+vira duas sessões:
 
-- `35M45` expande para terça + quinta;
-- `M45` converte para 10:00–12:00;
-- manhã/tarde/noite usam os blocos horários atuais;
-- `code` permanece presente na saída;
-- `location` é opcional;
-- texto livre sem código SIGAA não é inventado como grade;
-- edição aceita faixas horárias válidas e rejeita intervalos invertidos/horas inválidas;
-- aliases de dia da semana usados pela edição ficam caracterizados;
-- onboarding continua informando fonte SIGAA recomendada, PDF/TXT e ausência de OCR.
+```text
+terça-feira  10:00–12:00  PAV II sala 05
+quinta-feira 10:00–12:00  PAV II sala 05
+```
 
-Esses testes **não** legitimam a persistência destrutiva atual; ela é um problema que a Etapa 2 deve remover.
+O `code` faz parte da saída do parser, mas não precisa virar novo campo no banco nesta etapa.
 
 ### Preview
 
-Já existe uma boa decisão que deve ser preservada:
+A decisão atual é boa e permanece obrigatória:
 
 ```text
 arquivo
-→ parse
+→ extração
 → prévia
-→ usuário digita confirmar
-→ persistência
-```
-
-### Persistência atual — problema crítico
-
-Na confirmação da grade, o código executa:
-
-```text
-DELETE subject_sessions do usuário
-DELETE subjects do usuário
-→ INSERT matérias/sessões parseadas
-```
-
-Isso não é um merge e não preserva identidade.
-
----
-
-## 4. Riscos encontrados
-
-### P0 — reimportação pode destruir histórico de faltas
-
-Como `subject_absences.subject_id/session_id` usam `ON DELETE CASCADE`, apagar todas as matérias/sessões pode apagar faltas e configurações acadêmicas relacionadas.
-
-**Decisão para Etapa 2:** importação não pode continuar baseada em `delete all + recreate`.
-
-### P0 — provas podem ficar órfãs semanticamente
-
-Provas usam:
-
-```text
-details = exam:<subject_id>
-```
-
-Depois de apagar/recriar matérias, os IDs podem mudar. O `daily_item` não é apagado por FK, mas deixa de casar com a nova matéria.
-
-**Decisão:** a associação avaliação ↔ matéria precisa de identidade estável/normalizada antes de consolidar importação.
-
-### P1 — código SIGAA é reconhecido e descartado
-
-O parser já retorna `code`, mas o modelo não salva.
-
-Isso elimina o melhor identificador externo disponível para reconciliar uma matéria importada com a já existente.
-
-### P1 — edição existe por monkeypatch, não no módulo dono
-
-`app.py` mantém um fluxo-base e `academic_polish.py` substitui partes em runtime.
-
-Funciona, mas a autoridade fica difícil de entender/testar. A Etapa 2 deve consolidar gradualmente essa responsabilidade em módulo acadêmico explícito, sem big-bang.
-
-### P1 — sessões podem duplicar
-
-`subject_sessions` não possui unicidade formal para:
-
-```text
-subject_id + weekday + start_time + end_time + location
-```
-
-Edição/importações incrementais futuras precisam de estratégia de identidade/deduplicação.
-
-### P1 — remoção de matéria é destrutiva
-
-`Remover matéria` executa DELETE; `Trancar matéria` apenas seta `active=0`.
-
-Antes de ampliar o modelo, definir claramente:
-
-```text
-trancar → preservar histórico e ocultar do período ativo
-remover → quando realmente apagar? arquivar? soft delete?
-```
-
-### P2 — menus acadêmicos possuem várias definições
-
-Há menu em `app.py`, `academic_intelligence.py` e `attendance_production_fix.py`; o último instala a versão final.
-
-Não é urgente, mas deve haver uma autoridade clara ao fim da Etapa 2.
-
-### P2 — schema defensivo e heartbeat ainda nascem em runtime
-
-`attendance_enhancement.ensure_schema()` repete migration 0003 e `attendance_production_fix._heartbeat()` cria `attendance_scheduler_ticks` dinamicamente.
-
-A disciplina final deve preferir migration formal para estruturas permanentes.
-
-### P2 — handoff documental estava uma migration atrás
-
-O repositório já possui `0009_ru_menu.sql`. `docs/STATUS_ATUAL.md` ainda listava apenas `0001–0008`; a 2.1 corrige esse snapshot para `0001–0009`.
-
----
-
-## 5. Autoridades-alvo da Etapa 2
-
-Sem implementar tudo de uma vez, a direção é:
-
-```text
-academic_model / repository
-→ matéria + sessões + identidade acadêmica
-
-academic_import
-→ adaptadores (SIGAA primeiro)
-→ preview normalizado
-→ merge plan
+→ usuário confere
 → confirmação
-→ persistência
-
-academic_ui
-→ cadastro/edição/trancar/arquivar
-
-academic_assessments
-→ provas/avaliações/trabalhos associados por identidade estável
-
-attendance
-→ continua responsável por faltas/presença explícita
-
-academic_scheduler
-→ aula + avisos temporais, reaproveitando idempotência atual
+→ cadastro
 ```
 
-Nomes finais dos módulos podem aproveitar os arquivos existentes; não criar todos como patches novos por padrão.
+Não haverá `parser → banco` silencioso.
+
+### Cadastro manual
+
+Continua sendo alternativa válida quando o arquivo não puder ser interpretado com confiança.
 
 ---
 
-## 6. Ordem dentro da Etapa 2
+## 4. Problema real que a Etapa 2 deve resolver
 
-### 2.1 Inventário/autoridade
-
-- [x] schema atual mapeado;
-- [x] CRUD atual mapeado;
-- [x] importação atual mapeada;
-- [x] edição por monkeypatch identificada;
-- [x] presença/faltas mapeadas;
-- [x] provas mapeadas;
-- [x] riscos de reimportação identificados;
-- [x] regressões de caracterização do parser/fluxos críticos adicionadas;
-- [x] correção documental da migration 0009 registrada;
-- [ ] regressão completa da PR verde;
-- [ ] PR 2.1 mesclada.
-
-### 2.2 Identidade/modelo acadêmico
-
-Antes de migration, definir:
-
-- campos de `subjects`;
-- identidade interna estável;
-- `external_code`/código SIGAA;
-- período/semestre se necessário;
-- política de trancar/arquivar/remover;
-- unicidade de sessões;
-- associação de avaliações.
-
-### 2.3 Migration + backfill
-
-Somente depois do desenho 2.2 aprovado.
-
-### 2.4 Importador normalizado
-
-Extrair parser SIGAA de `app.py`, gerar estrutura normalizada e um plano de merge sem escrita.
-
-### 2.5 Preview de diferenças
-
-Exibir algo como:
+O objetivo não é adicionar mais informação às matérias. É diminuir casos como:
 
 ```text
-+ matéria nova
-~ horário alterado
-= matéria mantida
-- sessão ausente na nova grade (confirmar ação)
+matéria não reconhecida
+nome cortado
+local grudado no nome
+código SIGAA interpretado errado
+um código com dois dias virar só uma aula
+horário M/T/N convertido incorretamente
+linha irrelevante virar matéria
+matéria duplicada na mesma importação
+arquivo parcialmente entendido ser cadastrado como se estivesse correto
 ```
 
-### 2.6 Persistência/merge confirmado
+O Butler deve preferir:
 
-Aplicar somente depois da confirmação, preservando IDs/histórico quando a matéria é a mesma.
+> "Não consegui interpretar estas 2 linhas; confira antes de cadastrar."
 
-### 2.7 Onboarding/documentação
-
-Alinhar primeiro acesso, menu acadêmico, README e exemplos SIGAA.
+em vez de inventar ou cadastrar grade errada.
 
 ---
 
-## 7. Invariantes para não quebrar
+## 5. Nova ordem da Etapa 2
 
-- aula prevista nunca implica presença;
-- `vou` não grava presença fictícia;
-- falta só por ação explícita;
-- reimportação não apaga histórico acadêmico silenciosamente;
-- importação sempre tem preview;
-- scan/imagem não é aceito como PDF textual;
-- dados de um usuário nunca entram na grade de outro;
-- provas existentes não podem perder matéria silenciosamente;
-- CI verde não prova deploy Cloudflare.
+### 2.1 — Caracterizar o comportamento atual ✅
+
+- [x] parser SIGAA identificado;
+- [x] fonte recomendada confirmada;
+- [x] PDF textual/TXT confirmados;
+- [x] sem OCR confirmado;
+- [x] múltiplos dias do mesmo código caracterizados;
+- [x] blocos M/T/N caracterizados;
+- [x] localização opcional caracterizada;
+- [x] falsos positivos básicos cobertos;
+- [x] edição atual reconhecida como suficiente;
+- [x] testes de caracterização adicionados.
+
+### 2.2 — Extração SIGAA mais robusta
+
+Melhorar a leitura sem alterar o modelo persistido.
+
+Cobrir variações reais de:
+
+```text
+nome da matéria
+código da turma/componente quando aparecer na linha
+local vazio ou longo
+espaços/quebras de linha do PDF
+códigos com mais de um dia
+combinações M/T/N
+linhas de cabeçalho/rodapé
+texto repetido pelo PDF
+```
+
+O parser deve continuar determinístico.
+
+### 2.3 — Validação e confiança
+
+Antes da prévia, validar cada matéria/sessão.
+
+Exemplos de erro que devem bloquear o cadastro daquele bloco:
+
+- nome vazio;
+- dia inválido;
+- horário impossível;
+- código SIGAA parcialmente reconhecido;
+- sessão duplicada dentro do mesmo arquivo;
+- linha ambígua que poderia representar mais de uma matéria.
+
+Classificação desejada:
+
+```text
+✅ reconhecido
+⚠️ precisa conferir
+❌ não reconhecido
+```
+
+### 2.4 — Prévia mais clara
+
+O usuário deve conseguir conferir facilmente o resultado antes de salvar.
+
+Exemplo:
+
+```text
+📥 Encontrei 6 matérias
+
+1. Cálculo II
+   terça 08:00–10:00 — PAV I 03
+   quinta 08:00–10:00 — PAV I 03
+
+2. Física II
+   quarta 14:00–16:00 — Lab. Física
+
+⚠️ Não consegui interpretar:
+• linha: "..."
+
+[✅ Confirmar cadastro]
+[❌ Cancelar]
+```
+
+Se houver bloco ambíguo, o Butler não deve fingir confiança total.
+
+### 2.5 — Cadastro inicial seguro
+
+Ao confirmar:
+
+- cadastrar somente o que apareceu na prévia;
+- preservar o formato atual de `subjects` + `subject_sessions`;
+- evitar duplicatas dentro da mesma importação;
+- isolar tudo por usuário;
+- não cadastrar trecho rejeitado/ambíguo;
+- limpar corretamente o estado do wizard após confirmar/cancelar.
+
+O foco oficial é **novo usuário / primeira grade**.
+
+Reimportação de uma grade já existente não é objetivo desta etapa. Os riscos técnicos encontrados no inventário ficam documentados, mas não justificam redesenhar o sistema agora.
+
+### 2.6 — Onboarding e regressão real
+
+Primeiro acesso deve explicar:
+
+1. onde pegar a grade no SIGAA;
+2. qual tabela usar;
+3. PDF textual ou TXT;
+4. por que print/scan não funciona;
+5. que haverá uma prévia antes do cadastro;
+6. que cadastro manual continua disponível.
+
+Criar corpus com exemplos reais/anônimos de grades e variações de PDF/TXT.
+
+---
+
+## 6. Gate de saída da Etapa 2
+
+A Etapa 2 estará concluída quando:
+
+- [ ] parser reconhecer com segurança as principais variações reais do SIGAA;
+- [ ] múltiplos dias/horários forem extraídos corretamente;
+- [ ] cabeçalhos/rodapés/linhas irrelevantes não virarem matéria;
+- [ ] duplicatas da própria importação forem eliminadas;
+- [ ] blocos ambíguos forem sinalizados em vez de inventados;
+- [ ] prévia mostrar claramente tudo que será cadastrado;
+- [ ] nada for persistido antes da confirmação;
+- [ ] cadastro final usar o mesmo modelo acadêmico atual;
+- [ ] onboarding de novos usuários explicar o formato recomendado;
+- [ ] cadastro manual continuar disponível;
+- [ ] dois usuários permanecerem isolados;
+- [ ] regressão completa ficar verde.
+
+**Não é requisito da Etapa 2 modificar o schema acadêmico atual.**
+
+---
+
+## 7. Observações técnicas fora do escopo
+
+O inventário encontrou pontos que podem ser revisitados apenas se um caso real exigir no futuro, como comportamento de reimportação de usuário já existente e associações históricas.
+
+Eles **não devem puxar a Etapa 2 para uma reformulação acadêmica** sem nova decisão explícita do produto.
 
 ---
 
 ## Próximo passo
 
-Passando o gate da PR, a 2.1 será encerrada. Depois: desenhar **2.2 — identidade/modelo acadêmico** antes de criar qualquer migration nova.
+Fechar a PR 2.1 mantendo os testes de caracterização e iniciar **2.2 — Extração SIGAA mais robusta**, sem migration e sem alterar o formato atual das matérias.
