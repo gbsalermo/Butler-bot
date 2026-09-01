@@ -7,13 +7,15 @@ Invariantes centrais:
 - navegar/abrir conteúdo nunca altera progresso;
 - ``Continuar curso`` é consulta pura ao próximo pendente;
 - conteúdo e curso só mudam de estado por ação explícita;
-- conclusão do último conteúdo não conclui o curso automaticamente.
+- conclusão do último conteúdo não conclui o curso automaticamente;
+- terminar um foco/tópico no Modo Estudo não conclui conteúdo do curso.
 """
 from __future__ import annotations
 
 import app
 import course_domain
 import course_operational
+import course_study_bridge
 
 
 _INSTALLED = False
@@ -56,13 +58,15 @@ def _course_detail_kb(structure):
     ]
 
 
-def _content_detail_kb(detail, *, archived=False):
+def _content_detail_kb(detail, *, course_status="active", archived=False):
     if archived:
         return [["⬅️ Voltar ao módulo"]]
 
     rows = []
     if detail.get("status") == "pending":
         rows.append(["✅ Concluir conteúdo", "⏭️ Pular conteúdo"])
+        if course_status == "active":
+            rows.append(["🧠 Estudar no Modo Estudo"])
     else:
         rows.append(["↩️ Voltar para pendente"])
     rows.extend(
@@ -157,7 +161,7 @@ async def _show_content(db, token, chat_id, uid, course_id, module_id, content_i
             label = course_operational.CONTENT_STATUS_LABELS.get(item["status"], item["status"])
             lines.append(f"• {item['title']} — {label}")
 
-    lines.append("\nAbrir esta tela não altera o progresso.")
+    lines.append("\nAbrir esta tela ou estudar por tempo não altera o progresso do curso.")
     await app.set_state(
         db,
         uid,
@@ -172,7 +176,11 @@ async def _show_content(db, token, chat_id, uid, course_id, module_id, content_i
         token,
         chat_id,
         "\n".join(lines),
-        _content_detail_kb(detail, archived=structure.get("status") == "archived"),
+        _content_detail_kb(
+            detail,
+            course_status=structure.get("status"),
+            archived=structure.get("status") == "archived",
+        ),
     )
     return True
 
@@ -246,7 +254,7 @@ async def _continue_course(db, token, chat_id, uid, course_id):
 
 
 async def handle_message(db, token, message, *, uid=None, state=None, payload=None):
-    """Consome apenas ações novas da Etapa 4.3; o CRUD antigo segue no handler 4.2."""
+    """Consome as ações incrementais da Etapa 4 antes do CRUD base da 4.2."""
     text = (message.get("text") or "").strip()
     chat_id = (message.get("chat") or {}).get("id")
     if chat_id is None or not uid:
@@ -294,6 +302,36 @@ async def handle_message(db, token, message, *, uid=None, state=None, payload=No
         course_id = int(payload["course_id"])
         module_id = int(payload["module_id"])
         content_id = int(payload["content_id"])
+
+        if text == "🧠 Estudar no Modo Estudo":
+            try:
+                started = await course_study_bridge.start_content_study(
+                    db, uid, course_id, content_id
+                )
+            except course_study_bridge.StudySessionBusy:
+                await course_operational._send(
+                    token,
+                    chat_id,
+                    "📚 Já existe um Modo Estudo ativo ou pausado. Encerre ou conclua essa sessão antes de iniciar outra.",
+                    None,
+                )
+                return True
+            except ValueError:
+                await course_operational._send(
+                    token,
+                    chat_id,
+                    "Esse conteúdo precisa estar pendente e o curso ativo para iniciar o Modo Estudo.",
+                    None,
+                )
+                return True
+            await course_operational._send(
+                token,
+                chat_id,
+                f"🧠 Modo Estudo iniciado: {started['content_title']} — {started['focus_minutes']} min de foco. Terminar o foco ou a sessão não conclui o conteúdo; marque a conclusão aqui quando ela realmente acontecer.",
+                None,
+            )
+            return await _show_content(db, token, chat_id, uid, course_id, module_id, content_id)
+
         action = {
             "✅ Concluir conteúdo": "completed",
             "⏭️ Pular conteúdo": "skipped",
@@ -313,7 +351,7 @@ async def handle_message(db, token, message, *, uid=None, state=None, payload=No
 
 
 def install():
-    """Faz os fluxos CRUD existentes renderizarem as telas enriquecidas da 4.3."""
+    """Faz os fluxos CRUD existentes renderizarem as telas enriquecidas da Etapa 4."""
     global _INSTALLED
     if _INSTALLED:
         return
