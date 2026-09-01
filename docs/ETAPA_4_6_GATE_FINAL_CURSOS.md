@@ -1,7 +1,9 @@
 # Etapa 4.6 — Gate final de Cursos e Trilhas
 
-**Status:** ✅ aprovado na branch da Etapa 4.  
-**PR:** #45 — `feat: concluir Etapa 4 de Cursos até o gate final`.
+**Status:** ✅ aprovado  
+**PR final:** #46 — `feat: concluir Etapa 4 de Cursos até o gate final`.
+
+> O PR draft #45 foi fechado sem merge por uma limitação do conector ao convertê-lo para Ready. O PR #46 substitui aquele com a mesma branch/conteúdo funcional e é o PR de merge desta etapa.
 
 ## Escopo validado
 
@@ -23,12 +25,12 @@ O gate cobre o domínio estruturado `📘 Cursos` das subetapas 4.1 a 4.5:
 ## Invariantes de aceite
 
 ```text
-abrir/navegar                ≠ concluir conteúdo
-Continuar curso              ≠ concluir conteúdo
-tempo de foco                 ≠ concluir conteúdo
+abrir/navegar                   ≠ concluir conteúdo
+Continuar curso                 ≠ concluir conteúdo
+tempo de foco                   ≠ concluir conteúdo
 fim de tópico/sessão de estudo ≠ concluir conteúdo
-último conteúdo resolvido     ≠ concluir curso
-prévia de importação          ≠ persistir curso
+último conteúdo resolvido       ≠ concluir curso
+prévia de importação            ≠ persistir curso
 ```
 
 Mudanças reais continuam exigindo ação explícita.
@@ -62,9 +64,9 @@ O gate integrado verifica, entre outros casos:
 
 ## Evidência de CI
 
-No commit de gate integrado `7b41c42d4f151b126f405c7be9bceffcd452b9f9`, o GitHub Actions `Butler regression` (run #286) concluiu com sucesso. O job `deterministic-regression` passou tanto `Compile Worker sources` quanto `Run deterministic regression suite`.
+O commit de gate integrado `7b41c42d4f151b126f405c7be9bceffcd452b9f9` passou no GitHub Actions `Butler regression` run #286, incluindo `Compile Worker sources` e `Run deterministic regression suite`.
 
-Após os commits documentais finais, a PR deve permanecer verde antes do merge; o merge em `main` também deve ser conferido separadamente.
+A documentação final da branch também foi submetida ao mesmo workflow. O **head final do PR #46 deve estar verde antes do merge**, e o workflow de `main` deve ser conferido depois do merge.
 
 ## O que NÃO entra neste gate
 
