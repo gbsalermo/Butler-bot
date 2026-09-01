@@ -8,12 +8,14 @@ Invariantes centrais:
 - ``Continuar curso`` é consulta pura ao próximo pendente;
 - conteúdo e curso só mudam de estado por ação explícita;
 - conclusão do último conteúdo não conclui o curso automaticamente;
-- terminar um foco/tópico no Modo Estudo não conclui conteúdo do curso.
+- terminar um foco/tópico no Modo Estudo não conclui conteúdo do curso;
+- importação sempre exige prévia e confirmação antes de persistir.
 """
 from __future__ import annotations
 
 import app
 import course_domain
+import course_importer
 import course_operational
 import course_study_bridge
 
@@ -253,6 +255,89 @@ async def _continue_course(db, token, chat_id, uid, course_id):
     )
 
 
+async def _start_import(db, token, chat_id, uid):
+    await app.set_state(db, uid, "course_import_wait", {})
+    await course_operational._send(
+        token,
+        chat_id,
+        "📥 Envie um `.txt` ou PDF textual no formato abaixo. Também pode colar o texto diretamente.\n\n"
+        "CURSO: Java + Spring\n"
+        "TIPO: AUTOGERIDO\n"
+        "DESCRICAO: Trilha backend\n"
+        "[MÓDULO] Fundamentos\n"
+        "[CONTEÚDO] REST | aula\n"
+        "[MATERIAL] Slides | link | https://exemplo.com\n"
+        "[ATIVIDADE] Exercícios\n\n"
+        "Para curso ao vivo use `TIPO: AO VIVO` e, opcionalmente, uma terceira coluna no conteúdo: `15/09/2026 19:30`. Eu sempre mostro uma prévia antes de salvar; PDF sem texto pesquisável não entra.",
+        [["❌ Cancelar ação"]],
+    )
+    return True
+
+
+async def _handle_import_wait(db, token, chat_id, uid, message):
+    text = (message.get("text") or "").strip()
+    if text in {"❌ Cancelar ação", "/cancelar"}:
+        return False
+    try:
+        document = message.get("document")
+        if document:
+            raw = await course_importer.document_text(token, document)
+        elif text:
+            raw = text
+        else:
+            raise course_importer.CourseImportError("envie um .txt, PDF textual ou cole o conteúdo")
+        plan = course_importer.parse_course_text(raw)
+    except course_importer.CourseImportError as exc:
+        await course_operational._send(
+            token,
+            chat_id,
+            f"📥 Não vou adivinhar a estrutura: {exc}. Corrija o arquivo/texto e envie novamente.",
+            [["❌ Cancelar ação"]],
+        )
+        return True
+
+    await app.set_state(db, uid, "course_import_confirm", {"plan": plan})
+    await course_operational._send(
+        token,
+        chat_id,
+        course_importer.preview_text(plan),
+        [["✅ Confirmar importação"], ["❌ Cancelar ação"]],
+    )
+    return True
+
+
+async def _handle_import_confirm(db, token, chat_id, uid, text, payload):
+    if text in {"❌ Cancelar ação", "/cancelar"}:
+        return False
+    if text != "✅ Confirmar importação":
+        await course_operational._send(
+            token,
+            chat_id,
+            "Confira a prévia e escolha Confirmar importação ou Cancelar ação.",
+            [["✅ Confirmar importação"], ["❌ Cancelar ação"]],
+        )
+        return True
+    plan = payload.get("plan") or {}
+    try:
+        course_id = await course_importer.persist_plan(db, uid, plan)
+    except (course_importer.CourseImportError, ValueError) as exc:
+        await course_operational._send(
+            token,
+            chat_id,
+            f"A importação foi interrompida por validação: {exc}.",
+            [["❌ Cancelar ação"]],
+        )
+        return True
+    await app.clear_state(db, uid)
+    await course_operational._send(
+        token,
+        chat_id,
+        "✅ Curso importado. Todos os conteúdos e atividades começam pendentes; nenhum progresso foi inferido do arquivo.",
+        None,
+    )
+    return await _show_course(db, token, chat_id, uid, course_id)
+
+
 async def handle_message(db, token, message, *, uid=None, state=None, payload=None):
     """Consome as ações incrementais da Etapa 4 antes do CRUD base da 4.2."""
     text = (message.get("text") or "").strip()
@@ -261,6 +346,13 @@ async def handle_message(db, token, message, *, uid=None, state=None, payload=No
         return False
     chat_id = int(chat_id)
     payload = payload or {}
+
+    if text == "📥 Importar curso" and not (state and state.startswith("course_import_")):
+        return await _start_import(db, token, chat_id, uid)
+    if state == "course_import_wait":
+        return await _handle_import_wait(db, token, chat_id, uid, message)
+    if state == "course_import_confirm":
+        return await _handle_import_confirm(db, token, chat_id, uid, text, payload)
 
     if state == "course_view":
         course_id = int(payload["course_id"])
@@ -355,6 +447,11 @@ def install():
     global _INSTALLED
     if _INSTALLED:
         return
+    course_operational.COURSES_KB = [
+        ["📚 Meus cursos", "➕ Novo curso"],
+        ["📥 Importar curso", "🗄️ Cursos arquivados"],
+        ["🏠 Menu principal"],
+    ]
     course_operational._show_course = _show_course
     course_operational._show_content = _show_content
     _INSTALLED = True
