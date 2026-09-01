@@ -436,3 +436,36 @@ A meta não é declarar um número grande de usuários. A meta é conseguir aume
 - como evitar que crescimento derrube lembretes e funções essenciais.
 
 Capacidade passa a ser uma propriedade mensurada do Butler, não um palpite.
+
+---
+
+## 18. Pós-roadmap — estabilidade antes de IA
+
+A Etapa 10 encerra o roadmap funcional atual, mas **não inicia automaticamente a integração de IA**.
+
+Após concluir esta etapa, o projeto entra primeiro em um período de estabilização:
+
+```text
+Etapa 10 concluída
+        ↓
+Butler operando de forma estável
+        ↓
+gate pós-roadmap fechado
+        ↓
+integração progressiva de IA
+```
+
+A trilha de IA está documentada em:
+
+`docs/POS_ROADMAP_IA.md`
+
+Decisão atual registrada:
+
+- provedor inicial pretendido: **Groq**;
+- começar somente após estabilidade do produto atual;
+- primeira fase: IA apenas para compreensão de linguagem e auxílio à decisão;
+- evolução posterior por ferramentas/domínios;
+- Core determinístico permanece autoridade de regras e persistência;
+- modelo específico e condições do free tier devem ser reavaliados quando a implementação realmente começar.
+
+A IA não deve ser antecipada para resolver problemas pertencentes às Etapas 0–10.
