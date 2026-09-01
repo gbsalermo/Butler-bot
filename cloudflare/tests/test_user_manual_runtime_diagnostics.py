@@ -59,11 +59,18 @@ def test_manual_documents_new_time_and_study_features():
     assert "nunca conclui tópico sozinho" in estudo
 
 
-def test_manual_section_aliases_are_easy_to_recall():
+def test_manual_section_aliases_require_explicit_help_prefix():
     assert user_manual._section_from_text("Ajuda: Tempo") == "tempo"
     assert user_manual._section_from_text("ajuda estudo") == "estudo"
     assert user_manual._section_from_text("Ajuda: Faculdade") == "faculdade"
     assert user_manual._section_from_text("Ajuda: Musculação") == "treino"
+
+    # Botões operacionais não podem ser sequestrados pelo handler prioritário do manual.
+    assert user_manual._section_from_text("🏠 Cotidiano") is None
+    assert user_manual._section_from_text("📚 Matérias") is None
+    assert user_manual._section_from_text("🏋️ Musculação") is None
+    assert user_manual._section_from_text("🎯 Metas") is None
+    assert user_manual._section_from_text("🧘 Rotinas") is None
 
 
 def test_manual_and_runtime_status_are_checked_before_start_reset_logic():
