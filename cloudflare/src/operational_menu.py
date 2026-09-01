@@ -17,6 +17,7 @@ MAIN_KB = [
     ["➕ Adicionar", "🗓️ Hoje"],
     ["🛒 Item faltando", "📚 Matérias"],
     ["🏠 Cotidiano", "🏋️ Musculação"],
+    ["📖 Manual"],
     ["🌙 Day-off"],
 ]
 
