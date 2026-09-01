@@ -1,359 +1,121 @@
 # Butler — Manual do Usuário
 
-**Objetivo:** lembrar rapidamente o que o Butler sabe fazer e como pedir cada coisa no Telegram.
+**Data-base:** 01/09/2026
 
-Este arquivo descreve o comportamento de produção do Butler. Em caso de dúvida, você também pode usar no próprio bot:
+Butler é um assistente pessoal multiusuário no Telegram. Ele organiza tarefas, compromissos, rotinas, metas, universidade, estudo, cursos, musculação, itens faltando, cardápio do RU, clima e listas para depois.
+
+O Butler tenta aceitar texto natural, mas mudanças importantes continuam sendo determinísticas. Quando uma ação é ambígua ou exige confirmação, o bot pergunta antes de gravar.
+
+---
+
+## 1. Menu principal atual
+
+```text
+➕ Adicionar      🗓️ Hoje
+🛒 Item faltando  📚 Matérias
+🏠 Cotidiano      🏋️ Musculação
+📘 Cursos
+📖 Manual
+🌙 Day-off
+```
+
+Esse menu ainda será reorganizado por áreas da vida no fechamento da Etapa 4. As funções abaixo já estão disponíveis independentemente dessa futura reorganização.
+
+`🌙 Day-off` fica sozinho na última linha para diminuir toque acidental.
+
+---
+
+## 2. Comandos de ajuda
+
+Você pode usar:
 
 ```text
 /manual
 /ajuda
-ajuda
 manual
+📖 Manual
 ```
+
+O manual só deve abrir quando a intenção de ajuda é explícita. Falar `Cotidiano`, `Matérias` ou `Musculação` como ação normal não deve ser sequestrado pela ajuda.
 
 ---
 
-# 1. Como falar com o Butler
+## 3. Cotidiano
 
-Você não precisa decorar comandos para as funções principais. Frases naturais funcionam quando a intenção está clara.
+Abra `🏠 Cotidiano` para acessar tarefas, compromissos, rotinas, metas, itens faltando, Ler/Ver Depois e RU.
+
+### Tarefas
+
+Use `✅ Tarefas` para ver as tarefas ativas. Quando o bot mostrar uma lista numerada, você pode responder pelo número exibido naquele momento.
+
+Exemplos de linguagem natural:
+
+```text
+preciso entregar o relatório amanhã às 18h
+me lembra de pagar a conta sexta às 10h
+```
+
+A posição `1`, `2`, etc. deve continuar apontando para a lista que você realmente viu durante aquele fluxo.
+
+Ações como concluir, adiar ou remover pedem o alvo quando necessário. Ao adiar uma tarefa, depois de escolher a tarefa basta informar a nova data/horário; o Butler não deve pedir a tarefa novamente.
+
+### Compromissos
+
+Use `📅 Compromissos` para listar. Para criar, use `📅 Compromisso` ou uma frase clara, por exemplo:
+
+```text
+amanhã tenho dentista às 15h
+reunião sexta às 9h
+```
+
+Compromissos pendentes continuam visíveis. Concluídos/cancelados deixam a tela operacional depois de uma janela curta, mas o histórico não é apagado.
+
+### Rotinas
+
+Abra `🧘 Rotinas` para listar, criar, marcar como feita, editar ou remover rotinas.
+
+O Butler não deve considerar uma rotina feita apenas porque o horário passou. O registro depende do fluxo/ação correspondente.
+
+### Metas
+
+Abra `🎯 Metas` para criar e acompanhar metas de hábito, numéricas e de projeto.
 
 Exemplos:
 
 ```text
-me lembra amanhã às 15h de levar o documento
-cria uma tarefa revisar cálculo amanhã às 20h
-tenho dentista sexta às 14h
-qual meu almoço hoje no RU?
-qual meu treino hoje?
-cronometra 20 minutos
+quero criar uma meta de estudar inglês
+quero perder 5 kg
+quero terminar o projeto X
 ```
 
-Também existem botões para os fluxos mais comuns.
-
-Se estiver no meio de uma ação e quiser sair:
-
-```text
-Cancelar ação
-```
-
-ou use o botão:
-
-```text
-❌ Cancelar ação
-```
-
-Para voltar:
-
-```text
-🏠 Menu principal
-```
+Ações disponíveis incluem registrar progresso, editar, concluir, remover e, quando aplicável, vincular uma rotina. Em listas filtradas, a numeração se refere ao conjunto mostrado na tela.
 
 ---
 
-# 2. Tarefas
+## 4. Itens faltando
 
-Use tarefas para coisas que precisam ser feitas e continuar pendentes até você concluir ou cancelar.
+Use:
+
+```text
+🛒 Item faltando
+➕ Item faltando
+🛒 O que está faltando?
+```
 
 Exemplos:
 
 ```text
-cria uma tarefa revisar cálculo amanhã às 20h
-preciso pagar a conta amanhã
-tenho que entregar o relatório sexta
+acabou o café
+está faltando açúcar
 ```
 
-Você pode consultar pelo menu:
-
-```text
-✅ Tarefas
-```
-
-Depois de uma lista, referências curtas também podem funcionar:
-
-```text
-conclui a segunda
-cancela a primeira
-```
-
-Depois de criar ou mencionar uma tarefa recente:
-
-```text
-muda ela pra sexta
-adia isso 30 minutos
-```
+A lista é persistente e pessoal por usuário.
 
 ---
 
-# 3. Compromissos
+## 5. Ler/Ver Depois
 
-Use compromissos para eventos marcados, como dentista, reunião ou consulta.
-
-Exemplos:
-
-```text
-tenho dentista amanhã às 15h
-marca uma consulta sexta às 14h
-cria um compromisso reunião terça às 10h
-```
-
-Menu:
-
-```text
-📅 Compromissos
-```
-
----
-
-# 4. Lembretes pessoais
-
-Use lembrete quando você quer apenas ser avisado em uma data e horário, sem transformar aquilo numa tarefa permanente.
-
-Exemplos:
-
-```text
-me lembra amanhã às 9h de levar o documento
-me avisa sexta às 18h de entregar o relatório
-não deixa eu esquecer amanhã às 8h de pegar a chave
-```
-
----
-
-# 5. Alertas rápidos e cronômetros
-
-Use para minutos ou poucas horas a partir de agora. Eles não criam tarefa na agenda.
-
-## Alerta rápido
-
-```text
-me lembra de desligar o ovo daqui a 5 minutos
-me avisa daqui a 20 minutos de olhar o forno
-tenho que ligar para João daqui a 10 minutos
-```
-
-## Cronômetro
-
-```text
-cronometra 30 minutos
-cronometra 45 segundos
-inicia um timer de 10 minutos
-```
-
-## Cancelar
-
-```text
-cancelar timer
-cancelar timer #12
-```
-
-Limite atual de alerta rápido: de 1 segundo até 24 horas. Para datas posteriores, use um lembrete normal.
-
-Responder ao aviso com `valeu`, `desliguei`, `feito`, `já foi` e semelhantes é opcional. Quando o contexto ainda estiver recente, o Butler pode apenas reconhecer e encerrar naturalmente.
-
----
-
-# 6. Modo Estudo
-
-O Modo Estudo organiza ciclos de foco e pausa mantendo matéria, tópicos e histórico.
-
-## Iniciar
-
-```text
-modo estudo Cálculo I: limites, derivadas, integrais
-quero estudar Cálculo agora: limites, derivadas e integrais
-```
-
-## Tempos padrão
-
-```text
-25 min foco
-5 min pausa
-15 min pausa longa
-```
-
-Personalização:
-
-```text
-modo estudo 50/10/20 Cálculo I: limites, derivadas
-```
-
-Durante:
-
-```text
-status estudo
-não terminei
-concluí o tópico
-pular tópico
-pausar estudo
-retomar estudo
-cancelar estudo
-histórico de estudo
-```
-
-**O tempo acabar não conclui o tópico.** O tópico só avança quando você disser explicitamente que concluiu ou pulou.
-
----
-
-# 7. Agenda
-
-No menu principal:
-
-```text
-🗓️ Hoje
-```
-
-Frases úteis:
-
-```text
-o que tenho hoje?
-o que tenho amanhã?
-minha agenda de hoje
-qual a próxima coisa?
-o que faço agora?
-```
-
----
-
-# 8. Matérias e faculdade
-
-Menu:
-
-```text
-📚 Matérias
-```
-
-Você pode cadastrar, visualizar e gerenciar matérias e horários.
-
-## Importar grade no primeiro acesso
-
-Fonte recomendada no SIGAA:
-
-```text
-Componente Curricular | Local | Horário
-```
-
-Formatos aceitos:
-
-- PDF com texto pesquisável/selecionável;
-- TXT.
-
-O Butler não usa OCR em produção para grade acadêmica. Antes de salvar uma importação, ele mostra uma prévia.
-
-## Presença e faltas
-
-O Butler não presume presença só porque a aula aconteceu.
-
----
-
-# 9. Provas
-
-Exemplos naturais:
-
-```text
-tenho prova de cálculo sexta
-marca prova de física dia 15
-```
-
----
-
-# 10. Restaurante Universitário — RU
-
-Menu:
-
-```text
-🏠 Cotidiano
-→ 🍽️ RU
-```
-
-Consultas úteis:
-
-```text
-qual o almoço hoje?
-qual o café amanhã?
-cardápio de hoje
-cardápio da semana
-```
-
-O cardápio semanal é compartilhado; a atualização/importação fica restrita ao proprietário.
-
----
-
-# 11. Rotinas
-
-Menu:
-
-```text
-🏠 Cotidiano
-→ 🧘 Rotinas
-```
-
-Você pode criar, listar, marcar realizada, editar horários/checkpoints e remover rotina.
-
-Rotina é recorrente; tarefa é pontual.
-
----
-
-# 12. Metas
-
-Menu:
-
-```text
-🏠 Cotidiano
-→ 🎯 Metas
-```
-
-O Butler suporta metas com progresso e integração com rotinas quando aplicável.
-
----
-
-# 13. Lista de mercado / itens faltando
-
-É uma lista persistente do que está faltando em casa.
-
-Exemplos:
-
-```text
-acabou café
-tô sem detergente
-adiciona arroz na lista
-o que está faltando?
-```
-
----
-
-# 14. Musculação
-
-Menu:
-
-```text
-🏋️ Musculação
-```
-
-Funções principais:
-
-```text
-📅 Treino de hoje
-🚀 Começar os trabalhos
-📝 Registrar série
-🔁 Substituir exercício
-✅ Finalizar treino
-😕 Não consegui treinar hoje
-📈 Progresso
-```
-
-O Butler registra apenas o que você informar. Ele não inventa carga, repetição ou conclusão.
-
----
-
-# 15. Ler / Ver Depois
-
-Menu:
-
-```text
-🏠 Cotidiano
-→ 📌 Ler/ver depois
-```
-
-Categorias atuais:
+A lista simples de coisas para consumir no futuro possui categorias como:
 
 ```text
 📚 Livros
@@ -362,182 +124,338 @@ Categorias atuais:
 🗂️ Outras
 ```
 
-Essa lista serve como backlog simples.
+Ela funciona como backlog simples.
 
-**`🎓 Cursos` aqui não é o mesmo que `📘 Cursos` do menu principal.** Use Ler/Ver Depois quando você só quer guardar um curso para talvez fazer no futuro.
+**`🎓 Cursos` aqui não é o mesmo que `📘 Cursos` do menu principal.** Use Ler/Ver Depois quando você só quer guardar o nome de um curso para talvez fazer futuramente. Use `📘 Cursos` quando quer acompanhar módulos, conteúdos e progresso.
 
 ---
 
-# 16. Cursos e trilhas estruturados
+## 6. Restaurante Universitário
 
-Menu principal:
+Abra `🍽️ RU` no Cotidiano.
+
+Consultas disponíveis incluem:
+
+```text
+🍽️ Cardápio de hoje
+📅 Cardápio da semana
+🗃️ Cardápios anteriores
+```
+
+O cardápio é compartilhado para leitura entre usuários. A atualização/importação do arquivo fica restrita ao proprietário enquanto essa política estiver ativa.
+
+---
+
+## 7. Matérias e universidade
+
+Abra `📚 Matérias` para acessar o domínio acadêmico.
+
+O Butler trabalha com matérias e seus horários, além de provas e presença/faltas conforme os fluxos disponíveis.
+
+### Importar grade
+
+O formato recomendado vem do painel do SIGAA contendo informações como:
+
+```text
+Componente Curricular | Local | Horário
+```
+
+São aceitos:
+
+- PDF com texto pesquisável/selecionável;
+- arquivo TXT.
+
+O fluxo usa extração, validação, prévia e confirmação antes da persistência. PDF escaneado/imagem não é o formato oficial; o Butler não depende de OCR para essa importação.
+
+### Presença
+
+Aula prevista **não significa presença**. O Butler nunca deve presumir presença apenas porque uma aula ocorreu ou porque você disse que pretende ir.
+
+Registros de ausência/presença seguem os fluxos explícitos existentes.
+
+---
+
+## 8. Alertas rápidos e cronômetros
+
+O Butler possui auxiliares temporais persistentes para pedidos como:
+
+```text
+cronometra 20 minutos
+me avisa daqui a 10 minutos
+```
+
+Esses alertas rápidos não viram tarefas em `daily_items`.
+
+O runtime usa Cron + Durable Objects para reduzir dependência de um único relógio. Isso é detalhe interno; para você, o importante é que o alerta é um recurso temporal separado da lista de tarefas.
+
+---
+
+## 9. Modo Estudo
+
+O Modo Estudo trabalha com sessões e tópicos.
+
+Exemplo conceitual:
+
+```text
+Matéria: Cálculo
+Tópicos:
+1. Limites
+2. Derivadas
+3. Integrais
+```
+
+Regra central:
+
+**o fim do tempo de foco não conclui o tópico.**
+
+Concluir ou pular um tópico precisa ser explícito. Pausar, reiniciar, encerrar um foco ou entrar em Day-off não deve inventar progresso.
+
+---
+
+## 10. Cursos estruturados
+
+Abra:
 
 ```text
 📘 Cursos
 ```
 
-Use esta área quando você realmente está fazendo/acompanhando um curso e quer organizar a estrutura dele.
-
-Menu:
+O menu atual oferece:
 
 ```text
-📘 Cursos
-├── 📚 Meus cursos
-├── ➕ Novo curso
-└── 🗄️ Cursos arquivados
+📚 Meus cursos
+➕ Novo curso
+📥 Importar curso
+🗄️ Cursos arquivados
 ```
 
-## Criar um curso
-
-Ao escolher `➕ Novo curso`, o Butler pergunta:
-
-1. nome;
-2. tipo;
-3. descrição opcional.
-
-Tipos:
-
-```text
-🧭 Autogerido
-→ você segue a ordem dos módulos/conteúdos no seu ritmo
-
-📡 Ao vivo
-→ conteúdos podem ter data e horário fixos
-```
-
-## Estrutura
-
-Um curso pode ter:
+Um curso estruturado pode conter:
 
 ```text
 Curso
-→ Módulos
-   → Conteúdos
+├── Módulos
+│   └── Conteúdos
+│       ├── Materiais
+│       └── Atividades
+└── Histórico/progresso
 ```
 
-Os conteúdos podem ser:
+### Criar curso
+
+Ao usar `➕ Novo curso`, o Butler pergunta:
+
+1. nome;
+2. modo `Autogerido` ou `Ao vivo`;
+3. descrição opcional.
+
+Você pode depois criar/renomear módulos, criar/editar conteúdos e arquivar/reativar o curso.
+
+Curso arquivado preserva estrutura e histórico.
+
+### Autogerido x Ao vivo
+
+**Autogerido:** `Continuar curso` segue a ordem dos módulos/conteúdos persistidos.
+
+**Ao vivo:** o próximo conteúdo respeita o calendário (`scheduled_at`) registrado. Uma aula perdida não desloca automaticamente o curso inteiro.
+
+### Progresso
+
+Na tela do curso existem ações como:
 
 ```text
-🎥 Aula
-📖 Leitura
-🧪 Exercício
-🛠️ Projeto
-🔁 Revisão
-📎 Outro
+▶️ Continuar curso
+📊 Progresso
+🏁 Concluir curso
 ```
 
-Você pode criar/abrir módulos, renomear módulos, criar conteúdos e editar nome, tipo e data/horário dos conteúdos.
+Na tela de conteúdo:
 
-## Editar e arquivar
+```text
+✅ Concluir conteúdo
+⏭️ Pular conteúdo
+↩️ Voltar para pendente
+```
 
-Na tela do curso é possível editar nome, descrição e tipo.
+Regras importantes:
 
-`🗄️ Arquivar curso` tira o curso da lista principal, mas **não apaga sua estrutura ou histórico**. Em `🗄️ Cursos arquivados`, ele pode ser reativado depois.
+- abrir um conteúdo não o conclui;
+- `▶️ Continuar curso` apenas abre o próximo pendente;
+- passar tempo estudando não conclui conteúdo;
+- `skipped` conta como resolvido, mas não como concluído/aprendido;
+- resolver o último conteúdo não conclui o curso automaticamente;
+- concluir o curso exige ação explícita e confirmação.
 
-## Progresso nesta versão
+### Estudar um conteúdo no Modo Estudo
 
-A tela já mostra conteúdos concluídos, pulados e pendentes, mas **a Etapa atual de Cursos ainda não expõe os botões de concluir/pular/continuar**. Isso será adicionado na próxima evolução do módulo.
+Quando um conteúdo está pendente em curso ativo, pode aparecer:
 
-Navegar, abrir ou editar uma aula nunca marca progresso automaticamente.
+```text
+🧠 Estudar no Modo Estudo
+```
+
+Isso cria uma sessão de estudo ligada ao conteúdo. Porém:
+
+**terminar o foco, o tópico ou a sessão não marca o conteúdo do curso como concluído.**
+
+Depois de estudar, marque `✅ Concluir conteúdo` somente se a conclusão realmente aconteceu.
+
+Se já houver uma sessão de estudo ativa/pausada, o Butler não substitui essa sessão silenciosamente.
+
+### Importar curso
+
+Use:
+
+```text
+📥 Importar curso
+```
+
+Você pode enviar:
+
+- `.txt`;
+- PDF com texto pesquisável;
+- texto colado diretamente.
+
+Formato explícito:
+
+```text
+CURSO: Java + Spring
+TIPO: AUTOGERIDO
+DESCRICAO: Trilha backend
+[MÓDULO] Fundamentos
+[CONTEÚDO] REST Controllers | aula
+[MATERIAL] Slides | link | https://exemplo.com
+[ATIVIDADE] Exercícios | implementar GET /health
+```
+
+Para curso ao vivo:
+
+```text
+TIPO: AO VIVO
+[CONTEÚDO] Aula síncrona | aula | 15/09/2026 19:30
+```
+
+O Butler **não tenta adivinhar linhas ambíguas**. Se não conseguir associar uma linha com segurança, pede correção.
+
+Antes de salvar, sempre mostra uma prévia. Nada é persistido até você escolher:
+
+```text
+✅ Confirmar importação
+```
+
+PDF sem texto pesquisável é recusado; OCR não faz parte deste fluxo.
+
+Todos os conteúdos e atividades importados começam pendentes. O arquivo não pode inventar que algo já foi aprendido/concluído.
 
 ---
 
-# 17. Clima
+## 11. Musculação
 
-Você pode perguntar:
+Abra `🏋️ Musculação` para os fluxos de treino.
 
-```text
-como está o tempo hoje?
-vai chover amanhã?
-qual a previsão de hoje?
-```
+O Butler registra carga/repetições apenas quando esses dados foram informados. Ausência de treino não cria séries fictícias. Substituição de exercício deve preservar rastreabilidade do original.
 
-O clima usa Open-Meteo.
+Perfis pessoais/protocolos específicos não devem ser aplicados automaticamente a outro usuário.
 
 ---
 
-# 18. Day-off
+## 12. Hoje, agenda e clima
 
-Botão:
+`🗓️ Hoje` combina informações operacionais do dia conforme disponibilidade, como agenda/pendências e previsão do tempo.
 
-```text
-🌙 Day-off
-```
+O Butler usa Open-Meteo para dados objetivos. Comentários mais humanos sobre o clima podem ser acrescentados, mas temperatura, chuva, vento e probabilidades não podem ser inventados.
 
-O Day-off vale para o dia local em que foi ativado. Alertas rápidos/cronômetros explicitamente iniciados continuam funcionando, assim como uma sessão de estudo já iniciada.
+Se o serviço meteorológico falhar, a agenda não deve desaparecer por causa disso.
 
 ---
 
-# 19. Referências e correções rápidas
+## 13. Day-off
 
-O Butler mantém contexto curto para frases como:
+`🌙 Day-off` serve para sinalizar um dia em que determinadas cobranças/notificações devem respeitar a política de descanso.
+
+Ele não deve apagar histórico nem concluir automaticamente tarefas, rotinas, tópicos ou conteúdos.
+
+O botão fica isolado na última linha do menu para diminuir acionamento acidental.
+
+---
+
+## 14. Linguagem natural e contexto curto
+
+Exemplos de frases que o Butler pode entender conforme o domínio:
 
 ```text
-muda ela pra sexta
-cancela esse
-conclui a segunda
+me lembra de entregar o relatório amanhã às 18h
+amanhã tenho dentista às 15h
+acabou o café
+segunda não vou pra Sistemas Digitais
+hoje não vou conseguir treinar
+cria uma rotina de estudar inglês
 ```
 
-Também entende correções recentes como:
+O contexto curto permite referências recentes como:
+
+```text
+essa
+a segunda
+a anterior
+```
+
+quando existe um alvo seguro.
+
+Correções como:
 
 ```text
 não, 16h
 quinta não, sexta
-na verdade é dia 16
 ```
 
-Uma mudança explícita de assunto não deve ser contaminada por contexto antigo.
+podem atualizar o item recém-criado sem duplicá-lo quando o contexto é claro.
+
+Regra permanente:
+
+**entender o texto não significa autorização automática para gravar qualquer coisa.**
 
 ---
 
-# 20. Quando usar cada tipo
+## 15. Cancelar e voltar
 
-```text
-Tenho algo para fazer e quero manter pendente
-→ Tarefa
+Fluxos guiados devem oferecer `Cancelar` e/ou `Voltar` quando fizer sentido.
 
-Tenho evento marcado
-→ Compromisso
+Se estiver em uma criação/importação e desistir, use o botão de cancelamento exibido ou `/cancelar` quando o fluxo aceitar esse comando.
 
-Quero só um aviso numa data/hora
-→ Lembrete
-
-Quero aviso daqui a alguns minutos/horas
-→ Alerta rápido
-
-Quero contar uma duração
-→ Cronômetro
-
-Quero estudar com foco/pausa e acompanhar tópicos
-→ Modo Estudo
-
-Quero hábito recorrente
-→ Rotina
-
-Quero acompanhar objetivo/progresso
-→ Meta
-
-Quero guardar um curso para talvez fazer depois
-→ 🎓 Cursos em Ler/Ver Depois
-
-Quero acompanhar um curso que estou fazendo
-→ 📘 Cursos estruturados
-```
+O Butler deve limpar o estado temporário em cancelamentos válidos para não capturar a próxima conversa por engano.
 
 ---
 
-# 21. Ajuda rápida no Telegram
+## 16. Administração
 
-Digite:
+Algumas ações são exclusivas do proprietário, como diagnósticos e manutenção de conteúdo compartilhado.
 
-```text
-/manual
-```
-
-ou:
+Exemplos administrativos podem incluir:
 
 ```text
-/ajuda
+/status runtime
+/status usuarios
+/aviso ...
 ```
 
-O manual interno mostra categorias e exemplos curtos sem precisar abrir este arquivo no GitHub.
+Ações exclusivas não devem ficar disponíveis operacionalmente para usuários comuns.
+
+---
+
+## 17. Privacidade operacional
+
+Dados pessoais são isolados por usuário no banco. Um usuário não deve conseguir listar ou alterar tarefas, metas, cursos, estudos ou outros registros de outra conta.
+
+Os registros de erro de runtime guardam metadados técnicos, não o texto completo da conversa.
+
+---
+
+## 18. Limites atuais
+
+- Broad NLU/Library genérica não governa o webhook de produção;
+- IA/Groq está planejada somente para depois do roadmap principal e do gate de estabilidade;
+- importações oficiais de acadêmico/cursos não dependem de OCR;
+- o menu ainda será reorganizado por áreas da vida antes da Etapa 5;
+- recursos futuros de Inbox/Projetos/Memória seletiva ainda não devem ser tratados como prontos.
+
+Para o estado técnico exato consulte `docs/STATUS_ATUAL.md`.
