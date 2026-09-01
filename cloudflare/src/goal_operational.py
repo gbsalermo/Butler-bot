@@ -93,6 +93,31 @@ def _number(text):
     return float(m.group(0).replace(",", ".")) if m else None
 
 
+def _pick_visible(items, text, candidate_ids=None):
+    """Resolve uma escolha contra a mesma lista mostrada no turno anterior.
+
+    `candidate_ids` fixa a posição temporária quando a tela foi exibida. Sem esse
+    contexto, mantém o comportamento legado por posição da lista atual.
+    """
+    n = _norm(text)
+    if n.isdigit():
+        idx = int(n) - 1
+        pinned = []
+        for value in candidate_ids or []:
+            try:
+                pinned.append(int(value))
+            except Exception:
+                continue
+        if pinned:
+            if not 0 <= idx < len(pinned):
+                return None
+            wanted = pinned[idx]
+            return next((item for item in items if int(_row(item, "id")) == wanted), None)
+        return items[idx] if 0 <= idx < len(items) else None
+    matches = [item for item in items if n and (n in _norm(_row(item,"name")) or _norm(_row(item,"name")) in n)]
+    return matches[0] if len(matches) == 1 else None
+
+
 async def _goal_list(db, uid):
     rows = await _rows(db.prepare("""
         SELECT g.id,g.name,g.category,p.goal_type,p.start_date,p.target_date,
@@ -308,20 +333,16 @@ async def handle_message(db, token, message):
                 msg=f"📈 {payload['name']}: progresso atualizado para {v:g}"+(". Meta concluída. ✅" if reached else ".")
             await runtime_guard._clear(db,uid); await send_message(token,chat_id,msg,reply_markup=_kb(GOAL_KB)); return True
         if state == "goal_link_select":
-            goal,goals=await _find_goal(db,uid,text)
+            goals=await _active_goals(db,uid); habits=[g for g in goals if _row(g,"goal_type")=="habit"]
+            goal=_pick_visible(habits,text,payload.get("goal_ids"))
             if not goal:
-                await send_message(token,chat_id,"Qual meta de hábito?\n"+"\n".join(f"{i}. {_row(g,'name')}" for i,g in enumerate(goals,1) if _row(g,"goal_type")=="habit"),reply_markup=_kb(CANCEL_KB)); return True
-            if _row(goal,"goal_type")!="habit":
-                await send_message(token,chat_id,"Vínculo automático com rotina é para metas de hábito. Peso e projeto recebem progresso manual.",reply_markup=_kb(GOAL_KB)); await runtime_guard._clear(db,uid); return True
+                await send_message(token,chat_id,"Qual meta de hábito?\n"+"\n".join(f"{i}. {_row(g,'name')}" for i,g in enumerate(habits,1)),reply_markup=_kb(CANCEL_KB)); return True
             routines=await _rows(db.prepare("SELECT id,name FROM routines WHERE user_id=? AND active=1 ORDER BY name").bind(uid))
-            await runtime_guard._set_state(db,uid,"goal_link_routine",{"goal_id":int(_row(goal,"id")),"goal_name":_row(goal,"name")})
+            await runtime_guard._set_state(db,uid,"goal_link_routine",{"goal_id":int(_row(goal,"id")),"goal_name":_row(goal,"name"),"routine_ids":[int(_row(r,"id")) for r in routines]})
             await send_message(token,chat_id,"Qual rotina?\n"+"\n".join(f"{i}. {_row(r,'name')}" for i,r in enumerate(routines,1)),reply_markup=_kb(CANCEL_KB)); return True
         if state == "goal_link_routine":
-            routines=await _rows(db.prepare("SELECT id,name FROM routines WHERE user_id=? AND active=1 ORDER BY name").bind(uid)); routine=None
-            if n.isdigit() and 1<=int(n)<=len(routines): routine=routines[int(n)-1]
-            else:
-                ms=[r for r in routines if n in _norm(_row(r,"name")) or _norm(_row(r,"name")) in n]
-                if len(ms)==1:routine=ms[0]
+            routines=await _rows(db.prepare("SELECT id,name FROM routines WHERE user_id=? AND active=1 ORDER BY name").bind(uid))
+            routine=_pick_visible(routines,text,payload.get("routine_ids"))
             if not routine:
                 await send_message(token,chat_id,"Escolha a rotina pelo número ou nome.",reply_markup=_kb(CANCEL_KB)); return True
             await db.prepare("UPDATE goal_profiles SET linked_routine_id=? WHERE goal_id=?").bind(_row(routine,"id"),payload["goal_id"]).run(); await runtime_guard._clear(db,uid)
@@ -346,7 +367,8 @@ async def handle_message(db, token, message):
         goals=await _active_goals(db,uid); await runtime_guard._set_state(db,uid,"goal_progress_select",{})
         await send_message(token,chat_id,"Qual meta?\n"+"\n".join(f"{i}. {_row(g,'name')}" for i,g in enumerate(goals,1)),reply_markup=_kb(CANCEL_KB)); return True
     if text=="🔗 Vincular rotina":
-        goals=await _active_goals(db,uid); habits=[g for g in goals if _row(g,"goal_type")=="habit"]; await runtime_guard._set_state(db,uid,"goal_link_select",{})
+        goals=await _active_goals(db,uid); habits=[g for g in goals if _row(g,"goal_type")=="habit"]
+        await runtime_guard._set_state(db,uid,"goal_link_select",{"goal_ids":[int(_row(g,"id")) for g in habits]})
         await send_message(token,chat_id,"Qual meta de hábito quer ligar a uma rotina?\n"+"\n".join(f"{i}. {_row(g,'name')}" for i,g in enumerate(habits,1)),reply_markup=_kb(CANCEL_KB)); return True
     if text=="✏️ Editar meta":
         await send_message(token,chat_id,"Por enquanto, edite registrando novo progresso ou remova/recrie a meta. Na próxima revisão eu separo edição de prazo, nome e alvo sem reabrir um wizard gigante.",reply_markup=_kb(GOAL_KB)); return True
