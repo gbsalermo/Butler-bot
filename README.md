@@ -4,45 +4,58 @@
 
 # Butler Bot
 
-**Butler** é um assistente pessoal via Telegram para organização de cotidiano, universidade, tarefas, compromissos, rotinas, metas, musculação, mercado, clima e acompanhamento pessoal.
+**Butler** é um assistente pessoal multiusuário via Telegram para cotidiano, universidade, estudo, cursos, projetos, trabalho, hábitos, treino e organização pessoal.
 
-A produção atual é determinística e roda em **Cloudflare Python Worker + Telegram Webhook + D1 + Durable Objects**. O repositório preserva experiências anteriores de NLU, memória e Library, mas essas camadas não devem ser confundidas com o dispatcher ativo.
+A produção roda em **Cloudflare Python Worker + Telegram Webhook + D1 + Durable Objects**. O repositório preserva experiências históricas de NLU/memória/Library, mas elas não devem ser confundidas com o dispatcher ativo.
 
 ## Estado atual
 
-**Data-base documental:** 31/08/2026  
-**Fase oficial:** Etapa 1 — Linguagem natural + estabilidade de conversa real  
-**Subetapa atual:** **1.4 — Correção e auto-reparo conversacional**
+**Data-base documental:** 01/09/2026  
+**Etapas 0–3:** ✅ concluídas  
+**Etapa 4 — Cursos e trilhas:** ✅ subetapas 4.1–4.6 concluídas  
+**Próximo trabalho oficial:** **fechamento obrigatório da Etapa 4 — menu por áreas da vida**
 
-Já concluído na Etapa 1:
+O snapshot de handoff está em [`docs/STATUS_ATUAL.md`](docs/STATUS_ATUAL.md). Uma nova IA/agente deve começar por ele e continuar o roadmap existente, sem criar outro.
 
-- **1.1:** auditoria da linguagem ativa + corpus inicial;
-- **1.2:** base linguística comum em `language_primitives.py`;
-- **1.3:** contexto curto/referências com `short_context.py`;
-- **1.4:** primeira fatia temporal já mesclada, permitindo corrigir o item recém-criado sem duplicá-lo (`não, 16h`, `quis dizer terça`, etc.).
+## Roadmap
 
-O snapshot de handoff está em [`docs/STATUS_ATUAL.md`](docs/STATUS_ATUAL.md). Uma nova IA/agente deve começar por ele e **continuar a etapa atual**, sem criar outro roadmap.
+```text
+0. 🧹 Arrumar a casa                         ✅
+1. 🗣️ Linguagem natural + conversa real     ✅
+2. 🎓 Importação acadêmica confiável         ✅
+3. ⏱️ Auxiliares de Tempo / Modo Estudo     ✅
+4. 📚 Cursos e trilhas de estudo             ▶️ fechamento pendente
+   4.1 Modelo + autoridade                   ✅
+   4.2 CRUD + navegação                      ✅
+   4.3 Progresso / Continuar curso           ✅
+   4.4 Integração com Modo Estudo            ✅
+   4.5 Importação                            ✅
+   4.6 Gate final                            ✅
+   fechamento: menu por áreas da vida        ▶️ próximo
+5. 📥 Caixa de entrada                       ⏳
+6. 🗂️ Projetos e trabalho                    ⏳
+7. 🧭 Resumo/contexto/priorização             ⏳
+8. 🧠 Memória + Library seletiva             ⏳
+9. 🔒 Hardening                              ⏳
+10. 🌐 Abertura pública/capacidade/escala    ⏳
+```
+
+Não iniciar a Etapa 5 antes de concluir o fechamento do menu por áreas da vida.
 
 ## Documentação oficial
 
-Antes de alterar o projeto, leia nesta ordem:
+Leia nesta ordem:
 
-1. [`docs/STATUS_ATUAL.md`](docs/STATUS_ATUAL.md) — onde o projeto está agora e o próximo trabalho;
-2. [`docs/BUTLER_DOSSIE_MESTRE.md`](docs/BUTLER_DOSSIE_MESTRE.md) — visão completa do produto, arquitetura, domínios, banco e regras;
-3. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — fonte de verdade do runtime de produção;
-4. [`docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`](docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md) — roadmap oficial;
-5. [`docs/ETAPA_1_4_CORRECOES.md`](docs/ETAPA_1_4_CORRECOES.md) — trabalho funcional atualmente aberto;
-6. [`docs/SCHEDULER_REDUNDANCY.md`](docs/SCHEDULER_REDUNDANCY.md) — arquitetura de contingência temporal após o incidente de 30/08;
-7. [`docs/INVENTARIO_ETAPA_0.md`](docs/INVENTARIO_ETAPA_0.md) — classificação estrutural após a limpeza;
-8. [`docs/MAINTAINER_GUIDE.md`](docs/MAINTAINER_GUIDE.md) — regras práticas de manutenção;
-9. [`cloudflare/src/README.md`](cloudflare/src/README.md) — mapa técnico dos módulos;
-10. [`CONTINUIDADE.md`](CONTINUIDADE.md) — decisões duradouras e histórico relevante.
+1. [`docs/STATUS_ATUAL.md`](docs/STATUS_ATUAL.md) — andamento e próximo trabalho;
+2. [`CONTINUIDADE.md`](CONTINUIDADE.md) — decisões duradouras;
+3. [`docs/BUTLER_DOSSIE_MESTRE.md`](docs/BUTLER_DOSSIE_MESTRE.md) — visão completa do produto;
+4. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — runtime de produção;
+5. [`docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`](docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md) — ordem oficial;
+6. [`docs/ETAPA_4_6_GATE_FINAL_CURSOS.md`](docs/ETAPA_4_6_GATE_FINAL_CURSOS.md) — último gate concluído;
+7. [`docs/MANUAL_USUARIO.md`](docs/MANUAL_USUARIO.md) — uso do produto;
+8. [`docs/MAINTAINER_GUIDE.md`](docs/MAINTAINER_GUIDE.md) — manutenção.
 
-`docs/AUDIT_MAIN_2026-08.md` permanece como registro histórico da auditoria que motivou a Etapa 0.
-
-> **Importante:** a raiz `src/` é o runtime antigo de polling/SQLite. A produção está em `cloudflare/`.
-
----
+> **Importante:** a raiz `src/` é o runtime antigo de polling/SQLite. Produção está em `cloudflare/`.
 
 ## Runtime de produção
 
@@ -58,179 +71,145 @@ handlers operacionais ordenados
 D1 / Durable Objects / Telegram Bot API / Open-Meteo
 ```
 
-`entry.py` expõe funções testáveis para a orquestração real:
-
-```text
-dispatch_callback()
-dispatch_message()
-dispatch_scheduled()
-```
-
-A ordem de precedência é parte do contrato e possui regressão própria.
-
-Após a Etapa 1.3/1.4, o caminho de linguagem ativa também possui:
-
-```text
-language_primitives.py  → famílias linguísticas/polaridade sem efeitos colaterais
-short_context.py        → contexto curto expirável e isolado por usuário
-correction_patch.py     → auto-reparo seguro do item recém-criado
-```
-
----
+A precedência do dispatcher é parte do contrato e possui regressão própria.
 
 ## Funcionalidades ativas
 
-O Core operacional cobre:
+O Core cobre, entre outros:
 
-- tarefas e pendências;
-- compromissos e agenda;
-- lembretes simples;
-- matérias, grade, provas, presença e faltas;
-- importação da grade do SIGAA por PDF/texto pesquisável;
-- lista do que está faltando em casa;
+- tarefas, compromissos e lembretes;
 - rotinas e metas;
-- musculação, exercícios, séries, carga e progresso;
-- Ler/Ver Depois, com categorias **Livros, Filmes, Cursos e Outras**;
-- clima por usuário e previsão integrada ao resumo/agenda;
-- comentários mais naturais sobre a previsão sem alterar os dados objetivos do Open-Meteo;
+- matérias, grade, provas, presença/faltas;
+- importação acadêmica por PDF textual/TXT;
+- quick timers/alertas;
+- Modo Estudo;
+- musculação;
+- lista de itens faltando;
+- cardápio do RU;
+- Ler/Ver Depois;
+- clima e resumos;
 - Day-off;
-- resumo matinal e fechamento semanal;
-- alarmes persistentes para eventos críticos;
-- redundância de scheduler via Durable Objects;
-- diagnóstico administrativo de usuários;
-- avisos administrativos com prévia e confirmação por botão;
-- linguagem natural operacional conservadora;
-- referências de contexto curto;
-- primeira fatia de correção temporal conversacional.
+- diagnóstico/admin;
+- linguagem natural conservadora e contexto curto;
+- **Cursos estruturados** com módulos, conteúdos, materiais, atividades, progresso, Modo Estudo e importação.
 
-Finanças continuam preservadas no Core, embora não sejam destaque no menu operacional atual.
+Finanças permanecem preservadas no Core, embora não sejam destaque do menu atual.
 
-O Butler é multiusuário: operações pessoais devem resolver `telegram_chat_id → user_id` e limitar SQL ao usuário correto.
+## Cursos estruturados
 
----
+Entrada:
 
-## Menu principal
+```text
+📘 Cursos
+```
 
-A fonte autoritativa é `cloudflare/src/operational_menu.py`:
+O domínio estruturado é diferente da categoria `🎓 Cursos` de Ler/Ver Depois.
+
+### Modelo
+
+```text
+Curso
+├── Módulos
+│   └── Conteúdos
+│       ├── Materiais
+│       └── Atividades
+└── Eventos/histórico
+```
+
+Autoridade:
+
+```text
+cloudflare/src/course_domain.py
+```
+
+Camadas operacionais:
+
+```text
+course_operational.py   → CRUD/navegação
+course_stage4.py        → progresso, continuar, Modo Estudo e wizard de importação
+course_study_bridge.py  → ponte Cursos ↔ Modo Estudo
+course_importer.py      → parser/prévia/importação
+```
+
+Regras centrais:
+
+```text
+abrir/navegar ≠ concluir
+Continuar curso ≠ concluir
+tempo estudado ≠ concluir
+fim do Modo Estudo ≠ concluir
+último conteúdo resolvido ≠ concluir curso
+prévia de importação ≠ persistir
+```
+
+Progresso e conclusão exigem ações explícitas.
+
+### Importação de curso
+
+Botão:
+
+```text
+📥 Importar curso
+```
+
+Aceita `.txt`, PDF textual pesquisável ou texto colado no formato explícito:
+
+```text
+CURSO: Java + Spring
+TIPO: AUTOGERIDO
+DESCRICAO: Trilha backend
+[MÓDULO] Fundamentos
+[CONTEÚDO] REST | aula
+[MATERIAL] Slides | link | https://exemplo.com
+[ATIVIDADE] Exercícios
+```
+
+Para curso ao vivo, `TIPO: AO VIVO` e o conteúdo pode receber `DD/MM/AAAA HH:MM` como terceira coluna. Linhas ambíguas bloqueiam a importação. Sempre existe prévia e confirmação antes de persistir. PDF escaneado não usa OCR.
+
+## Menu principal atual
+
+A fonte autoritativa continua sendo `cloudflare/src/operational_menu.py`:
 
 ```text
 ➕ Adicionar      🗓️ Hoje
 🛒 Item faltando  📚 Matérias
 🏠 Cotidiano      🏋️ Musculação
+📘 Cursos
+📖 Manual
 🌙 Day-off
 ```
 
-Outros módulos reutilizam o menu sincronizado em `app.MAIN_KB`; não devem manter cópia concorrente do menu principal.
+Este menu **ainda será reorganizado no fechamento obrigatório da Etapa 4**. Não antecipar a Etapa 5.
 
----
+## Linguagem e contexto
 
-## Importação de grade do SIGAA
+Produção privilegia handlers determinísticos, famílias linguísticas compartilhadas e contexto curto, não uma NLU ampla.
 
-No primeiro acesso, o Butler orienta o usuário sobre o formato aceito. O modelo recomendado é a **tabela do painel principal do SIGAA** que contém:
-
-```text
-Componente Curricular | Local | Horário
-```
-
-Códigos como `35M45`, `24M23` ou `2T23` são relevantes para reconstruir dias e horários.
-
-### Formatos aceitos
-
-- PDF com texto pesquisável/selecionável;
-- arquivo `.txt` contendo a grade.
-
-### Formato recomendado
-
-1. abra o painel principal do SIGAA onde aparecem matérias, locais e horários;
-2. use **Imprimir → Salvar como PDF**;
-3. confira que o texto continua selecionável;
-4. no Butler, abra **📚 Matérias → 📥 Importar grade por PDF/texto**;
-5. envie o arquivo e confira a prévia antes de confirmar.
-
-Exemplo mínimo útil:
+Ativos principais:
 
 ```text
-Física II
-PAV III, SALA 07
-24M45
+language_primitives.py
+short_context.py
+correction_patch.py
+compound_router.py
+temporal_language.py
 ```
 
-> Print, foto, imagem ou PDF escaneado não são o formato recomendado. O runtime atual não executa OCR.
-
-A Etapa 2 do roadmap ampliará o motor de importação e a edição completa de matérias.
-
----
-
-## Linguagem natural
-
-A produção privilegia **fast paths conservadores, famílias linguísticas compartilhadas e handlers por domínio**, não uma NLU ampla.
-
-Exemplos esperados:
+Regra permanente:
 
 ```text
-me lembra de entregar o relatório amanhã às 18h
-amanhã tenho dentista às 15h
-acabou o café
-segunda eu não vou pra Sistemas Digitais
-hoje não vou conseguir treinar
-cria uma rotina de estudar inglês
+reconhecer linguagem ≠ autorizar escrita
 ```
-
-Ação explícita deve vencer palavra incidental de outro domínio. Exemplo: `me lembra de procurar jogos` é lembrete, não consulta de jogos.
-
-O contexto curto ativo expira e é isolado por usuário. Referências como `ela`, `essa`, `a segunda`, `a anterior` podem resolver itens recentes quando o contexto é seguro.
-
-A subetapa atual, **1.4**, trabalha correção do turno anterior sem duplicar registros. Depois dela, os gates restantes da Etapa 1 incluem principalmente conjunções, mensagens compostas/múltiplas intenções, corpus maior e sequências mais longas.
-
----
 
 ## Lembretes e scheduler
 
-O Cron Trigger roda a cada minuto, mas **não é mais o único relógio do sistema**.
+Cron não é o único relógio. O Butler usa também Durable Objects (`PersonalAlarm` e `AttendanceAlarm`). `notification_log` é a barreira central de idempotência para entregas agendadas.
 
-Linha primária:
-
-```text
-cron
-→ day_off
-→ attendance
-→ daily_items
-→ routines
-→ summaries
-→ app.scheduled_tick (compatibilidade)
-```
-
-Linha persistente de contingência:
-
-```text
-webhook/cron
-→ sync_personal_alarms()
-→ PersonalAlarm por usuário
-→ próximo evento persistido no Durable Object
-→ dispatchers autoritativos
-```
-
-`AttendanceAlarm` continua separado para presença/aula.
-
-Após webhook, a reconciliação dos alarms usa `ctx.waitUntil(...)`, fora do caminho crítico da resposta HTTP. Isso reduz latência sem perder o rearme persistente.
-
-`reliable_reminders.py` continua sendo a autoridade temporal única para `daily_items`:
-
-- tarefa com horário: aviso no horário;
-- compromisso: 5 minutos antes;
-- lembrete pessoal simples: no horário, com tolerância curta;
-- `notification_log`: idempotência;
-- entrega crítica validada quando aplicável.
-
-A redundância de Cron + Durable Object não deve gerar duplicidade; ambos convergem para dispatchers autoritativos e a mesma barreira de idempotência.
-
-Detalhes: [`docs/SCHEDULER_REDUNDANCY.md`](docs/SCHEDULER_REDUNDANCY.md).
-
----
+`reliable_reminders.py` continua sendo autoridade temporal para `daily_items`.
 
 ## Banco de dados
 
-A fonte formal do D1 são as migrations:
+Migrations formais atuais:
 
 ```text
 0001_initial.sql
@@ -241,80 +220,17 @@ A fonte formal do D1 são as migrations:
 0006_weather_preferences.sql
 0007_admin_pending_announcements.sql
 0008_later_items.sql
+0009_ru_menu.sql
+0010_quick_timers.sql
+0011_study_mode.sql
+0012_runtime_errors.sql
+0013_courses.sql
+0014_course_study_links.sql
 ```
 
-As subetapas 1.1–1.4 reutilizam estruturas existentes e, neste snapshot, não introduziram migration nova.
+`cloudflare/migrations/` é a fonte formal do D1. `ensure_schema()` é apenas tolerância operacional.
 
-`ensure_schema()` pode existir como proteção incremental, mas não substitui migration.
-
-`runtime_schema.py` é helper preservado e não representa o bootstrap automático do banco.
-
-Migration destrutiva exige backup/export D1 e plano de rollback documentado.
-
----
-
-## Administração
-
-Comandos administrativos são restritos ao proprietário.
-
-Exemplos:
-
-```text
-/status usuarios
-/aviso Nova funcionalidade disponível
-/aviso id 2 Mensagem individual
-```
-
-`/aviso` mostra uma prévia e botões:
-
-```text
-✅ Confirmar envio
-❌ Cancelar
-```
-
-O aviso pendente possui estado no D1 e proteção contra confirmação repetida.
-
----
-
-## Clima
-
-O Butler usa Open-Meteo sem chave de API para a previsão.
-
-- proprietário possui localização padrão configurada;
-- outros usuários configuram sua cidade;
-- resumo matinal pode incluir clima;
-- `Hoje`/`Amanhã` podem combinar agenda + previsão;
-- falha do serviço meteorológico não derruba agenda/resumo;
-- `weather_personality.py` pode acrescentar comentário humano/descontraído sem inventar dados meteorológicos.
-
----
-
-## Código preservado
-
-Existe trabalho histórico útil em:
-
-```text
-context_router.py
-intent_parser.py
-action_policy.py
-context_memory.py
-compound_router.py
-suggestion_engine.py
-deterministic_memory.py
-butler_library.py
-library_catalog_handler.py
-knowledge/
-companion_*
-conversational_*
-```
-
-Esses componentes **não formam o roteador central de produção hoje**. Servirão como material para etapas futuras somente após avaliação e testes.
-
-A raiz `src/` também permanece preservada como runtime histórico.
-
----
-
-## Testes e desempenho
+## Testes
 
 Na pasta `cloudflare/`:
 
@@ -322,34 +238,27 @@ Na pasta `cloudflare/`:
 pytest -q
 ```
 
-O workflow do GitHub Actions:
+O GitHub Actions compila `cloudflare/src` e executa a regressão determinística. O gate integrado da Etapa 4 está em:
 
-1. compila `cloudflare/src`;
-2. executa a regressão determinística;
-3. protege, entre outros contratos, a ordem do dispatcher/callbacks/cron.
+```text
+test_stage4_3_course_progress.py
+test_stage4_4_course_study_bridge.py
+test_stage4_5_course_import.py
+test_stage4_6_course_gate.py
+```
 
-A produção usa Pyodide; os testes CPython possuem stubs mínimos de `js`, `pyodide` e `workers`, sem simular rede real.
+A execução de gate no commit `7b41c42d4f151b126f405c7be9bceffcd452b9f9` terminou verde no workflow `Butler regression` run #286.
 
-O caminho quente também possui regressões específicas para:
-
-- cache local ao update de `telegram_chat_id → user_id`;
-- cache local ao update de `user_sessions`;
-- gates antes de consultas D1 irrelevantes;
-- ausência de DDL de presença no dispatcher geral;
-- reconciliação de Durable Objects fora do tempo de resposta do webhook.
-
-CI verde é condição necessária para merge, mas não prova deploy Cloudflare.
-
----
+**CI verde é condição necessária, mas não prova deploy Cloudflare.** O build/deploy de `salbutler-bot` deve ser conferido separadamente.
 
 ## Regra para novas mudanças
 
-Antes de criar outro `*_patch.py` ou `*_fix.py`:
+Antes de criar outro `*_patch.py`/`*_fix.py`:
 
 1. encontre o módulo autoritativo;
-2. verifique se a mudança cabe diretamente nele;
+2. veja se a mudança cabe nele;
 3. proteja com teste;
-4. use camada paralela somente se houver limitação técnica real;
-5. documente qualquer monkeypatch novo.
+4. use ponte/camada paralela só quando houver fronteira real entre domínios;
+5. documente monkeypatches necessários.
 
-Antes de iniciar uma etapa nova, consulte `docs/STATUS_ATUAL.md` e o gate da etapa atual. A ideia daqui para frente é **evoluir funcionalidades sem voltar a acumular uma arquitetura difícil de explicar**.
+Antes de qualquer nova etapa, consulte `docs/STATUS_ATUAL.md` e o último gate concluído.
