@@ -12,6 +12,7 @@ from colloquial_reminder_fastpath import handle_message as handle_colloquial_rem
 from compound_router import handle_message as handle_compound_message, is_compound_action
 from exam_phrase_patch import handle_message as handle_exam_phrase
 from grocery_phrase_patch import handle_message as handle_grocery
+from notification_ack import handle_message as handle_notification_ack
 from operational_informal_fastpath import handle_message as handle_informal_action
 from quick_time import handle_message as handle_quick_time
 from routine_natural_fastpath import handle_message as handle_natural_routine
@@ -110,21 +111,22 @@ async def handle_message(db, token, message):
     if await handle_global_navigation(db, token, message):
         return True
 
-    # Clima e atalhos de agenda continuam com precedência própria.
     if await handle_weather_context(db, token, message):
         return True
 
-    # Etapa 3A: tempo relativo curto vence os parsers de lembrete/tarefa.
     if await handle_quick_time(db, token, message):
         return True
 
-    # Etapa 3B: o Modo Estudo vem antes do compound router. Listas de tópicos
-    # como "limites, derivadas e integrais" pertencem a uma única sessão.
+    # Modo Estudo tem precedência sobre respostas sociais. Assim `terminei`
+    # durante uma sessão continua sendo progresso explícito do estudo.
     if await handle_study_mode(db, token, message):
         return True
 
-    # Mensagens com múltiplas ações claras recebem preview estrutural antes de
-    # qualquer parser poder registrar somente um pedaço delas.
+    # Avisos efêmeros já terminaram quando são enviados. Uma resposta curta é
+    # opcional e apenas fecha a conversa de forma natural.
+    if await handle_notification_ack(db, token, message):
+        return True
+
     if await handle_compound_message(db, token, message):
         return True
 
