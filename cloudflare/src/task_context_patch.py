@@ -97,10 +97,30 @@ async def _task_list(db, uid):
 async def _find_task(db, uid, text):
     raw = (text or "").strip()
 
-    # Na tela de tarefas, números são posições temporárias, não IDs eternos do banco.
+    # Na tela de tarefas, números são posições temporárias. Se existe uma lista
+    # recente, a posição precisa apontar para a mesma linha que o usuário viu,
+    # mesmo que o banco tenha mudado de ordem entre uma mensagem e outra.
     m = re.search(r"#?(\d+)\b", raw)
     if m:
         pos = int(m.group(1))
+        ctx = await short_context.latest(db, uid)
+        if ctx and ctx.get("kind") == "tarefa":
+            candidate_ids = []
+            for value in ctx.get("candidate_ids") or []:
+                try:
+                    candidate_ids.append(int(value))
+                except Exception:
+                    continue
+            if candidate_ids:
+                if not 1 <= pos <= len(candidate_ids):
+                    return None
+                task_id = candidate_ids[pos - 1]
+                return await db.prepare(
+                    "SELECT * FROM daily_items WHERE id=? AND user_id=? AND kind='tarefa'"
+                ).bind(task_id, uid).first()
+
+        # Compatibilidade para comandos numéricos que não vieram de uma lista
+        # recente (por exemplo, após reinício/expiração do contexto).
         rs = await _visible_tasks(db, uid)
         if 1 <= pos <= len(rs):
             return rs[pos-1]
