@@ -68,8 +68,6 @@ Você pode consultar pelo menu:
 ✅ Tarefas
 ```
 
-ou perguntar naturalmente sobre sua agenda.
-
 Depois de uma lista, referências curtas também podem funcionar:
 
 ```text
@@ -98,19 +96,10 @@ marca uma consulta sexta às 14h
 cria um compromisso reunião terça às 10h
 ```
 
-O Butler avisa compromissos comuns alguns minutos antes segundo a política atual.
-
 Menu:
 
 ```text
 📅 Compromissos
-```
-
-Referências curtas também podem ser usadas:
-
-```text
-muda ele pra 16h
-cancela esse compromisso
 ```
 
 ---
@@ -127,15 +116,11 @@ me avisa sexta às 18h de entregar o relatório
 não deixa eu esquecer amanhã às 8h de pegar a chave
 ```
 
-Um lembrete pontual continua sendo apenas aviso.
-
 ---
 
 # 5. Alertas rápidos e cronômetros
 
-Use esta função para minutos ou poucas horas a partir de agora.
-
-Ela não cria tarefa na agenda.
+Use para minutos ou poucas horas a partir de agora. Eles não criam tarefa na agenda.
 
 ## Alerta rápido
 
@@ -143,7 +128,6 @@ Ela não cria tarefa na agenda.
 me lembra de desligar o ovo daqui a 5 minutos
 me avisa daqui a 20 minutos de olhar o forno
 tenho que ligar para João daqui a 10 minutos
-me lembra daqui a 1 hora de tirar a roupa do varal
 ```
 
 ## Cronômetro
@@ -152,33 +136,18 @@ me lembra daqui a 1 hora de tirar a roupa do varal
 cronometra 30 minutos
 cronometra 45 segundos
 inicia um timer de 10 minutos
-começa um cronômetro de 1 hora
 ```
-
-O Butler informa o número do timer quando necessário.
 
 ## Cancelar
 
-Se houver apenas um:
-
 ```text
 cancelar timer
-para o cronômetro
-```
-
-Se houver vários:
-
-```text
-cancelar timer
-```
-
-O Butler lista os ativos. Depois use, por exemplo:
-
-```text
 cancelar timer #12
 ```
 
 Limite atual de alerta rápido: de 1 segundo até 24 horas. Para datas posteriores, use um lembrete normal.
+
+Responder ao aviso com `valeu`, `desliguei`, `feito`, `já foi` e semelhantes é opcional. Quando o contexto ainda estiver recente, o Butler pode apenas reconhecer e encerrar naturalmente.
 
 ---
 
@@ -186,20 +155,12 @@ Limite atual de alerta rápido: de 1 segundo até 24 horas. Para datas posterior
 
 O Modo Estudo organiza ciclos de foco e pausa mantendo matéria, tópicos e histórico.
 
-## Iniciar rapidamente
+## Iniciar
 
 ```text
 modo estudo Cálculo I: limites, derivadas, integrais
-```
-
-Também pode usar:
-
-```text
 quero estudar Cálculo agora: limites, derivadas e integrais
-começa o modo estudo Cálculo I: limites, derivadas
 ```
-
-Se a matéria já existir no cadastro acadêmico e o nome for reconhecido com segurança, o Butler reaproveita o nome dela.
 
 ## Tempos padrão
 
@@ -209,29 +170,13 @@ Se a matéria já existir no cadastro acadêmico e o nome for reconhecido com se
 15 min pausa longa
 ```
 
-A pausa longa ocorre periodicamente durante os ciclos.
-
-## Personalizar tempos
-
-Formato:
-
-```text
-foco/pausa/pausa-longa
-```
-
-Exemplo:
+Personalização:
 
 ```text
 modo estudo 50/10/20 Cálculo I: limites, derivadas
 ```
 
-Para testes curtos, o mínimo atual de foco é 5 minutos:
-
-```text
-modo estudo 5/1 Cálculo I: limites, derivadas
-```
-
-## Durante o estudo
+Durante:
 
 ```text
 status estudo
@@ -244,13 +189,7 @@ cancelar estudo
 histórico de estudo
 ```
 
-### Regra importante
-
-**O tempo acabar não conclui o tópico.**
-
-Se os 25 minutos terminarem, o Butler inicia a pausa, mas o tópico continua pendente.
-
-O tópico só avança quando você disser explicitamente que concluiu ou pulou.
+**O tempo acabar não conclui o tópico.** O tópico só avança quando você disser explicitamente que concluiu ou pulou.
 
 ---
 
@@ -261,8 +200,6 @@ No menu principal:
 ```text
 🗓️ Hoje
 ```
-
-O Butler reúne informações operacionais do dia conforme os módulos ativos.
 
 Frases úteis:
 
@@ -299,15 +236,11 @@ Formatos aceitos:
 - PDF com texto pesquisável/selecionável;
 - TXT.
 
-O Butler não usa OCR em produção para grade acadêmica.
-
-Antes de salvar uma importação, ele mostra uma prévia. Se houver trecho ambíguo, nada é persistido até revisão.
+O Butler não usa OCR em produção para grade acadêmica. Antes de salvar uma importação, ele mostra uma prévia.
 
 ## Presença e faltas
 
 O Butler não presume presença só porque a aula aconteceu.
-
-Você pode acompanhar faltas pelo módulo acadêmico e responder aos avisos de aula quando eles forem enviados.
 
 ---
 
@@ -319,8 +252,6 @@ Exemplos naturais:
 tenho prova de cálculo sexta
 marca prova de física dia 15
 ```
-
-Provas possuem tratamento acadêmico próprio e lembretes específicos.
 
 ---
 
@@ -342,9 +273,7 @@ cardápio de hoje
 cardápio da semana
 ```
 
-O cardápio semanal é compartilhado para os usuários do Butler.
-
-A atualização/importação do cardápio fica restrita ao proprietário.
+O cardápio semanal é compartilhado; a atualização/importação fica restrita ao proprietário.
 
 ---
 
@@ -357,15 +286,9 @@ Menu:
 → 🧘 Rotinas
 ```
 
-Você pode:
+Você pode criar, listar, marcar realizada, editar horários/checkpoints e remover rotina.
 
-- criar rotina;
-- listar rotinas;
-- marcar rotina realizada;
-- editar horários/checkpoints;
-- remover rotina.
-
-Rotina é recorrente. Tarefa é uma obrigação pontual. Não use uma no lugar da outra se quiser histórico coerente.
+Rotina é recorrente; tarefa é pontual.
 
 ---
 
@@ -380,13 +303,11 @@ Menu:
 
 O Butler suporta metas com progresso e integração com rotinas quando aplicável.
 
-Ações disponíveis pelo menu incluem criação, listagem, registro de progresso, edição, conclusão e remoção.
-
 ---
 
 # 13. Lista de mercado / itens faltando
 
-O objetivo não é montar uma compra única. É manter uma lista persistente do que está faltando em casa.
+É uma lista persistente do que está faltando em casa.
 
 Exemplos:
 
@@ -394,18 +315,7 @@ Exemplos:
 acabou café
 tô sem detergente
 adiciona arroz na lista
-```
-
-Para consultar:
-
-```text
 o que está faltando?
-```
-
-ou use:
-
-```text
-🛒 O que está faltando?
 ```
 
 ---
@@ -432,8 +342,6 @@ Funções principais:
 
 O Butler registra apenas o que você informar. Ele não inventa carga, repetição ou conclusão.
 
-Também mantém referências de cargas e exercícios substitutos quando disponíveis no protocolo configurado.
-
 ---
 
 # 15. Ler / Ver Depois
@@ -456,13 +364,87 @@ Categorias atuais:
 
 Essa lista serve como backlog simples.
 
-**A categoria Cursos aqui não é o módulo completo de Cursos e Trilhas**, que pertence à evolução posterior do Butler.
+**`🎓 Cursos` aqui não é o mesmo que `📘 Cursos` do menu principal.** Use Ler/Ver Depois quando você só quer guardar um curso para talvez fazer no futuro.
 
 ---
 
-# 16. Clima
+# 16. Cursos e trilhas estruturados
 
-Você pode perguntar naturalmente:
+Menu principal:
+
+```text
+📘 Cursos
+```
+
+Use esta área quando você realmente está fazendo/acompanhando um curso e quer organizar a estrutura dele.
+
+Menu:
+
+```text
+📘 Cursos
+├── 📚 Meus cursos
+├── ➕ Novo curso
+└── 🗄️ Cursos arquivados
+```
+
+## Criar um curso
+
+Ao escolher `➕ Novo curso`, o Butler pergunta:
+
+1. nome;
+2. tipo;
+3. descrição opcional.
+
+Tipos:
+
+```text
+🧭 Autogerido
+→ você segue a ordem dos módulos/conteúdos no seu ritmo
+
+📡 Ao vivo
+→ conteúdos podem ter data e horário fixos
+```
+
+## Estrutura
+
+Um curso pode ter:
+
+```text
+Curso
+→ Módulos
+   → Conteúdos
+```
+
+Os conteúdos podem ser:
+
+```text
+🎥 Aula
+📖 Leitura
+🧪 Exercício
+🛠️ Projeto
+🔁 Revisão
+📎 Outro
+```
+
+Você pode criar/abrir módulos, renomear módulos, criar conteúdos e editar nome, tipo e data/horário dos conteúdos.
+
+## Editar e arquivar
+
+Na tela do curso é possível editar nome, descrição e tipo.
+
+`🗄️ Arquivar curso` tira o curso da lista principal, mas **não apaga sua estrutura ou histórico**. Em `🗄️ Cursos arquivados`, ele pode ser reativado depois.
+
+## Progresso nesta versão
+
+A tela já mostra conteúdos concluídos, pulados e pendentes, mas **a Etapa atual de Cursos ainda não expõe os botões de concluir/pular/continuar**. Isso será adicionado na próxima evolução do módulo.
+
+Navegar, abrir ou editar uma aula nunca marca progresso automaticamente.
+
+---
+
+# 17. Clima
+
+Você pode perguntar:
 
 ```text
 como está o tempo hoje?
@@ -470,13 +452,11 @@ vai chover amanhã?
 qual a previsão de hoje?
 ```
 
-O clima usa Open-Meteo e pode ser combinado com a agenda/resumo diário.
+O clima usa Open-Meteo.
 
 ---
 
-# 17. Day-off
-
-Use quando quiser suspender o comportamento normal do Butler naquele dia.
+# 18. Day-off
 
 Botão:
 
@@ -484,15 +464,11 @@ Botão:
 🌙 Day-off
 ```
 
-O Day-off vale para o dia local em que foi ativado e não transforma automaticamente finais de semana em folga.
-
-Alertas rápidos/cronômetros explicitamente iniciados continuam funcionando, assim como uma sessão de estudo já iniciada.
-
-Para voltar ao comportamento normal, use os fluxos de reativação disponíveis no Butler.
+O Day-off vale para o dia local em que foi ativado. Alertas rápidos/cronômetros explicitamente iniciados continuam funcionando, assim como uma sessão de estudo já iniciada.
 
 ---
 
-# 18. Referências e correções rápidas
+# 19. Referências e correções rápidas
 
 O Butler mantém contexto curto para frases como:
 
@@ -502,7 +478,7 @@ cancela esse
 conclui a segunda
 ```
 
-Também entende correções recentes em vários fluxos:
+Também entende correções recentes como:
 
 ```text
 não, 16h
@@ -510,11 +486,11 @@ quinta não, sexta
 na verdade é dia 16
 ```
 
-O contexto é curto e isolado por usuário. Uma nova ação explícita em outro assunto não deve ser contaminada por contexto antigo.
+Uma mudança explícita de assunto não deve ser contaminada por contexto antigo.
 
 ---
 
-# 19. Quando usar cada tipo
+# 20. Quando usar cada tipo
 
 ```text
 Tenho algo para fazer e quero manter pendente
@@ -540,13 +516,19 @@ Quero hábito recorrente
 
 Quero acompanhar objetivo/progresso
 → Meta
+
+Quero guardar um curso para talvez fazer depois
+→ 🎓 Cursos em Ler/Ver Depois
+
+Quero acompanhar um curso que estou fazendo
+→ 📘 Cursos estruturados
 ```
 
 ---
 
-# 20. Ajuda rápida no Telegram
+# 21. Ajuda rápida no Telegram
 
-A forma mais simples de lembrar como usar é digitar:
+Digite:
 
 ```text
 /manual
@@ -558,4 +540,4 @@ ou:
 /ajuda
 ```
 
-O manual interno mostra as categorias principais e exemplos curtos sem precisar abrir este arquivo no GitHub.
+O manual interno mostra categorias e exemplos curtos sem precisar abrir este arquivo no GitHub.
