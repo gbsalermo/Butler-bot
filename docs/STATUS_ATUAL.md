@@ -1,20 +1,21 @@
 # Butler — Status Atual e Handoff
 
-**Data-base:** 31/08/2026  
+**Data-base:** 01/09/2026  
 **Branch de produção:** `main`  
-**Etapa 1 — Linguagem natural:** ✅ concluída  
-**Etapa 2 — Importação acadêmica confiável:** ✅ concluída  
-**Etapa 3 — Auxiliares de Tempo / Modo Estudo:** ✅ concluída  
-**Próxima fase oficial:** **Etapa 4 — Cursos e trilhas de estudo**  
-**Snapshot técnico validado:** `83fe6e17a96c8b8734ba211d43f046670b3e9985`
+**Etapas 0–3:** ✅ concluídas  
+**Etapa 4 — Cursos e trilhas:** ▶️ em andamento  
+**4.1 — Modelo + autoridade:** ✅ concluída  
+**4.2 — CRUD + navegação no Telegram:** ✅ concluída  
+**Próxima subetapa oficial:** **4.3 — Progresso e `Continuar curso`**  
+**Snapshot funcional da 4.2:** `4987327cae69e16d9973bee4a97aa3229c36f5d2`
 
-> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para runtime use `ARCHITECTURE.md`; para decisões duradouras use `CONTINUIDADE.md`; para ordem futura use `TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`. Os fechamentos recentes estão em `ETAPA_2_GATE_FINAL.md`, `ETAPA_3A_ASSISTENTE_GERAL_TEMPO.md`, `ETAPA_3B_MODO_ESTUDO.md` e `ETAPA_3_ASSISTENTES_DE_TEMPO.md`.
+> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para decisões duradouras use `CONTINUIDADE.md`; para runtime use `docs/ARCHITECTURE.md`; para ordem futura use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
 
 ---
 
 ## 1. O projeto em uma frase
 
-Butler é um assistente pessoal multiusuário via Telegram para cotidiano, universidade, estudos, projetos e organização pessoal, com Core determinístico, linguagem natural conservadora, persistência D1 e serviços temporais redundantes via Durable Objects.
+Butler é um assistente pessoal multiusuário via Telegram para cotidiano, universidade, estudos, projetos e organização pessoal, com operações críticas determinísticas, persistência Cloudflare D1 e serviços temporais redundantes via Durable Objects.
 
 Produção:
 
@@ -28,172 +29,91 @@ Telegram
 → D1 / Durable Objects / Telegram Bot API / Open-Meteo
 ```
 
-A raiz `src/` continua histórica/preservada e não governa produção.
+A raiz `src/` é runtime histórico/preservado e não governa produção.
 
 ---
 
-## 2. Estado do roadmap
+## 2. Roadmap oficial
 
 ```text
-0. 🧹 Arrumar a casa                         ✅ concluída
-1. 🗣️ Linguagem natural + conversa real     ✅ concluída
-2. 🎓 Importação acadêmica confiável         ✅ concluída
-3. ⏱️ Auxiliares de Tempo / Modo Estudo     ✅ concluída
-4. 📚 Cursos e trilhas de estudo             ▶️ próxima etapa
-   fechamento: menu por áreas da vida        ⏳ planejado
-5. 📥 Caixa de entrada                       ⏳ planejada
-6. 🗂️ Projetos e trabalho                    ⏳ planejada
-7. 🧭 Resumo/contexto/priorização             ⏳ planejada
-8. 🧠 Memória + Library seletiva             ⏳ planejada
-9. 🔒 Hardening                              ⏳ planejada
-10. 🌐 Abertura pública/capacidade/escala    ⏳ planejada
+0. 🧹 Arrumar a casa                         ✅
+1. 🗣️ Linguagem natural + conversa real     ✅
+2. 🎓 Importação acadêmica confiável         ✅
+3. ⏱️ Auxiliares de Tempo / Modo Estudo     ✅
+4. 📚 Cursos e trilhas de estudo             ▶️ em andamento
+   4.1 Modelo + autoridade                   ✅
+   4.2 CRUD + navegação                      ✅
+   4.3 Progresso / Continuar curso           ▶️ próxima
+   4.4 Integração com Modo Estudo            ⏳
+   4.5 Importação                            ⏳
+   4.6 Gate final                            ⏳
+   fechamento: menu por áreas da vida        ⏳ obrigatório
+5. 📥 Caixa de entrada                       ⏳
+6. 🗂️ Projetos e trabalho                    ⏳
+7. 🧭 Resumo/contexto/priorização             ⏳
+8. 🧠 Memória + Library seletiva             ⏳
+9. 🔒 Hardening                              ⏳
+10. 🌐 Abertura pública/capacidade/escala    ⏳
 ```
 
-`TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` continua sendo a autoridade da ordem/gates. Este arquivo é o snapshot operacional do ponto de continuidade.
+A trilha de IA/Groq está documentada como **pós-roadmap** e só começa depois da Etapa 10 + gate de estabilidade. Não antecipar IA para corrigir lacunas das Etapas 0–10.
 
 ---
 
-## 3. Etapa 1 — resultado consolidado
+## 3. Invariantes que não podem ser quebrados
 
-A linguagem natural foi estruturada sem religar NLU ampla/opaca.
+1. reconhecer linguagem não autoriza escrita;
+2. presença em aula nunca é presumida;
+3. carga/repetições de treino só existem quando informadas;
+4. fim de timer do Modo Estudo nunca conclui tópico;
+5. tempo gasto em curso nunca conclui conteúdo;
+6. progresso de curso é explícito;
+7. dados são isolados por usuário;
+8. migration é fonte formal do D1;
+9. `ensure_schema()` é apenas tolerância operacional;
+10. CI verde não prova deploy Cloudflare — verificar `Workers Builds: salbutler-bot`;
+11. `🌙 Day-off` permanece sozinho na última linha do menu;
+12. `🎓 Cursos` de Ler/Ver Depois é backlog simples e não é o domínio estruturado `📘 Cursos`.
 
-Ativos:
+---
 
-- `language_primitives.py` — famílias, relações, referências e polaridade sem CRUD;
-- `short_context.py` — contexto curto de 30 min, isolamento e referências posicionais;
-- `correction_patch.py` — correções como `não, 16h`, `quinta não, sexta`, correção de título e `desfaz`;
-- `compound_router.py` — mensagens compostas, conjunções, preview e lote confirmado;
-- `temporal_language.py` — classificação pura dos pedidos temporais rápidos.
+## 4. Etapas 1–3 já consolidadas
 
-Invariante:
+### Linguagem natural
+
+Ativos principais:
 
 ```text
-reconhecer linguagem ≠ autorizar escrita
+language_primitives.py
+short_context.py
+correction_patch.py
+compound_router.py
+temporal_language.py
 ```
 
-Gate final: `docs/ETAPA_1_6_GATE_FINAL.md`.
+Contexto curto usa janela de 30 minutos, isolamento por usuário e referências posicionais/recentes. NLU ampla histórica não foi religada.
 
----
+### Acadêmico
 
-## 4. Etapa 2 — resultado consolidado
-
-### Decisão de produto
-
-O formato acadêmico atual foi validado como suficiente e não foi remodelado.
-
-Permanece:
+O modelo atual foi preservado:
 
 ```text
 subjects
-→ nome
-→ ativa/trancada
-
 subject_sessions
-→ dia
-→ início
-→ fim
-→ local
 ```
 
-Etapa 2 focou apenas em aumentar a confiança da **primeira importação de novos usuários**.
+Importação inicial usa TXT ou PDF textual pesquisável/selecionável, com prévia e confirmação. Não usar OCR em produção.
 
-`academic_import.py` agora faz:
-
-```text
-PDF textual/TXT
-→ reconstrução conservadora
-→ parse/validação
-→ deduplicação
-→ prévia
-→ confirmação explícita
-→ subjects + subject_sessions atuais
-```
-
-Qualquer trecho acadêmico ambíguo bloqueia toda a persistência daquela tentativa. O Butler prefere pedir correção a cadastrar uma grade incompleta como se estivesse correta.
-
-Fonte SIGAA recomendada:
-
-```text
-Componente Curricular | Local | Horário
-```
-
-Sem OCR em produção.
-
-Fechamento técnico:
-
-- PR #30;
-- merge `1542ec1e1f932fdcc75b32d097ddee0089ee2034`;
-- regressão pós-merge: success, run #244.
-
-Gate: `docs/ETAPA_2_GATE_FINAL.md`.
-
----
-
-## 5. Etapa 3 — resultado consolidado
-
-A Etapa 3 implementou dois domínios irmãos sobre o mesmo `PersonalAlarm`.
-
-### 3A — Assistente Geral de Tempo
-
-Exemplos:
-
-```text
-me lembra de desligar o ovo daqui a 5 minutos
-tenho que ligar para alguém daqui a 10 minutos
-me lembra daqui a 1 hora de tirar a roupa do varal
-cronometra 30 minutos
-```
-
-Regras:
-
-- tempo relativo curto tem prioridade sobre tarefa/lembrete tradicional quando a intenção está clara;
-- quick timer não entra em `daily_items`;
-- horizonte de 1 segundo a 24 horas;
-- múltiplos timers simultâneos;
-- cancelamento por texto/ID;
-- isolamento por usuário;
-- idempotência com `notification_log` + status próprio;
-- Day-off não bloqueia timer explicitamente criado.
-
-Persistência:
+### Tempo
 
 ```text
 0010_quick_timers.sql
 quick_timers
 ```
 
-Merge:
+Aceita timer/alerta rápido de 1 segundo a 24 horas. Persistência aceita `timer | quick_alert`; a intenção linguística `relative_alert` é normalizada antes do INSERT.
 
-```text
-PR #32
-1165175c8868ff26a6b278473581519a8463191b
-```
-
-Pós-merge: success, run #247.
-
-Documento: `docs/ETAPA_3A_ASSISTENTE_GERAL_TEMPO.md`.
-
-### 3B — Modo Estudo
-
-Exemplo:
-
-```text
-modo estudo Cálculo I: limites, derivadas, integrais
-```
-
-Padrão:
-
-```text
-25 min foco / 5 min pausa / 15 min pausa longa
-```
-
-Pode configurar, por exemplo:
-
-```text
-modo estudo 50/10/20 Física I: cinemática, dinâmica
-```
-
-Persistência:
+### Modo Estudo
 
 ```text
 0011_study_mode.sql
@@ -202,129 +122,160 @@ study_topics
 study_events
 ```
 
-Invariante obrigatório e já testado:
-
-**o tópico só avança quando o usuário explicitamente disser que concluiu ou pulou.**
-
-Portanto fim do timer, pausa, restart e Day-off nunca criam conclusão fictícia.
-
-Ações principais:
-
-```text
-concluí o tópico
-pular tópico
-não terminei
-status estudo
-pausar estudo
-retomar estudo
-cancelar estudo
-histórico de estudo
-```
-
-O fim do foco só inicia pausa. Se o tópico continuar pendente, o próximo foco volta para ele.
-
-O histórico usa eventos e estados persistidos; uma conclusão antecipada associa o fim do foco ao tópico realmente estudado.
-
-Merge:
-
-```text
-PR #33
-83fe6e17a96c8b8734ba211d43f046670b3e9985
-```
-
-Gate da PR: **330 testes passando**.  
-Regressão pós-merge: **success**, run #251.
-
-Documentos:
-
-- `docs/ETAPA_3B_MODO_ESTUDO.md`;
-- `docs/ETAPA_3_ASSISTENTES_DE_TEMPO.md`.
+Tópico só muda por `concluí`/`pular` explícitos.
 
 ---
 
-## 6. Scheduler e redundância
+## 5. Diagnóstico e manual
 
-Existem duas linhas temporais complementares:
-
-```text
-Cron Trigger
-+
-Durable Objects (PersonalAlarm / AttendanceAlarm)
-```
-
-`PersonalAlarm` hoje considera:
+Ativos:
 
 ```text
-tarefas/compromissos/lembretes
-quick timers
-Modo Estudo
-rotinas
-resumos
+/status runtime
+/status_runtime
+/manual
+/ajuda
+📖 Manual
 ```
 
-No alarm:
+`runtime_errors` registra somente metadados técnicos; não persiste texto da conversa.
 
-```text
-quick timers
-→ study phases
-→ reliable reminders
-→ routines
-→ summaries
-→ rearme
-```
+O manual só abre se a intenção de ajuda for explícita. Botões como `Cotidiano`, `Matérias` e `Musculação` não podem ser sequestrados pelo handler do manual.
 
-`notification_log` continua sendo a barreira central de idempotência.
-
-A reconciliação dos alarms ocorre fora do tempo crítico do webhook para preservar latência interativa.
-
-Detalhes: `docs/SCHEDULER_REDUNDANCY.md`.
+Após alertas efêmeros, respostas sociais como `valeu`, `desliguei`, `já foi`, `feito` podem ser reconhecidas em contexto curto, mas são opcionais e nunca impedem a entrega do alerta.
 
 ---
 
-## 7. Performance
+## 6. Etapa 4.1 — modelo de Cursos
 
-O caminho quente já possui:
+Migration formal:
 
-- cache por update de `telegram_chat_id → user_id`;
-- cache por update de `user_sessions`;
-- gates lexicais antes de D1;
-- DDL de presença removido do dispatcher geral;
-- reconciliação de Durable Objects pós-resposta;
-- Modo Estudo faz gate linguístico antes de consultar usuário/D1.
+```text
+0013_courses.sql
+```
 
-Se a latência voltar a incomodar, instrumentar tempo por handler/D1/Telegram antes de nova otimização.
+Tabelas:
+
+```text
+courses
+course_modules
+course_contents
+course_materials
+course_activities
+course_events
+```
+
+Autoridade:
+
+```text
+cloudflare/src/course_domain.py
+```
+
+Modos:
+
+```text
+self_paced
+live
+```
+
+Estados de conteúdo:
+
+```text
+pending
+completed
+skipped
+```
+
+`skipped` conta como resolvido, mas não como concluído/aprendido.
+
+Documento: `docs/ETAPA_4_1_MODELO_CURSOS.md`.
 
 ---
 
-## 8. Funcionalidades operacionais relevantes
+## 7. Etapa 4.2 — CRUD e navegação concluídos
 
-Ativas:
+Nova camada operacional:
 
-- tarefas/pendências;
-- compromissos;
-- lembretes pessoais;
-- agenda Hoje/Amanhã/7 dias;
-- matérias/provas/presença/faltas;
-- importação acadêmica confiável no primeiro acesso;
-- rotinas e metas;
-- mercado;
-- musculação/progresso;
-- Ler/Ver Depois: Livros, Filmes, Cursos e Outras;
-- alertas rápidos/cronômetros;
-- Modo Estudo;
-- Day-off;
-- resumos matinal/semanal;
-- clima Open-Meteo com comentário humano;
-- administração do proprietário;
-- scheduler redundante.
+```text
+cloudflare/src/course_operational.py
+```
 
-`🎓 Cursos` em Ler/Ver Depois continua sendo backlog simples. Não confundir com a Etapa 4.
+Entrada no menu:
+
+```text
+📘 Cursos
+```
+
+Fluxos entregues:
+
+```text
+📘 Cursos
+├── 📚 Meus cursos
+├── ➕ Novo curso
+├── 🗄️ Cursos arquivados
+└── abrir curso
+    ├── 🧩 módulos
+    │   ├── criar
+    │   ├── renomear
+    │   └── abrir
+    ├── 📄 conteúdos
+    │   ├── criar
+    │   ├── editar nome/tipo/data
+    │   └── abrir
+    ├── ✏️ editar curso
+    └── 🗄️ arquivar / ♻️ reativar
+```
+
+Criação de curso pergunta:
+
+1. nome;
+2. `Autogerido` ou `Ao vivo`;
+3. descrição opcional.
+
+Curso ao vivo pode guardar data/horário por conteúdo.
+
+Arquivamento preserva estrutura/histórico e substitui hard delete operacional nesta etapa.
+
+`course_domain.py` foi ampliado com:
+
+```text
+list_courses()
+get_course()
+update_course()
+rename_module()
+update_content()
+content_details()
+```
+
+O handler Telegram não faz mutações SQL de cursos fora da autoridade.
+
+Regressão da PR funcional: **366 testes passando**.
+
+Documento: `docs/ETAPA_4_2_CRUD_NAVEGACAO_CURSOS.md`.
+
+---
+
+## 8. O que a Etapa 4.2 NÃO faz
+
+Não antecipar:
+
+```text
+concluir/pular conteúdo
+voltar conteúdo para pendente
+Continuar curso
+concluir curso no Telegram
+integração com Modo Estudo
+importação de curso/material
+reorganização final do menu
+```
+
+A tela de curso pode mostrar `progress_summary()`, mas na 4.2 esse progresso é somente leitura.
 
 ---
 
 ## 9. Banco e migrations
 
-Migrations formais conhecidas:
+Migrations formais atuais:
 
 ```text
 0001_initial.sql
@@ -338,43 +289,61 @@ Migrations formais conhecidas:
 0009_ru_menu.sql
 0010_quick_timers.sql
 0011_study_mode.sql
+0012_runtime_errors.sql
+0013_courses.sql
 ```
-
-Migration é fonte formal. `ensure_schema()` de domínio é somente defesa operacional.
 
 ---
 
-## 10. Próxima etapa — Etapa 4
+## 10. Próximo trabalho exato — Etapa 4.3
 
-**Cursos e trilhas de estudo.**
+**Progresso e `Continuar curso`.**
 
-Objetivo geral já definido no roadmap:
+A base já existe no domínio:
 
 ```text
-Curso
-→ módulos[]
-   → conteúdos/submódulos[]
-      → materiais[]
-      → atividades[]
-      → progresso
+set_content_status()
+next_content()
+progress_summary()
+set_course_status()
 ```
 
-O progresso deve continuar explícito. Cursos autogeridos e cursos ao vivo possuem regras diferentes. O Modo Estudo da Etapa 3 será a infraestrutura operacional para executar sessões sobre um conteúdo de curso, sem misturar a identidade do curso com o cronômetro.
+A 4.3 deve expor UX segura para:
 
-Ao final da Etapa 4 existe o fechamento obrigatório de reorganização do menu por áreas da vida antes da Etapa 5.
+```text
+✅ concluir conteúdo
+⏭️ pular conteúdo
+↩️ voltar para pendente
+▶️ continuar curso
+📊 ver progresso
+🏁 concluir curso explicitamente
+```
+
+Regras obrigatórias:
+
+- nenhuma navegação altera progresso;
+- nenhuma duração altera progresso;
+- `Continuar curso` apenas encontra/abre o próximo pendente;
+- curso autogerido segue posição de módulo/conteúdo;
+- curso ao vivo respeita calendário persistido;
+- conclusão do último conteúdo não deve concluir o curso silenciosamente;
+- qualquer conclusão do curso precisa de ação explícita.
+
+A integração com Modo Estudo só entra na **4.4**.
 
 ---
 
-## 11. Instrução para a próxima IA
+## 11. Instrução para a próxima IA/agente
 
-1. confirmar commits posteriores a `83fe6e17a96c8b8734ba211d43f046670b3e9985`;
-2. ler `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`;
-3. ler `docs/ETAPA_3_ASSISTENTES_DE_TEMPO.md` e os documentos 3A/3B;
-4. iniciar **Etapa 4 — Cursos e trilhas de estudo**, sem criar roadmap paralelo;
-5. preservar conclusão/progresso explícitos;
-6. integrar cursos ao Modo Estudo sem transformar tempo em progresso;
-7. manter `🎓 Cursos` de Ler/Ver Depois como backlog simples até a migração explícita de itens, se houver;
-8. não reabrir o modelo acadêmico sem nova decisão do produto;
-9. não religar Broad NLU/Library histórica como atalho.
+1. confirmar `main` e deploy do snapshot funcional da 4.2;
+2. ler `CONTINUIDADE.md`;
+3. ler `docs/ETAPA_4_1_MODELO_CURSOS.md`;
+4. ler `docs/ETAPA_4_2_CRUD_NAVEGACAO_CURSOS.md`;
+5. iniciar **4.3 — Progresso e `Continuar curso`**;
+6. reutilizar `course_domain.py`, não criar autoridade paralela;
+7. preservar progresso explícito;
+8. não integrar Modo Estudo antes da 4.4;
+9. não reinterpretar `🎓 Cursos` de Ler/Ver Depois;
+10. não avançar para 4.4 sem gate/regressão da 4.3.
 
-**Próximo trabalho oficial: Etapa 4 — Cursos e trilhas de estudo.**
+**Próximo ponto oficial: Etapa 4.3.**
