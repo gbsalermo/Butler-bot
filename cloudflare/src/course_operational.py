@@ -79,7 +79,9 @@ CONTENT_STATUS_LABELS = {
 }
 _STATE_UNSET = object()
 
-COURSE_BUTTON_RE = re.compile(r"^[📘🗄️]\s+#(\d+)\b")
+# O arquivo 🗄 normalmente chega do Telegram com U+FE0F (variation selector).
+# Aceitamos ambas as formas sem contaminar o ID/texto persistido.
+COURSE_BUTTON_RE = re.compile(r"^(?:📘|🗄\ufe0f?)\s+#(\d+)\b")
 MODULE_BUTTON_RE = re.compile(r"^🧩\s+#(\d+)\b")
 CONTENT_BUTTON_RE = re.compile(r"^📄\s+#(\d+)\b")
 COURSE_DIRECT_TEXTS = {
