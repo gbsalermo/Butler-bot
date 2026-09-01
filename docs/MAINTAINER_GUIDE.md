@@ -1,286 +1,342 @@
 # Guia de manutenção do Butler
 
-Este guia existe para que outra pessoa ou IA consiga alterar o Butler sem depender do histórico das conversas que originaram o projeto.
+**Data-base:** 01/09/2026
 
-## 1. Comece por estes arquivos
+Este guia existe para evitar que uma correção pequena volte a criar autoridades concorrentes, estados frágeis ou documentação incompatível com produção.
+
+---
+
+## 1. Antes de alterar qualquer coisa
 
 Leia nesta ordem:
 
-1. `docs/STATUS_ATUAL.md` — fase, subetapa, decisões recentes e próximo passo;
-2. `docs/BUTLER_DOSSIE_MESTRE.md` — visão completa do produto;
-3. `docs/ARCHITECTURE.md` — arquitetura **real de produção**;
-4. `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` — ordem oficial de evolução;
-5. documento da subetapa atual, hoje `docs/ETAPA_1_4_CORRECOES.md`;
-6. `cloudflare/src/entry.py` — prioridade dos handlers;
-7. `cloudflare/src/worker.py` — entrypoint, cron e reconciliação de Durable Objects;
-8. `cloudflare/src/README.md` — mapa de módulos;
-9. `cloudflare/migrations/` — evolução do D1;
-10. testes em `cloudflare/tests/`.
+1. `docs/STATUS_ATUAL.md` — ponto exato do roadmap;
+2. `CONTINUIDADE.md` — decisões duradouras;
+3. `docs/ARCHITECTURE.md` — runtime real;
+4. `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` — ordem oficial;
+5. documento/gate da etapa atual;
+6. `cloudflare/src/entry.py` e o módulo autoritativo envolvido.
 
-`CONTINUIDADE.md` registra decisões duradouras. `AUDIT_MAIN_2026-08.md` e `INVENTARIO_ETAPA_0.md` são snapshots históricos e não devem ser usados sozinhos para inferir o runtime atual.
+Não crie novo roadmap, não reorganize etapas e não avance gate por conveniência.
 
-## 2. Qual runtime devo editar?
-
-### Produção
-
-Edite `cloudflare/`.
-
-A implantação real usa Telegram Webhook + Cloudflare Python Worker + D1 + Durable Objects.
-
-### Legado/preservado
-
-`src/` na raiz usa polling + SQLite. Não é a produção atual.
-
-Se uma correção precisa valer no bot implantado, alterar apenas `src/` não resolve.
-
-## 3. Contrato de handlers
-
-Handlers de mensagem seguem este contrato informal:
-
-```python
-async def handle_message(db, token, message) -> bool:
-    ...
-    return True   # consumiu a mensagem
-    return False  # outro handler pode tentar
-```
-
-Regras:
-
-- retornar `True` somente depois de assumir responsabilidade pela mensagem;
-- não gravar dados e depois retornar `False`;
-- evitar capturar frases genéricas cedo demais;
-- estados guiados devem ter botão/forma de cancelamento;
-- qualquer escrita deve permanecer limitada ao `user_id`/`chat_id` correto.
-
-## 4. Ordem de precedência
-
-Em caso de conflito, a intenção operacional explícita deve vencer conteúdo incidental.
-
-Exemplo:
+O ponto atual depois da Etapa 4.6 é:
 
 ```text
-"me lembra de procurar jogos"
+FECHAMENTO OBRIGATÓRIO DA ETAPA 4
+→ menu por áreas da vida
+→ somente depois Etapa 5
 ```
 
-é um lembrete, não uma consulta à biblioteca de jogos.
+---
 
-Na prática, a precedência é garantida pela ordem de `entry.py`, pelas famílias linguísticas compartilhadas e pelos fast paths conservadores — não pelo antigo `context_router.py`.
+## 2. Runtime que realmente importa
 
-Na Etapa 1.4, `correction_patch` precisa vir antes dos parsers de criação, porque `não, 16h` deve corrigir o item recém-criado, não criar outro.
-
-## 5. Linguagem natural e contexto curto
-
-A Etapa 1 introduziu autoridades explícitas:
+Produção:
 
 ```text
-language_primitives.py
-→ famílias linguísticas e polaridade
-→ sem D1, Telegram ou CRUD
-
-short_context.py
-→ contexto curto expirável e isolado por usuário
-
-correction_patch.py
-→ correção segura do item recém-criado
+Telegram
+→ cloudflare/src/worker.py
+→ cloudflare/src/entry.py
+→ handlers ativos
+→ D1 / Durable Objects / APIs externas
 ```
 
-Regras:
+A raiz `src/` é histórica/preservada. Corrigir somente ali não corrige o bot de produção.
 
-- reconhecimento linguístico não autoriza escrita sozinho;
-- contexto velho não pode sequestrar mudança de assunto;
-- contexto é isolado por `user_id`;
-- a janela inicial do contexto curto é de 30 minutos;
-- referências posicionais devem usar a ordem que o usuário viu;
-- correção silenciosa só usa alvo marcado como recém-criado/corrigido;
-- broad NLU e memória pessoal genérica continuam desativadas.
+Antes de mexer num arquivo, prove que ele é alcançado pelo runtime ativo.
 
-## 6. Estados de conversa
+---
 
-Estados ficam principalmente em `user_sessions`.
+## 3. Uma autoridade por domínio
 
-Convenções existentes:
+Regra prática:
 
-- `guard_*` — `runtime_guard.py`;
-- `later_*` — Ler/Ver Depois;
-- estados de tarefa/compromisso — `app.py` e módulos especializados;
-- estados acadêmicos/presença — módulos `academic_*` e `attendance_*`.
-
-Ao criar estado novo:
-
-1. use prefixo do domínio;
-2. salve somente dados mínimos no payload;
-3. implemente cancelamento;
-4. limpe o estado ao concluir;
-5. teste troca de assunto;
-6. nunca compartilhe estado entre usuários.
-
-## 7. SQL/D1
-
-Todo acesso deve incluir o usuário quando a entidade for pessoal.
-
-Prefira:
-
-```sql
-WHERE user_id=? AND id=?
+```text
+nova regra de negócio
+→ localizar módulo dono
+→ implementar no dono
+→ expor por handler/ponte
+→ teste
 ```
 
-em vez de consultar somente pelo `id`.
+Evite criar `*_patch.py`/`*_fix.py` por reflexo.
 
-Para mudanças de schema:
+Uma camada paralela só é aceitável quando existe fronteira real ou limitação técnica. Exemplo válido: `course_study_bridge.py` liga Cursos e Modo Estudo sem transformar um deles na autoridade do outro.
 
-- crie migration numerada;
-- não dependa somente de `CREATE TABLE IF NOT EXISTS` dentro do handler;
-- `ensure_schema()` pode existir como proteção de implantação incremental, mas não substitui a migration;
-- documente qual módulo é dono da tabela.
+Autoridades importantes:
 
-As subetapas 1.1–1.4 reutilizam estruturas existentes e não adicionaram migration até o snapshot de 31/08/2026.
+| Domínio | Autoridade/camada principal |
+|---|---|
+| Dispatcher | `entry.py` |
+| Menu principal | `operational_menu.py` |
+| Contexto curto | `short_context.py` |
+| Linguagem comum | `language_primitives.py` |
+| `daily_items` temporais | `reliable_reminders.py` |
+| Modo Estudo | `study_mode.py` |
+| Cursos — persistência | `course_domain.py` |
+| Cursos — CRUD Telegram | `course_operational.py` |
+| Cursos — progresso/integrações UX | `course_stage4.py` |
+| Cursos ↔ Modo Estudo | `course_study_bridge.py` |
+| Importação de Cursos | `course_importer.py`, persistindo via `course_domain.py` |
+| Ler/Ver Depois | `production_usability_patch.py` |
+| Alarmes persistentes | `personal_alarm.py`, `attendance_alarm.py` |
 
-## 8. Patches e monkeypatches
+---
 
-O projeto acumulou módulos que modificam símbolos de outros módulos em runtime.
+## 4. Dispatcher primeiro, regex depois
 
-Antes de criar um novo patch:
+Handlers são ordenados. Se uma mensagem entra no domínio errado:
 
-1. verifique se o comportamento pode ser implementado diretamente no módulo autoritativo;
-2. se ainda precisar de patch, documente qual símbolo substitui;
-3. documente quem havia substituído o mesmo símbolo antes;
-4. registre a posição necessária na sequência de `install_*()` de `entry.py`;
-5. adicione teste que demonstre o comportamento final após todas as instalações.
+1. reproduza;
+2. descubra qual handler anterior retornou `True`;
+3. verifique estado atual e precedência;
+4. só depois ajuste interpretação/roteamento.
 
-**Evite criar `*_fix2.py`, `*_final.py` ou novas camadas paralelas.** A estratégia atual é consolidar domínio por domínio quando houver cobertura suficiente.
+Não trate sintoma acrescentando regex em outro módulo sem entender quem sequestrou a mensagem.
 
-## 9. Como comentar código neste projeto
+Ação explícita deve vencer contexto antigo.
 
-Comentários devem explicar **por quê**, prioridade, invariantes ou riscos — não repetir a linha seguinte.
+---
 
-Bom:
+## 5. Estados guiados
 
-```python
-# Auto-reparo vem antes dos parsers de criação para que uma correção temporal
-# do turno anterior não seja interpretada como um item novo.
-if await handle_correction_message(...):
-    return True
+Todo fluxo multi-turno deve preservar o objeto já escolhido no payload quando o próximo turno só pede um valor.
+
+Exemplo correto:
+
+```text
+usuário escolhe tarefa #1
+→ state guarda task_id
+→ próximo turno recebe "amanhã às 8h"
+→ atualiza aquele task_id
 ```
 
-Ruim:
+Exemplo incorreto:
 
-```python
-# chama a função
-await handle_correction_message(...)
+```text
+usuário escolhe tarefa #1
+→ próximo turno recebe data
+→ parser tenta identificar a tarefa outra vez
 ```
 
-### Todo módulo novo deve começar com docstring
+Para listas numeradas temporárias, preserve os IDs da lista exibida. Não reconsulte uma ordem nova e interprete `1` contra uma lista que o usuário nunca viu.
 
-Modelo:
+O mesmo vale para listas filtradas, como hábitos elegíveis para vínculo com rotina.
 
-```python
-"""Responsabilidade principal do módulo.
+---
 
-Chamado por: entry.py -> handler X.
-Grava em: tabela Y.
-Não deve: assumir presença / escrever sem confirmação / etc.
-"""
+## 6. Cancelamento e mudança de assunto
+
+Fluxos guiados devem, quando aplicável:
+
+- aceitar cancelamento;
+- limpar estado temporário;
+- permitir voltar;
+- não capturar indefinidamente mensagens de outro domínio;
+- manter payload mínimo e identificadores confiáveis.
+
+Confirmações de escrita derivada devem expirar ou ser invalidadas quando o contexto deixa de ser seguro.
+
+---
+
+## 7. Multiusuário
+
+Toda operação pessoal precisa restringir leitura/escrita ao `user_id` correto.
+
+Nunca aceite um `id` vindo do estado/usuário como prova de propriedade. A consulta/mutação da autoridade deve validar também o usuário.
+
+Teste obrigatório para persistência pessoal nova:
+
+```text
+usuário A cria
+usuário B tenta listar/abrir/editar
+→ não consegue
 ```
 
-### Funções que merecem docstring
+Cursos, estudos, tarefas, metas e demais domínios devem manter esse contrato.
 
-Priorize funções que:
+---
 
-- alteram banco;
-- resolvem contexto/referência;
-- fazem monkeypatch;
-- têm janela temporal;
-- fazem deduplicação/idempotência;
-- possuem regras de negócio não óbvias.
+## 8. Banco e migrations
 
-## 10. Menus
+Fonte formal:
 
-O menu visível de produção é autoritativo em `operational_menu.py`. Patches que sincronizam `app.MAIN_KB`/`app.COTIDIANO_KB` existem para fluxos de fallback e precisam permanecer coerentes.
+```text
+cloudflare/migrations/
+```
 
-Ao adicionar botão:
+Migrations atuais vão de:
 
-- adicione ao menu autoritativo;
-- verifique `BASE_BUTTONS`/`EXACT_BUTTONS` quando aplicável;
-- verifique navegação de volta;
-- teste clique e texto digitado com o mesmo nome;
-- confirme que estados temporários não capturam o botão por engano.
+```text
+0001_initial.sql
+...
+0013_courses.sql
+0014_course_study_links.sql
+```
 
-Ler/Ver Depois possui atualmente as categorias visíveis **Livros, Filmes, Cursos e Outras**. Isso não significa que a Etapa 4 de Cursos/Trilhas esteja implementada.
+`ensure_schema()` é tolerância operacional e **não substitui migration**.
 
-## 11. Lembretes, scheduler e Durable Objects
+Nova persistência segue:
 
-Nunca crie um segundo scheduler para a mesma obrigação sem estratégia explícita de idempotência e autoridade.
+```text
+migration
+→ backfill se necessário
+→ índice quando justificado
+→ testes
+→ documentação
+```
 
-Hoje:
+Migration destrutiva exige export/backup D1 e plano de rollback.
 
-- `reliable_reminders.py` é autoridade de tarefas/compromissos/lembretes simples;
-- `scheduled_delivery_guard.py` protege entrega crítica;
-- `notification_log` é a principal barreira de duplicidade;
-- `PersonalAlarm` fornece contingência persistente para eventos pessoais;
-- `AttendanceAlarm` permanece separado para aula/presença;
-- Cron Trigger continua primeira linha, mas não deve ser tratado como ponto único de falha.
+---
 
-**`reminder_policy.py` não existe mais.** Ele foi removido na Etapa 0 após a eliminação do scheduler duplicado que neutralizava.
+## 9. Regras permanentes de linguagem
 
-Após webhook, a reconciliação dos Durable Objects deve continuar fora do caminho crítico com `ctx.waitUntil(...)`. No cron, a reconciliação permanece síncrona.
+`language_primitives.py` e contexto podem reconhecer intenção, mas:
 
-Ao alterar horário de aviso, atualize também:
+```text
+reconhecer ≠ autorizar escrita
+```
 
-- `/health` quando aplicável;
-- `docs/SCHEDULER_REDUNDANCY.md` se mudar a arquitetura temporal;
-- documentação de domínio;
-- chaves/idempotência;
-- teste correspondente.
+Não invente:
 
-## 12. Desempenho do caminho quente
+- presença;
+- conclusão;
+- prioridade;
+- carga/repetição;
+- progresso de curso;
+- gasto;
+- compromisso;
+- memória pessoal.
 
-`performance_patch.py` mantém cache **somente durante um update** para:
+Ambiguidade com efeito persistente exige confirmação quando não houver alvo/regra determinística suficiente.
 
-- `telegram_chat_id → user_id`;
-- `user_sessions`.
+---
 
-Não transforme isso em cache global persistente sem desenho explícito de invalidação.
+## 10. Cursos estruturados
 
-Outras decisões de latência já tomadas:
+`📘 Cursos` está implementado até o gate 4.6.
 
-- gates lexicais antes de consultar contexto/D1 quando a mensagem é irrelevante;
-- DDL de presença fora do dispatcher geral;
-- sincronização global de alarms fora da resposta interativa.
+**Não confundir com `🎓 Cursos` de Ler/Ver Depois.** Esse último continua sendo backlog simples.
 
-## 13. Dados do proprietário
+### Persistência
 
-O projeto suporta usuários genéricos, mas ainda possui bootstrap pessoal versionado em `owner_profile.py` e `settings.py`.
+`course_domain.py` é a autoridade. `course_operational.py`, `course_stage4.py` e `course_importer.py` não devem criar SQL concorrente de mutação do domínio.
 
-Regras:
+### Progresso
 
-- nunca aplicar dados do proprietário em outro usuário;
-- `is_owner(chat_id)` deve continuar sendo a barreira;
-- novos defaults genéricos não devem depender do bootstrap pessoal;
-- se o projeto for distribuído para terceiros, migrar esses dados para configuração/seed privado antes.
+Invariantes:
 
-## 14. Fast paths
+```text
+abrir conteúdo             ≠ concluir
+Continuar curso            ≠ concluir
+tempo estudado             ≠ concluir
+fim de sessão de estudo    ≠ concluir
+último conteúdo resolvido  ≠ concluir curso
+```
 
-Fast paths existem para ações claras e frequentes.
+Mudança de status precisa de ação explícita.
 
-Eles devem ser conservadores. Um fast path amplo demais impede handlers especializados de rodarem.
+### Modo Estudo
 
-Ao adicionar frase natural:
+`course_study_bridge.py` cria vínculo e sessão, mas conclusão no Modo Estudo não sincroniza conclusão do conteúdo do curso.
 
-- prefira família semântica, não uma frase única;
-- use `language_primitives.py` quando a regra for compartilhável;
-- teste negativas próximas;
-- teste palavras de outro domínio dentro do conteúdo;
-- teste seguimento temporal (`hoje`, `amanhã`, `15h`);
-- teste mudança brusca de assunto;
-- teste sequência de turnos quando houver contexto.
+Não adicione sincronização automática sem reabrir formalmente a decisão de produto e seu gate.
 
-## 15. Clima
+### Importação
 
-`weather_service.py` continua responsável pelos dados objetivos e Open-Meteo. `weather_personality.py` pode enriquecer a apresentação, mas não deve inventar temperatura, chuva, vento ou probabilidade.
+Pipeline obrigatório:
 
-Falha meteorológica não pode derrubar agenda/resumo.
+```text
+entrada
+→ parser determinístico
+→ validação completa
+→ prévia
+→ confirmação
+→ persistência via course_domain
+```
 
-## 16. Testes
+Não use `parser → banco` direto. Não adivinhe linhas ambíguas. Não introduza OCR como dependência silenciosa.
+
+---
+
+## 11. Menu
+
+A autoridade atual é `operational_menu.py`.
+
+Menu antes do fechamento da Etapa 4:
+
+```text
+➕ Adicionar      | 🗓️ Hoje
+🛒 Item faltando | 📚 Matérias
+🏠 Cotidiano      | 🏋️ Musculação
+📘 Cursos
+📖 Manual
+🌙 Day-off
+```
+
+`🌙 Day-off` deve continuar protegido contra toque acidental.
+
+O próximo trabalho oficial é reorganizar esse menu por áreas humanas da vida. Ao fazê-lo:
+
+- inventarie menus ativos antes;
+- compare os protótipos previstos no documento de fechamento;
+- preserve atalhos frequentes;
+- não quebre linguagem natural fora do menu;
+- esconda ações de proprietário para usuários comuns;
+- mantenha Voltar/Cancelar consistentes;
+- adicione regressões de navegação.
+
+---
+
+## 12. Ler/Ver Depois
+
+Categorias:
+
+```text
+📚 Livros
+🎬 Filmes
+🎓 Cursos
+🗂️ Outras
+```
+
+A categoria `🎓 Cursos` **não prova nem substitui** o domínio `📘 Cursos`. Ambos coexistem com finalidades diferentes.
+
+---
+
+## 13. Modo Estudo e regras temporais
+
+Fim de foco não conclui tópico.
+
+Timers rápidos não viram tarefas.
+
+Para qualquer nova regra temporal, documente:
+
+- fonte do horário;
+- tolerância;
+- idempotência;
+- retry/falha;
+- efeito do Day-off;
+- relação com Cron/Durable Objects;
+- chave usada em `notification_log` quando aplicável.
+
+Não use `sleep()` no Worker para persistência temporal.
+
+---
+
+## 14. Scheduler e Durable Objects
+
+Linha primária: Cloudflare Cron.
+
+Contingência: `PersonalAlarm`/`AttendanceAlarm`.
+
+Ambas devem convergir para as mesmas autoridades e barreiras de idempotência.
+
+Depois do webhook, reconciliações globais devem usar `ctx.waitUntil(...)` quando já definido pelo runtime, para não aumentar latência interativa.
+
+---
+
+## 15. Testes
 
 Na pasta `cloudflare/`:
 
@@ -288,44 +344,101 @@ Na pasta `cloudflare/`:
 pytest -q
 ```
 
-A suíte roda em CPython. O Worker real roda com objetos `js`/Pyodide; `tests/conftest.py` fornece somente stubs de import para permitir testes determinísticos.
+Workflow:
 
-Não use esses stubs como evidência de que uma chamada real ao Telegram/Cloudflare funciona.
+```text
+.github/workflows/butler-regression.yml
+```
 
-### Cobertura mínima para uma mudança operacional
+Ele compila `cloudflare/src` e executa a suíte determinística.
 
-Teste pelo menos:
+Toda mudança funcional precisa, conforme aplicável, de:
 
-- frase feliz;
-- variação informal;
-- frase parecida que não deve acionar;
-- usuário A e usuário B quando há estado/memória;
-- repetição/idempotência quando há scheduler;
-- navegação/cancelamento quando há wizard;
-- sequência completa quando houver contexto/correção.
+- caso feliz;
+- falso positivo/erro;
+- isolamento multiusuário;
+- cancelamento/estado;
+- sequência multi-turno;
+- regressão de bug quando a mudança nasce de incidente.
 
-## 17. Logs e exceções
+Etapa 4 possui suites específicas:
 
-O Worker deliberadamente isola alguns schedulers para que uma falha não derrube os demais.
+```text
+test_stage4_3_course_progress.py
+test_stage4_4_course_study_bridge.py
+test_stage4_5_course_import.py
+test_stage4_6_course_gate.py
+```
 
-Não faça `except Exception: pass` em caminhos críticos novos. Quando tolerar erro:
+---
 
-- explique por que ele é recuperável;
-- registre contexto seguro suficiente;
-- nunca logue token;
-- não marque notificação como entregue se o envio falhou.
+## 16. CI não é deploy
 
-## 18. Checklist antes do PR
+Um PR pode estar verde e o Worker ainda não ter sido publicado.
 
-- [ ] Li `docs/STATUS_ATUAL.md` e continuei a etapa correta?
-- [ ] Alterei o runtime correto?
-- [ ] Verifiquei a ordem de handlers?
-- [ ] Verifiquei monkeypatches sobre o mesmo símbolo?
-- [ ] Mantive isolamento por usuário?
-- [ ] Existe cancelamento para estado guiado?
-- [ ] Migration/documentação foram atualizadas?
-- [ ] `pytest -q` passa?
-- [ ] O comportamento declarado no `/health` continua verdadeiro?
-- [ ] README/arquitetura ainda correspondem ao código?
-- [ ] Não criei outra camada paralela sem necessidade?
-- [ ] Diferenciei regressão/CI de deploy real na Cloudflare?
+Sempre diferencie:
+
+```text
+GitHub Actions verde
+≠
+Workers Build/Deploy validado
+```
+
+Depois de merge que afeta produção, verifique separadamente o build/deploy de `salbutler-bot` quando houver acesso à Cloudflare.
+
+Não declare produção atualizada apenas porque `pytest` passou.
+
+---
+
+## 17. Documentação
+
+Quando a mudança altera comportamento material:
+
+- `docs/STATUS_ATUAL.md` — andamento/próximo passo;
+- `CONTINUIDADE.md` — decisão duradoura;
+- `docs/ARCHITECTURE.md` — runtime/autoridade;
+- `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` — apenas quando o andamento oficial do roadmap muda;
+- `docs/MANUAL_USUARIO.md` — comportamento visível ao usuário;
+- README — visão de entrada do repositório;
+- documento específico da etapa/gate.
+
+Evite deixar frases contraditórias do tipo “feature ainda não existe” depois que o gate já foi fechado.
+
+---
+
+## 18. Biblioteca/IA preservadas
+
+Existir no repositório não significa estar no webhook.
+
+Broad NLU, Library genérica e camadas experimentais permanecem preservadas para etapas futuras. Não as ligue ao dispatcher central só para resolver uma lacuna local.
+
+A trilha IA/Groq continua depois da Etapa 10 + gate de estabilidade.
+
+---
+
+## 19. Checklist antes do merge
+
+- [ ] módulo dono identificado;
+- [ ] nenhuma autoridade paralela acidental;
+- [ ] isolamento multiusuário preservado;
+- [ ] migration criada se necessário;
+- [ ] estados/cancelamento seguros;
+- [ ] testes novos + regressão completa verdes;
+- [ ] documentação sincronizada;
+- [ ] PR no ponto correto do roadmap;
+- [ ] CI do **head final** verde;
+- [ ] deploy tratado como verificação separada.
+
+---
+
+## 20. Ponto atual
+
+Subetapas 4.1–4.6: ✅.
+
+Próximo trabalho oficial:
+
+```text
+Fechamento da Etapa 4 — menu por áreas da vida
+```
+
+Etapa 5 — Caixa de entrada continua bloqueada até esse fechamento e sua regressão.
