@@ -8,6 +8,11 @@ from telegram_api import send_message
 TASK_KB = [["✅ Concluir tarefa", "⏰ Adiar tarefa"],["📌 Manter pendente", "🚫 Cancelar tarefa"],["⬅️ Voltar ao cotidiano"]]
 CANCEL_KB = [["❌ Cancelar ação"]]
 
+# Guarda a implementação base antes de instalar o patch. O wrapper abaixo só
+# intercepta o segundo passo do adiamento; todos os demais estados continuam
+# passando pelo runtime_guard original.
+_BASE_RUNTIME_HANDLE_STATE = runtime_guard._handle_state
+
 
 def _norm(text):
     value = unicodedata.normalize("NFKD", (text or "").lower())
@@ -115,6 +120,80 @@ async def _find_task(db, uid, text):
     return matches[0] if len(matches) == 1 else None
 
 
+async def _handle_runtime_state(db, token, chat, uid, text):
+    """Evita que o segundo passo do adiamento tente escolher a tarefa de novo.
+
+    `guard_task_postpone_when` já carrega `id` e `title` no payload. No handler
+    base, o prefixo `guard_task_` é testado antes desse estado específico; por
+    isso textos como `amanhã às 8h` caem em `_find_task()` e o bot volta a pedir
+    qual tarefa deve ser adiada. Aqui tratamos esse estado primeiro e preservamos
+    o alvo selecionado no turno anterior.
+    """
+    state, payload = await runtime_guard._state(db, uid)
+    if state != "guard_task_postpone_when":
+        return await _BASE_RUNTIME_HANDLE_STATE(db, token, chat, uid, text)
+
+    # Cancelamento continua usando exatamente a regra/teclado do runtime base.
+    if text in ("❌ Cancelar ação", "/cancelar"):
+        return await _BASE_RUNTIME_HANDLE_STATE(db, token, chat, uid, text)
+
+    from nlu import parse_date, parse_time, validate_future
+
+    due_date = parse_date(text, runtime_guard._now().date())
+    due_time = parse_time(text)
+    if not due_date:
+        await runtime_guard._send(
+            token,
+            chat,
+            "Não entendi a nova data. Ex.: `amanhã às 18h`.",
+            runtime_guard.CANCEL_KB,
+        )
+        return True
+
+    ok, msg = validate_future(
+        due_date,
+        due_time,
+        runtime_guard._now().replace(tzinfo=None),
+    )
+    if not ok:
+        await runtime_guard._send(token, chat, msg, runtime_guard.CANCEL_KB)
+        return True
+
+    task_id = payload.get("id")
+    title = payload.get("title")
+    if not task_id or not title:
+        # Sessão inconsistente: limpa o estado em vez de adiar uma tarefa errada.
+        await runtime_guard._clear(db, uid)
+        await runtime_guard._send(
+            token,
+            chat,
+            "Perdi a referência da tarefa. Abra Tarefas e escolha novamente qual deseja adiar.",
+            runtime_guard.TASK_KB,
+        )
+        return True
+
+    await db.prepare(
+        "UPDATE daily_items SET due_date=?,due_time=?,status='pendente',"
+        "postpone_count=postpone_count+1,snoozed_until=? WHERE id=? AND user_id=?"
+    ).bind(
+        due_date.isoformat(),
+        due_time,
+        f"{due_date.isoformat()} {due_time}" if due_time else due_date.isoformat(),
+        int(task_id),
+        uid,
+    ).run()
+    await runtime_guard._clear(db, uid)
+    await runtime_guard._send(
+        token,
+        chat,
+        f"⏰ {title} adiada para {due_date.strftime('%d/%m')}"
+        + (f" às {due_time}" if due_time else "")
+        + ". O calendário aceitou. Eu estou processando. 😏",
+        runtime_guard.TASK_KB,
+    )
+    return True
+
+
 async def handle_message(db, token, message):
     chat_id = (message.get("chat") or {}).get("id")
     if chat_id is None:
@@ -164,3 +243,4 @@ def install():
     short_context.install()
     runtime_guard._task_list = _task_list
     runtime_guard._find_task = _find_task
+    runtime_guard._handle_state = _handle_runtime_state
