@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import re
 
 import language_primitives as language
+import notification_ack
 import quality_patch
 import temporal_language
 from telegram_api import send_message
@@ -150,12 +151,7 @@ def parse_request(text):
 
 
 def _storage_kind(kind):
-    """Converte a intenção linguística para o contrato persistido no D1.
-
-    A camada de linguagem usa ``relative_alert`` porque descreve a intenção.
-    O schema histórico de ``quick_timers`` usa ``quick_alert``. Manter a
-    conversão num único ponto evita que novos callers voltem a violar o CHECK.
-    """
+    """Converte a intenção linguística para o contrato persistido no D1."""
     if kind == "relative_alert":
         return "quick_alert"
     if kind in {"timer", "quick_alert"}:
@@ -323,8 +319,6 @@ async def dispatch_due_quick_timers(db, token, user_id=None, *, now=None):
     try:
         due = await _rows(db.prepare(sql).bind(*params))
     except Exception:
-        # Código pode chegar antes da migration; sem timer criado ainda, não há
-        # trabalho útil a fazer e o próximo pedido do domínio aplica o guard.
         return
 
     for item in due:
@@ -345,10 +339,11 @@ async def dispatch_due_quick_timers(db, token, user_id=None, *, now=None):
         label = _row(item, "label")
         if kind == "timer":
             text = f"⏰ Tempo! {_format_duration(_row(item,'delay_seconds'))} encerrados."
+            ack_label = f"cronômetro de {_format_duration(_row(item,'delay_seconds'))}"
         else:
             text = f"⏰ Hora de {label}."
+            ack_label = label
 
-        # scheduled_delivery_guard instala confirmação real neste sender.
         await quality_patch.send_message(token, int(_row(item, "telegram_chat_id")), text)
         await db.prepare(
             "INSERT OR IGNORE INTO notification_log(user_id,notification_key) VALUES(?,?)"
@@ -357,6 +352,7 @@ async def dispatch_due_quick_timers(db, token, user_id=None, *, now=None):
             "UPDATE quick_timers SET status='fired',fired_at=CURRENT_TIMESTAMP "
             "WHERE id=? AND user_id=? AND status='active'"
         ).bind(timer_id, uid).run()
+        await notification_ack.remember_notification(db, uid, kind, timer_id, ack_label)
 
 
 async def next_quick_timer(db, uid, *, now=None):
