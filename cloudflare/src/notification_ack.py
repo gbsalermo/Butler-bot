@@ -6,6 +6,9 @@ agenda; serve apenas para a conversa não terminar de forma seca.
 
 Tarefas/compromissos ficam fora deste módulo: neles ``feito`` deve continuar
 mudando o estado persistente da obrigação.
+
+Regra de segurança: esta camada é best-effort. Se o contexto social falhar, a
+entrega do alerta nunca pode falhar junto com ele.
 """
 from __future__ import annotations
 
@@ -42,33 +45,44 @@ def ack_kind(text):
 
 
 async def remember_notification(db, uid, domain, target_id, label):
-    """Registra apenas contexto curto do aviso efetivamente entregue."""
+    """Registra contexto curto sem nunca comprometer a entrega principal."""
     if domain not in _ALLOWED_DOMAINS:
-        return
+        return False
     detail = json.dumps(
         {"domain": domain, "label": str(label or "")[:160]},
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    await db.prepare(
-        "INSERT INTO natural_events(user_id,event_type,target_id,detail) "
-        "VALUES(?,'notification_sent',?,?)"
-    ).bind(int(uid), int(target_id) if target_id is not None else None, detail).run()
+    try:
+        await db.prepare(
+            "INSERT INTO natural_events(user_id,event_type,target_id,detail) "
+            "VALUES(?,'notification_sent',?,?)"
+        ).bind(int(uid), int(target_id) if target_id is not None else None, detail).run()
+        return True
+    except Exception as exc:
+        print(
+            f"[notification-ack] remember-failed type={type(exc).__name__} "
+            f"message={str(exc)[:240]}"
+        )
+        return False
 
 
 async def _recent_unacked(db, uid):
-    return await db.prepare(
-        "SELECT n.id,n.target_id,n.detail,n.created_at "
-        "FROM natural_events n "
-        "WHERE n.user_id=? AND n.event_type='notification_sent' "
-        "AND datetime(n.created_at) >= datetime('now', ?) "
-        "AND NOT EXISTS ("
-        "  SELECT 1 FROM natural_events a "
-        "  WHERE a.user_id=n.user_id AND a.event_type='notification_ack' "
-        "    AND a.target_id=n.id"
-        ") "
-        "ORDER BY n.id DESC LIMIT 1"
-    ).bind(int(uid), f"-{ACK_WINDOW_MINUTES} minutes").first()
+    try:
+        return await db.prepare(
+            "SELECT n.id,n.target_id,n.detail,n.created_at "
+            "FROM natural_events n "
+            "WHERE n.user_id=? AND n.event_type='notification_sent' "
+            "AND datetime(n.created_at) >= datetime('now', ?) "
+            "AND NOT EXISTS ("
+            "  SELECT 1 FROM natural_events a "
+            "  WHERE a.user_id=n.user_id AND a.event_type='notification_ack' "
+            "    AND a.target_id=n.id"
+            ") "
+            "ORDER BY n.id DESC LIMIT 1"
+        ).bind(int(uid), f"-{ACK_WINDOW_MINUTES} minutes").first()
+    except Exception:
+        return None
 
 
 def _row(row, key, default=None):
@@ -110,9 +124,12 @@ async def handle_message(db, token, message):
         return False
 
     event_id = int(_row(event, "id"))
-    await db.prepare(
-        "INSERT INTO natural_events(user_id,event_type,target_id,detail) "
-        "VALUES(?,'notification_ack',?,?)"
-    ).bind(int(uid), event_id, kind).run()
+    try:
+        await db.prepare(
+            "INSERT INTO natural_events(user_id,event_type,target_id,detail) "
+            "VALUES(?,'notification_ack',?,?)"
+        ).bind(int(uid), event_id, kind).run()
+    except Exception:
+        return False
     await send_message(token, int(chat_id), _response(kind, event_id))
     return True
