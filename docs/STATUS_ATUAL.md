@@ -5,7 +5,7 @@
 **Etapas 0–3:** ✅ concluídas  
 **Etapa 4 — Cursos e trilhas:** ✅ subetapas 4.1–4.6 concluídas  
 **Próximo trabalho oficial:** **fechamento obrigatório da Etapa 4 — menu por áreas da vida**  
-**PR do fechamento 4.3–4.6:** #45
+**PR final da implementação 4.3–4.6:** #46
 
 > Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para decisões duradouras use `CONTINUIDADE.md`; para runtime use `docs/ARCHITECTURE.md`; para ordem futura use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
 
@@ -290,11 +290,7 @@ Entrada:
 📥 Importar curso
 ```
 
-Aceita:
-
-- `.txt`;
-- PDF textual pesquisável;
-- texto colado no formato explícito.
+Aceita `.txt`, PDF textual pesquisável e texto colado em formato explícito.
 
 Estrutura suportada:
 
@@ -335,7 +331,9 @@ Gate integrado valida:
 - importação com prévia;
 - isolamento multiusuário.
 
-Evidência: no commit `7b41c42d4f151b126f405c7be9bceffcd452b9f9`, o GitHub Actions `Butler regression` run #286 terminou com `success`; compilação do Worker e suíte determinística ficaram verdes.
+Evidência de código: no commit `7b41c42d4f151b126f405c7be9bceffcd452b9f9`, o GitHub Actions `Butler regression` run #286 terminou com `success`; compilação do Worker e suíte determinística ficaram verdes.
+
+PR final de merge: **#46**. O draft #45 foi fechado sem merge por limitação do conector ao convertê-lo para Ready e foi substituído pelo #46 com a mesma branch funcional.
 
 Documento: `docs/ETAPA_4_6_GATE_FINAL_CURSOS.md`.
 
@@ -372,7 +370,7 @@ Não reabrir 4.3–4.6 sem regressão concreta. Não iniciar Etapa 5 ainda.
 
 Ao assumir:
 
-1. confirmar `main` e o resultado do merge da PR #45;
+1. confirmar merge/CI do PR #46 em `main`;
 2. verificar separadamente o deploy Cloudflare; CI verde não basta;
 3. ler `docs/ETAPA_4_6_GATE_FINAL_CURSOS.md`;
 4. ler `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` para a definição do fechamento;
