@@ -65,12 +65,21 @@ def _norm(text):
 
 
 def _section_from_text(text):
+    """Resolve seção apenas quando o usuário pediu ajuda explicitamente.
+
+    Não aceitar aliases crus aqui é essencial porque este handler roda antes dos
+    menus operacionais. Sem esse gate, botões como ``🏠 Cotidiano``, ``📚 Matérias``
+    e ``🏋️ Musculação`` eram confundidos com categorias do manual.
+    """
     n = _norm(text)
-    if n.startswith("ajuda "):
-        n = n[6:].strip()
+    requested = False
     for prefix in ("ajuda: ", "ajuda "):
         if n.startswith(prefix):
             n = n[len(prefix):].strip()
+            requested = True
+            break
+    if not requested:
+        return None
     return SECTION_ALIASES.get(n)
 
 
