@@ -77,6 +77,7 @@ CONTENT_STATUS_LABELS = {
     "completed": "✅ Concluído",
     "skipped": "⏭️ Pulado",
 }
+_STATE_UNSET = object()
 
 COURSE_BUTTON_RE = re.compile(r"^[📘🗄️]\s+#(\d+)\b")
 MODULE_BUTTON_RE = re.compile(r"^🧩\s+#(\d+)\b")
@@ -738,29 +739,40 @@ async def _handle_state(db, token, chat_id, uid, text, state, payload):
     return True
 
 
-async def handle_message(db, token, message, *, uid=None, state=None, payload=None):
+async def handle_message(db, token, message, *, uid=None, state=_STATE_UNSET, payload=None):
     text = (message.get("text") or "").strip()
     chat_id = (message.get("chat") or {}).get("id")
     if not text or chat_id is None:
         return False
     chat_id = int(chat_id)
 
-    course_state = bool(state and str(state).startswith("course_"))
     direct = (
         text in COURSE_DIRECT_TEXTS
         or _course_id_from_text(text) is not None
         or _module_id_from_text(text) is not None
         or _content_id_from_text(text) is not None
     )
-    if not course_state and not direct:
-        return False
+
+    # Quando o chamador (operational_menu) já fornece estado, fazemos o gate antes
+    # de qualquer nova consulta. Chamadas isoladas deixam o sentinel e recuperam o
+    # wizard antes de classificar texto livre como nome/descrição/resposta.
+    if state is not _STATE_UNSET:
+        course_state = bool(state and str(state).startswith("course_"))
+        if not course_state and not direct:
+            return False
+
     if uid is None:
         row = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(chat_id).first()
         uid = int(_row(row, "id")) if row else None
     if uid is None:
         return False
-    if state is None:
+
+    if state is _STATE_UNSET:
         state, payload = await app.get_state(db, uid)
+
+    course_state = bool(state and str(state).startswith("course_"))
+    if not course_state and not direct:
+        return False
     payload = payload or {}
 
     if await _handle_state(db, token, chat_id, uid, text, state, payload):
