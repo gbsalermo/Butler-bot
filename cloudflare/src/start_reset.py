@@ -1,11 +1,16 @@
-"""Escape operacional absoluto para /start.
+"""Escape operacional absoluto para /start e comandos de suporte prioritários.
 
 Para usuários já cadastrados, /start limpa apenas estado temporário do chat e
 volta ao menu principal. Dados permanentes nunca são tocados.
+
+``/manual`` e ``/status runtime`` passam por este primeiro handler para continuar
+acessíveis mesmo se um módulo operacional posterior estiver com problema.
 """
 import app
 import runtime_guard
+from runtime_diagnostics import handle_message as handle_runtime_diagnostics
 from telegram_api import send_message
+from user_manual import handle_message as handle_user_manual
 
 
 def _kb(rows):
@@ -13,6 +18,11 @@ def _kb(rows):
 
 
 async def handle_start_reset(db, token, message):
+    if await handle_runtime_diagnostics(db, token, message):
+        return True
+    if await handle_user_manual(db, token, message):
+        return True
+
     text=(message.get("text") or "").strip().lower()
     if text not in ("/start", "/start@butlersal_bot"):
         return False
@@ -43,7 +53,8 @@ async def handle_start_reset(db, token, message):
     await send_message(
         token,
         int(chat_id),
-        "🧹 Pronto. Zerei o estado temporário deste chat e voltei ao início. Seus dados continuam onde estavam.",
+        "🧹 Pronto. Zerei o estado temporário deste chat e voltei ao início. Seus dados continuam onde estavam.\n\n"
+        "Se esquecer como alguma função funciona, use /manual.",
         reply_markup=_kb(app.MAIN_KB),
     )
     return True
