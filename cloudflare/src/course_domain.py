@@ -1,4 +1,4 @@
-"""Domínio autoritativo de Cursos e Trilhas — Etapa 4.1.
+"""Domínio autoritativo de Cursos e Trilhas — Etapa 4.
 
 Este módulo não conversa com Telegram e não decide linguagem natural. Ele expõe
 operações determinísticas sobre o modelo de cursos. Progresso só muda por chamada
@@ -17,6 +17,7 @@ CONTENT_KINDS = {"lesson", "reading", "exercise", "project", "review", "other"}
 CONTENT_STATUSES = {"pending", "completed", "skipped"}
 MATERIAL_KINDS = {"link", "file", "video", "text", "other"}
 ACTIVITY_STATUSES = {"pending", "completed", "skipped"}
+_UNSET = object()
 
 
 def _row(row, key, default=None):
@@ -118,7 +119,11 @@ async def _next_position(db, table, parent_column, parent_id):
 async def _event(db, course_id, event_type, *, module_id=None, content_id=None, activity_id=None, detail=None):
     payload = None
     if detail is not None:
-        payload = json.dumps(detail, ensure_ascii=False, separators=(",", ":")) if not isinstance(detail, str) else detail
+        payload = (
+            json.dumps(detail, ensure_ascii=False, separators=(",", ":"))
+            if not isinstance(detail, str)
+            else detail
+        )
     await db.prepare(
         "INSERT INTO course_events(course_id,module_id,content_id,activity_id,event_type,detail) "
         "VALUES(?,?,?,?,?,?)"
@@ -130,6 +135,31 @@ async def _event(db, course_id, event_type, *, module_id=None, content_id=None, 
         str(event_type),
         payload,
     ).run()
+
+
+async def list_courses(db, user_id, *, statuses=None):
+    """Lista somente cursos do usuário, com filtro opcional de estados."""
+    if statuses is None:
+        statuses = ("active", "paused", "completed")
+    statuses = tuple(str(item).strip() for item in statuses)
+    if not statuses:
+        return []
+    if any(item not in COURSE_STATUSES for item in statuses):
+        raise ValueError("invalid course status")
+    placeholders = ",".join("?" for _ in statuses)
+    return await _rows(
+        db.prepare(
+            "SELECT id,title,mode,status,description,created_at,updated_at,completed_at "
+            f"FROM courses WHERE user_id=? AND status IN ({placeholders}) "
+            "ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 "
+            "WHEN 'completed' THEN 2 ELSE 3 END, title COLLATE NOCASE, id"
+        ).bind(int(user_id), *statuses)
+    )
+
+
+async def get_course(db, user_id, course_id):
+    """Retorna metadados do curso quando ele pertence ao usuário."""
+    return await _owned_course(db, user_id, course_id)
 
 
 async def create_course(db, user_id, title, *, mode="self_paced", description=None):
@@ -152,6 +182,56 @@ async def create_course(db, user_id, title, *, mode="self_paced", description=No
     return course_id
 
 
+async def update_course(
+    db,
+    user_id,
+    course_id,
+    *,
+    title=None,
+    mode=None,
+    description=_UNSET,
+):
+    """Edita metadados básicos sem alterar progresso ou estrutura."""
+    current = await _owned_course(db, user_id, course_id)
+    if not current:
+        raise LookupError("course not found")
+
+    assignments = []
+    values = []
+    changed = {}
+
+    if title is not None:
+        cleaned = _clean_title(title)
+        assignments.append("title=?")
+        values.append(cleaned)
+        changed["title"] = cleaned
+
+    if mode is not None:
+        mode = str(mode or "").strip()
+        if mode not in COURSE_MODES:
+            raise ValueError("invalid course mode")
+        assignments.append("mode=?")
+        values.append(mode)
+        changed["mode"] = mode
+
+    if description is not _UNSET:
+        cleaned_description = _clean_optional(description)
+        assignments.append("description=?")
+        values.append(cleaned_description)
+        changed["description"] = cleaned_description
+
+    if not assignments:
+        return False
+
+    assignments.append("updated_at=CURRENT_TIMESTAMP")
+    values.extend((int(course_id), int(user_id)))
+    await db.prepare(
+        "UPDATE courses SET " + ",".join(assignments) + " WHERE id=? AND user_id=?"
+    ).bind(*values).run()
+    await _event(db, course_id, "course_updated", detail=changed)
+    return True
+
+
 async def add_module(db, user_id, course_id, title, *, description=None, position=None):
     if not await _owned_course(db, user_id, course_id):
         raise LookupError("course not found")
@@ -171,6 +251,18 @@ async def add_module(db, user_id, course_id, title, *, description=None, positio
         module_id = int(_row(row, "id")) if row else None
     await _event(db, course_id, "module_added", module_id=module_id, detail={"position": int(position)})
     return module_id
+
+
+async def rename_module(db, user_id, course_id, module_id, title):
+    module = await _owned_module(db, user_id, course_id, module_id)
+    if not module:
+        raise LookupError("module not found")
+    title = _clean_title(title)
+    await db.prepare(
+        "UPDATE course_modules SET title=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND course_id=?"
+    ).bind(title, int(module_id), int(course_id)).run()
+    await _event(db, course_id, "module_renamed", module_id=module_id, detail={"title": title})
+    return True
 
 
 async def add_content(
@@ -199,8 +291,12 @@ async def add_content(
         "INSERT INTO course_contents(module_id,position,title,kind,scheduled_at,notes) "
         "VALUES(?,?,?,?,?,?)"
     ).bind(
-        int(module_id), int(position), title, kind,
-        _clean_optional(scheduled_at, max_len=80), _clean_optional(notes),
+        int(module_id),
+        int(position),
+        title,
+        kind,
+        _clean_optional(scheduled_at, max_len=80),
+        _clean_optional(notes),
     ).run()
     content_id = _last_row_id(result)
     if content_id is None:
@@ -209,10 +305,79 @@ async def add_content(
         ).bind(int(module_id), int(position)).first()
         content_id = int(_row(row, "id")) if row else None
     await _event(
-        db, course_id, "content_added", module_id=module_id, content_id=content_id,
+        db,
+        course_id,
+        "content_added",
+        module_id=module_id,
+        content_id=content_id,
         detail={"position": int(position), "kind": kind},
     )
     return content_id
+
+
+async def update_content(
+    db,
+    user_id,
+    course_id,
+    content_id,
+    *,
+    title=None,
+    kind=None,
+    scheduled_at=_UNSET,
+    notes=_UNSET,
+):
+    """Edita metadados do conteúdo; nunca altera o status de progresso."""
+    content = await _owned_content(db, user_id, course_id, content_id)
+    if not content:
+        raise LookupError("content not found")
+
+    assignments = []
+    values = []
+    changed = {}
+
+    if title is not None:
+        cleaned = _clean_title(title)
+        assignments.append("title=?")
+        values.append(cleaned)
+        changed["title"] = cleaned
+
+    if kind is not None:
+        kind = str(kind or "").strip()
+        if kind not in CONTENT_KINDS:
+            raise ValueError("invalid content kind")
+        assignments.append("kind=?")
+        values.append(kind)
+        changed["kind"] = kind
+
+    if scheduled_at is not _UNSET:
+        cleaned_schedule = _clean_optional(scheduled_at, max_len=80)
+        assignments.append("scheduled_at=?")
+        values.append(cleaned_schedule)
+        changed["scheduled_at"] = cleaned_schedule
+
+    if notes is not _UNSET:
+        cleaned_notes = _clean_optional(notes)
+        assignments.append("notes=?")
+        values.append(cleaned_notes)
+        changed["notes"] = cleaned_notes
+
+    if not assignments:
+        return False
+
+    assignments.append("updated_at=CURRENT_TIMESTAMP")
+    values.append(int(content_id))
+    await db.prepare(
+        "UPDATE course_contents SET " + ",".join(assignments) + " WHERE id=?"
+    ).bind(*values).run()
+    await _event(
+        db,
+        course_id,
+        "content_updated",
+        module_id=_row(content, "module_id"),
+        content_id=content_id,
+        detail=changed,
+    )
+    return True
 
 
 async def add_material(db, user_id, course_id, content_id, title, *, kind="other", reference=None, position=None):
@@ -234,7 +399,14 @@ async def add_material(db, user_id, course_id, content_id, title, *, kind="other
             "SELECT id FROM course_materials WHERE content_id=? AND position=?"
         ).bind(int(content_id), int(position)).first()
         material_id = int(_row(row, "id")) if row else None
-    await _event(db, course_id, "material_added", module_id=_row(content, "module_id"), content_id=content_id, detail={"kind": kind})
+    await _event(
+        db,
+        course_id,
+        "material_added",
+        module_id=_row(content, "module_id"),
+        content_id=content_id,
+        detail={"kind": kind},
+    )
     return material_id
 
 
@@ -254,7 +426,14 @@ async def add_activity(db, user_id, course_id, content_id, title, *, notes=None,
             "SELECT id FROM course_activities WHERE content_id=? AND position=?"
         ).bind(int(content_id), int(position)).first()
         activity_id = int(_row(row, "id")) if row else None
-    await _event(db, course_id, "activity_added", module_id=_row(content, "module_id"), content_id=content_id, activity_id=activity_id)
+    await _event(
+        db,
+        course_id,
+        "activity_added",
+        module_id=_row(content, "module_id"),
+        content_id=content_id,
+        activity_id=activity_id,
+    )
     return activity_id
 
 
@@ -273,7 +452,10 @@ async def set_content_status(db, user_id, course_id, content_id, status):
         "updated_at=CURRENT_TIMESTAMP WHERE id=?"
     ).bind(status, status, status, int(content_id)).run()
     await _event(
-        db, course_id, f"content_{status}", module_id=_row(content, "module_id"),
+        db,
+        course_id,
+        f"content_{status}",
+        module_id=_row(content, "module_id"),
         content_id=content_id,
     )
     return True
@@ -299,8 +481,12 @@ async def set_activity_status(db, user_id, course_id, activity_id, status):
         "updated_at=CURRENT_TIMESTAMP WHERE id=?"
     ).bind(status, status, status, int(activity_id)).run()
     await _event(
-        db, course_id, f"activity_{status}", module_id=_row(row, "module_id"),
-        content_id=_row(row, "content_id"), activity_id=activity_id,
+        db,
+        course_id,
+        f"activity_{status}",
+        module_id=_row(row, "module_id"),
+        content_id=_row(row, "content_id"),
+        activity_id=activity_id,
     )
     return True
 
@@ -392,22 +578,77 @@ async def course_structure(db, user_id, course_id):
                 "WHERE module_id=? ORDER BY position,id"
             ).bind(module_id)
         )
-        result["modules"].append({
-            "id": module_id,
-            "position": int(_row(module, "position")),
-            "title": _row(module, "title"),
-            "description": _row(module, "description"),
-            "contents": [
-                {
-                    "id": int(_row(item, "id")),
-                    "position": int(_row(item, "position")),
-                    "title": _row(item, "title"),
-                    "kind": _row(item, "kind"),
-                    "status": _row(item, "status"),
-                    "scheduled_at": _row(item, "scheduled_at"),
-                    "notes": _row(item, "notes"),
-                }
-                for item in contents
-            ],
-        })
+        result["modules"].append(
+            {
+                "id": module_id,
+                "position": int(_row(module, "position")),
+                "title": _row(module, "title"),
+                "description": _row(module, "description"),
+                "contents": [
+                    {
+                        "id": int(_row(item, "id")),
+                        "position": int(_row(item, "position")),
+                        "title": _row(item, "title"),
+                        "kind": _row(item, "kind"),
+                        "status": _row(item, "status"),
+                        "scheduled_at": _row(item, "scheduled_at"),
+                        "notes": _row(item, "notes"),
+                    }
+                    for item in contents
+                ],
+            }
+        )
     return result
+
+
+async def content_details(db, user_id, course_id, content_id):
+    content = await _owned_content(db, user_id, course_id, content_id)
+    if not content:
+        raise LookupError("content not found")
+    module = await db.prepare(
+        "SELECT id,position,title FROM course_modules WHERE id=?"
+    ).bind(int(_row(content, "module_id"))).first()
+    materials = await _rows(
+        db.prepare(
+            "SELECT id,position,title,kind,reference FROM course_materials "
+            "WHERE content_id=? ORDER BY position,id"
+        ).bind(int(content_id))
+    )
+    activities = await _rows(
+        db.prepare(
+            "SELECT id,position,title,status,notes FROM course_activities "
+            "WHERE content_id=? ORDER BY position,id"
+        ).bind(int(content_id))
+    )
+    return {
+        "id": int(_row(content, "id")),
+        "module_id": int(_row(content, "module_id")),
+        "module_title": _row(module, "title"),
+        "module_position": int(_row(module, "position", 0) or 0),
+        "position": int(_row(content, "position")),
+        "title": _row(content, "title"),
+        "kind": _row(content, "kind"),
+        "status": _row(content, "status"),
+        "scheduled_at": _row(content, "scheduled_at"),
+        "notes": _row(content, "notes"),
+        "materials": [
+            {
+                "id": int(_row(item, "id")),
+                "position": int(_row(item, "position")),
+                "title": _row(item, "title"),
+                "kind": _row(item, "kind"),
+                "reference": _row(item, "reference"),
+            }
+            for item in materials
+        ],
+        "activities": [
+            {
+                "id": int(_row(item, "id")),
+                "position": int(_row(item, "position")),
+                "title": _row(item, "title"),
+                "status": _row(item, "status"),
+                "notes": _row(item, "notes"),
+            }
+            for item in activities
+        ],
+    }
