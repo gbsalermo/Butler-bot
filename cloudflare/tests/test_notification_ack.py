@@ -4,6 +4,8 @@ import sqlite3
 
 import core_fast_path
 import notification_ack
+import quick_time
+import reliable_reminders
 
 
 class Result:
@@ -105,7 +107,6 @@ def test_recent_alert_can_receive_one_optional_ack(monkeypatch):
         ).fetchone()
         assert ack is not None
 
-        # O mesmo aviso já foi reconhecido; responder de novo não reabre contexto.
         handled_again = await notification_ack.handle_message(
             db, "token", {"chat": {"id": 123}, "text": "valeu"}
         )
@@ -118,10 +119,13 @@ def test_recent_alert_can_receive_one_optional_ack(monkeypatch):
 def test_old_alert_is_not_used_as_conversation_context(monkeypatch):
     async def scenario():
         db = FakeD1()
+
         async def fake_uid(db_arg, chat_id):
             return 1
+
         async def fake_send(*args, **kwargs):
             raise AssertionError("old alert must not answer")
+
         monkeypatch.setattr(notification_ack.runtime_guard, "_uid", fake_uid)
         monkeypatch.setattr(notification_ack, "send_message", fake_send)
 
@@ -140,3 +144,16 @@ def test_old_alert_is_not_used_as_conversation_context(monkeypatch):
 def test_study_mode_keeps_precedence_over_social_ack():
     source = inspect.getsource(core_fast_path.handle_message)
     assert source.index("handle_study_mode") < source.index("handle_notification_ack")
+
+
+def test_quick_time_records_context_only_after_delivery_path():
+    source = inspect.getsource(quick_time.dispatch_due_quick_timers)
+    assert source.index("quality_patch.send_message") < source.index("remember_notification")
+    assert '"quick_alert"' in inspect.getsource(notification_ack)
+
+
+def test_simple_reminder_records_social_context_but_tasks_do_not_use_it():
+    source = inspect.getsource(reliable_reminders.dispatch_due_reminders)
+    assert "simple_reminder" in source
+    assert "remember_notification" in source
+    assert 'if simple:' in source
