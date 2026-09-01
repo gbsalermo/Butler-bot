@@ -1,6 +1,7 @@
 """Menus enxutos e autoritativos do Butler operacional."""
 
 import app
+import course_operational
 import runtime_guard
 import ru_menu
 import goal_operational
@@ -17,7 +18,7 @@ MAIN_KB = [
     ["➕ Adicionar", "🗓️ Hoje"],
     ["🛒 Item faltando", "📚 Matérias"],
     ["🏠 Cotidiano", "🏋️ Musculação"],
-    ["📖 Manual"],
+    ["📘 Cursos", "📖 Manual"],
     ["🌙 Day-off"],
 ]
 
@@ -201,6 +202,18 @@ async def handle_message(db, token, message):
     uid = await _uid(db, chat_id)
     state, state_payload = await runtime_guard._state(db, uid) if uid else (None, {})
     owner = is_owner(chat_id)
+
+    # Cursos estruturados usam o mesmo usuário/estado já resolvidos por este menu,
+    # evitando uma segunda consulta de estado no caminho interativo.
+    if await course_operational.handle_message(
+        db,
+        token,
+        message,
+        uid=uid,
+        state=state,
+        payload=state_payload,
+    ):
+        return True
 
     # O cardápio é público para todos os usuários, mas a manutenção do TXT fica
     # restrita ao proprietário. Abrir o menu explicitamente usa teclado dinâmico.
