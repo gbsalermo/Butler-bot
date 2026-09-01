@@ -2,22 +2,15 @@
 
 **Data-base:** 01/09/2026
 
-> Este documento é o handoff duradouro do projeto. Para detalhes complementares:
->
-> - andamento exato: `docs/STATUS_ATUAL.md`;
-> - runtime: `docs/ARCHITECTURE.md`;
-> - visão completa: `docs/BUTLER_DOSSIE_MESTRE.md`;
-> - roadmap oficial: `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`;
-> - decisões pós-roadmap de IA: `docs/POS_ROADMAP_IA.md`;
-> - manual de uso: `docs/MANUAL_USUARIO.md`.
+> Este é o handoff duradouro do projeto. Para andamento exato use `docs/STATUS_ATUAL.md`; para runtime use `docs/ARCHITECTURE.md`; para visão geral use `docs/BUTLER_DOSSIE_MESTRE.md`; para a ordem oficial use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
 
 ---
 
 ## 1. Objetivo permanente
 
-Butler é um assistente pessoal multiusuário via Telegram para organização cotidiana, universidade, estudo, cursos, projetos, trabalho, hábitos, treino e interesses.
+Butler é um assistente pessoal multiusuário via Telegram para cotidiano, universidade, estudo, cursos, projetos, trabalho, hábitos, treino e interesses.
 
-O produto deve parecer um assistente que acompanha o usuário sem virar apenas CRUD/menu e, principalmente, sem executar ações silenciosas quando existe ambiguidade.
+O produto deve acompanhar o usuário sem virar apenas CRUD/menu e sem executar mudanças silenciosas quando há ambiguidade.
 
 Princípios permanentes:
 
@@ -39,8 +32,6 @@ Princípios permanentes:
 
 ## 2. Runtime oficial
 
-Produção:
-
 ```text
 Telegram Webhook
 → cloudflare/src/worker.py
@@ -51,17 +42,15 @@ Telegram Webhook
 
 A raiz `src/` permanece como runtime histórico polling/SQLite e não governa produção.
 
-### Scheduler
-
-O Butler combina:
+Scheduler:
 
 ```text
 Cloudflare Cron
-+ PersonalAlarm (Durable Object)
-+ AttendanceAlarm (Durable Object)
++ PersonalAlarm
++ AttendanceAlarm
 ```
 
-`notification_log` é a barreira central de idempotência para entregas agendadas. Falha de um subsistema temporal não deve derrubar os demais.
+`notification_log` é a barreira central de idempotência para entregas agendadas.
 
 ---
 
@@ -75,17 +64,18 @@ Ativos principais:
 language_primitives.py
 short_context.py
 correction_patch.py
+reference_patch.py
 compound_router.py
 temporal_language.py
 ```
 
-Regra permanente:
+Regra:
 
 ```text
 reconhecer linguagem ≠ autorizar escrita
 ```
 
-Referências recentes/posicionais só devem resolver quando existe contexto curto seguro e pertencente ao mesmo usuário. Quando uma lista numérica foi exibida, posições temporárias devem continuar vinculadas à lista que o usuário realmente viu, não a uma nova consulta que possa ter mudado de ordem.
+Quando uma lista numerada foi exibida, posições temporárias devem continuar vinculadas à lista que o usuário realmente viu, não a uma nova consulta que possa ter mudado de ordem.
 
 ---
 
@@ -122,28 +112,26 @@ A trilha IA/Groq permanece pós-roadmap, somente após Etapa 10 + gate de estabi
 
 ### Etapa 0 — Arrumar a casa ✅
 
-Decisões duradouras:
-
 - `entry.py` governa precedência do dispatcher;
 - `operational_menu.py` governa o menu principal;
-- `reliable_reminders.py` governa lembretes baseados em `daily_items`;
+- `reliable_reminders.py` governa lembretes de `daily_items`;
 - schema formal vem de migrations;
-- não excluir código apenas por idade/nome sem demonstrar que runtime não depende dele.
+- runtime Cloudflare ativo é separado da raiz histórica.
 
 ### Etapa 1 — Linguagem natural + conversa real ✅
 
-Negação, contexto curto, correções e mensagens compostas devem permanecer conservadores. Uma intenção reconhecida não autoriza escrita silenciosa.
+Negação, contexto curto, correções e mensagens compostas continuam conservadores. Reconhecer uma intenção não autoriza escrita silenciosa.
 
 ### Etapa 2 — Importação acadêmica confiável ✅
 
-Modelo acadêmico preservado:
+Modelo:
 
 ```text
 subjects
 subject_sessions
 ```
 
-Entrada oficial de grade: TXT ou PDF textual pesquisável/selecionável com prévia e confirmação. Presença nunca é presumida; “vou” não registra presença.
+Entrada oficial de grade: TXT ou PDF textual pesquisável/selecionável com prévia e confirmação. Presença nunca é presumida.
 
 ### Etapa 3 — Tempo / Modo Estudo ✅
 
@@ -156,30 +144,30 @@ Migrations:
 
 Quick timer/alerta rápido não vira `daily_items`.
 
-Invariante permanente do Modo Estudo:
+Invariante:
 
-> tópico só avança quando o usuário explicitamente conclui ou pula.
-
-Fim de foco, pausa, restart, Day-off ou passagem de tempo nunca concluem tópico.
+```text
+fim de foco/timer ≠ conclusão de tópico
+```
 
 ---
 
-## 6. Cotidiano e domínios existentes
+## 6. Domínios existentes
 
 Tarefas, compromissos, rotinas e metas continuam multiusuário e determinísticos. Seleção numérica deve manter o objeto exibido entre turnos.
 
-O cardápio do RU é compartilhado para leitura, mas a importação/manutenção continua restrita ao proprietário enquanto essa política permanecer documentada.
+O cardápio do RU é compartilhado para leitura, mas manutenção/importação continua restrita ao proprietário enquanto essa política permanecer documentada.
 
-`Ler/Ver Depois` mantém as categorias simples:
+Ler/Ver Depois possui:
 
 ```text
-Livros
-Filmes
-Cursos
-Outras
+📚 Livros
+🎬 Filmes
+🎓 Cursos
+🗂️ Outras
 ```
 
-**`🎓 Cursos` de Ler/Ver Depois é backlog simples. Nunca reinterpretar silenciosamente como o domínio estruturado `📘 Cursos`.**
+**`🎓 Cursos` é backlog simples. Nunca reinterpretar silenciosamente como o domínio estruturado `📘 Cursos`.**
 
 Musculação mantém ficha/progresso por usuário. Carga e repetição só existem quando informadas.
 
@@ -206,18 +194,7 @@ Curso
 └── Eventos / histórico
 ```
 
-Tabelas:
-
-```text
-courses
-course_modules
-course_contents
-course_materials
-course_activities
-course_events
-```
-
-Autoridade única de negócio/persistência:
+Autoridade única:
 
 ```text
 cloudflare/src/course_domain.py
@@ -240,17 +217,6 @@ skipped
 
 `skipped` é resolvido, não concluído/aprendido.
 
-Regras duradouras:
-
-- `next_content()` não possui efeito colateral;
-- autogerido segue posição de módulo/conteúdo;
-- ao vivo respeita `scheduled_at` persistido;
-- material/atividade não concluem conteúdo;
-- curso só termina por ação explícita;
-- isolamento por usuário é obrigatório.
-
-Documento: `docs/ETAPA_4_1_MODELO_CURSOS.md`.
-
 ### 4.2 — CRUD + navegação ✅
 
 Camada:
@@ -259,17 +225,9 @@ Camada:
 cloudflare/src/course_operational.py
 ```
 
-Entregue:
-
-- criar/editar/arquivar/reativar curso;
-- criar/renomear/abrir módulo;
-- criar/editar/abrir conteúdo;
-- curso ao vivo com `scheduled_at`;
-- navegação sem progresso implícito.
+Entregue: criar/editar/arquivar/reativar curso; módulos; conteúdos; calendário `scheduled_at`; navegação sem progresso implícito.
 
 Snapshot funcional histórico: `4987327cae69e16d9973bee4a97aa3229c36f5d2`.
-
-Documento: `docs/ETAPA_4_2_CRUD_NAVEGACAO_CURSOS.md`.
 
 ### 4.3 — Progresso + Continuar curso ✅
 
@@ -294,14 +252,12 @@ Operações:
 Invariantes:
 
 ```text
-abrir/navegar          ≠ concluir
-Continuar curso        ≠ concluir
-último item resolvido  ≠ concluir curso
+abrir/navegar         ≠ concluir
+Continuar curso       ≠ concluir
+último item resolvido ≠ concluir curso
 ```
 
 Conclusão do curso exige confirmação explícita.
-
-Documento: `docs/ETAPA_4_3_PROGRESSO_CURSOS.md`.
 
 ### 4.4 — Integração com Modo Estudo ✅
 
@@ -317,25 +273,15 @@ Ponte:
 cloudflare/src/course_study_bridge.py
 ```
 
-Conteúdo pendente de curso ativo pode iniciar:
+Conteúdo pendente de curso ativo pode iniciar Modo Estudo, mas:
 
 ```text
-🧠 Estudar no Modo Estudo
+tempo de foco ≠ concluir conteúdo
+fim do tópico ≠ concluir conteúdo
+fim da sessão ≠ concluir conteúdo
 ```
 
-Isso cria `study_session` + `course_study_link`, mas mantém o conteúdo `pending`.
-
-Invariantes permanentes:
-
-```text
-tempo de foco              ≠ concluir conteúdo
-fim do tópico              ≠ concluir conteúdo
-fim da sessão              ≠ concluir conteúdo
-```
-
-Sessão ativa/pausada não pode ser substituída silenciosamente.
-
-Documento: `docs/ETAPA_4_4_MODO_ESTUDO_CURSOS.md`.
+Sessão ativa/pausada não é substituída silenciosamente.
 
 ### 4.5 — Importação ✅
 
@@ -351,7 +297,7 @@ Entrada Telegram:
 📥 Importar curso
 ```
 
-Aceita `.txt`, PDF textual pesquisável ou texto colado no formato explícito:
+Aceita TXT, PDF textual pesquisável ou texto colado no formato explícito:
 
 ```text
 CURSO:
@@ -367,7 +313,6 @@ Princípios:
 
 - parser determinístico;
 - linha desconhecida/ambígua bloqueia importação;
-- material/atividade exige conteúdo-pai explícito;
 - PDF sem texto pesquisável é recusado; sem OCR;
 - plano inteiro é validado antes da escrita;
 - sempre mostrar prévia;
@@ -375,8 +320,6 @@ Princípios:
 - somente confirmação explícita persiste;
 - persistência usa funções de `course_domain.py`;
 - conteúdos/atividades importados começam pendentes.
-
-Documento: `docs/ETAPA_4_5_IMPORTACAO_CURSOS.md`.
 
 ### 4.6 — Gate final ✅
 
@@ -389,19 +332,11 @@ cloudflare/tests/test_stage4_5_course_import.py
 cloudflare/tests/test_stage4_6_course_gate.py
 ```
 
-Gate cobre:
+Gate cobre ordem self-paced, calendário live, progresso explícito, histórico, integração com Modo Estudo sem progresso automático, importação com prévia e isolamento multiusuário.
 
-- ordem self-paced;
-- calendário live;
-- progresso explícito;
-- histórico de eventos;
-- integração com Modo Estudo sem progresso automático;
-- importação com prévia obrigatória;
-- isolamento multiusuário.
+Evidência de código: commit `7b41c42d4f151b126f405c7be9bceffcd452b9f9`, GitHub Actions `Butler regression` run #286, job `deterministic-regression` verde.
 
-Evidência de gate de código: commit `7b41c42d4f151b126f405c7be9bceffcd452b9f9`, GitHub Actions `Butler regression` run #286, job `deterministic-regression` concluído com sucesso, incluindo compilação do Worker e suíte determinística.
-
-Documento: `docs/ETAPA_4_6_GATE_FINAL_CURSOS.md`.
+**PR final de merge: #46.** O PR draft #45 foi fechado sem merge por limitação do conector ao convertê-lo para Ready e substituído pelo #46 usando a mesma branch funcional.
 
 ---
 
@@ -428,25 +363,7 @@ Migration destrutiva exige backup/export D1 e plano de rollback. Não usar `ensu
 
 ---
 
-## 9. Diagnóstico e segurança operacional
-
-Ativos:
-
-```text
-/status runtime
-/status_runtime
-/manual
-/ajuda
-📖 Manual
-```
-
-`runtime_errors` guarda apenas metadados técnicos, nunca o texto da conversa.
-
-Administração e ações com efeito devem continuar com checagem de proprietário/usuário e confirmação quando aplicável.
-
----
-
-## 10. Testes e merge
+## 9. Testes, merge e deploy
 
 Workflow oficial:
 
@@ -454,42 +371,39 @@ Workflow oficial:
 .github/workflows/butler-regression.yml
 ```
 
-Ele compila `cloudflare/src` e roda `pytest -q` na suíte determinística.
+Ele compila `cloudflare/src` e roda `pytest -q`.
 
 Regras:
 
 - código novo precisa de regressão;
-- PR só deve ser mesclada com CI verde;
-- após commits documentais finais, conferir novamente o head da PR;
-- depois do merge, conferir o workflow de `main`;
+- PR só deve ser mesclada com CI verde no head final;
+- depois do merge, conferir workflow de `main`;
 - **CI verde não prova deploy Cloudflare**; `Workers Builds: salbutler-bot` deve ser verificado separadamente.
 
 ---
 
-## 11. Próximo trabalho oficial
+## 10. Próximo trabalho oficial
 
 A Etapa 4.1–4.6 está concluída. Falta o fechamento obrigatório já previsto no roadmap:
 
 **reorganizar o menu por áreas da vida.**
 
-Essa reorganização deve usar o domínio atual como fonte de verdade, não recriar handlers concorrentes e não reinterpretar `🎓 Cursos` como `📘 Cursos`.
+Essa reorganização deve usar os domínios atuais como fonte de verdade, não recriar handlers concorrentes e não reinterpretar `🎓 Cursos` como `📘 Cursos`.
 
-Sequência obrigatória:
+Sequência:
 
-1. confirmar merge/CI da PR #45;
+1. confirmar merge/CI do PR #46;
 2. verificar deploy Cloudflare separadamente;
-3. ler `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` para o formato planejado do fechamento;
+3. ler `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` e o documento do fechamento;
 4. implementar o menu por áreas da vida;
 5. atualizar testes de contrato do menu;
 6. rodar regressão completa;
-7. atualizar `docs/STATUS_ATUAL.md`, este arquivo, README e arquitetura;
+7. atualizar documentação;
 8. somente então liberar a **Etapa 5 — Caixa de entrada**.
-
-Não antecipar Inbox, Projetos, memória seletiva nem IA/Groq antes do ponto correspondente no roadmap.
 
 ---
 
-## 12. Regra prática para a próxima IA/agente
+## 11. Regra para a próxima IA/agente
 
 Antes de alterar qualquer coisa:
 
