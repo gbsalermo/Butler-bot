@@ -2,6 +2,7 @@
 
 import app
 import course_operational
+import course_stage4
 import runtime_guard
 import ru_menu
 import goal_operational
@@ -176,6 +177,7 @@ def install():
     # Respostas internas do domínio nunca exibem a ação administrativa para usuários comuns.
     # O proprietário recebe o botão de importação ao abrir explicitamente o menu RU.
     ru_menu.RU_KB = [list(row) for row in RU_PUBLIC_KB]
+    course_stage4.install()
     goal_operational.install()
     goal_polish.install()
     goal_deadline_patch.install()
@@ -203,6 +205,18 @@ async def handle_message(db, token, message):
     uid = await _uid(db, chat_id)
     state, state_payload = await runtime_guard._state(db, uid) if uid else (None, {})
     owner = is_owner(chat_id)
+
+    # Extensões da Etapa 4 (progresso/estudo/importação) têm precedência sobre o
+    # CRUD 4.2, mas continuam usando a mesma autoridade course_domain.
+    if await course_stage4.handle_message(
+        db,
+        token,
+        message,
+        uid=uid,
+        state=state,
+        payload=state_payload,
+    ):
+        return True
 
     # Cursos estruturados usam o mesmo usuário/estado já resolvidos por este menu,
     # evitando uma segunda consulta de estado no caminho interativo.
