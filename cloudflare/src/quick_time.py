@@ -149,15 +149,30 @@ def parse_request(text):
     }
 
 
+def _storage_kind(kind):
+    """Converte a intenção linguística para o contrato persistido no D1.
+
+    A camada de linguagem usa ``relative_alert`` porque descreve a intenção.
+    O schema histórico de ``quick_timers`` usa ``quick_alert``. Manter a
+    conversão num único ponto evita que novos callers voltem a violar o CHECK.
+    """
+    if kind == "relative_alert":
+        return "quick_alert"
+    if kind in {"timer", "quick_alert"}:
+        return kind
+    raise ValueError(f"unsupported quick timer kind: {kind}")
+
+
 async def create_timer(db, uid, kind, label, delay_seconds, *, now=None):
     await ensure_schema(db)
     now = now or _now_utc()
     fire_at = now + timedelta(seconds=int(delay_seconds))
+    stored_kind = _storage_kind(kind)
     result = await db.prepare(
         "INSERT INTO quick_timers(user_id,kind,label,delay_seconds,fire_at,status) "
         "VALUES(?,?,?,?,?,'active')"
     ).bind(
-        int(uid), kind, label, int(delay_seconds), fire_at.isoformat()
+        int(uid), stored_kind, label, int(delay_seconds), fire_at.isoformat()
     ).run()
 
     timer_id = None

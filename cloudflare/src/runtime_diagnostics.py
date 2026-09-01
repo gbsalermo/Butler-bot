@@ -100,6 +100,10 @@ async def _latest_tick(db):
     return None
 
 
+def _lazy_schema_status(exists):
+    return "✅" if exists else "ℹ️ ainda não inicializado"
+
+
 async def runtime_status_text(db):
     try:
         await db.prepare("SELECT 1").first()
@@ -116,8 +120,8 @@ async def runtime_status_text(db):
         "🩺 Status de runtime do Butler",
         "",
         f"D1: {'✅ acessível' if db_ok else '❌ indisponível'}",
-        f"quick_timers: {'✅' if quick else '⚠️ ausente'}",
-        f"study_sessions: {'✅' if study else '⚠️ ausente'}",
+        f"quick_timers: {_lazy_schema_status(quick)}",
+        f"study_sessions: {_lazy_schema_status(study)}",
         f"heartbeat presença: {tick or 'sem registro legível'}",
     ]
 
@@ -132,7 +136,7 @@ async def runtime_status_text(db):
         except Exception:
             errors = []
         if errors:
-            lines.append("\nÚltimos erros capturados:")
+            lines.append("\nÚltimos erros capturados (histórico; confira o horário):")
             for item in errors:
                 message = (_row(item, "error_message") or "")[:180]
                 lines.append(
