@@ -1,7 +1,10 @@
 """Protege alertas agendados contra falso positivo e contra avisos obsoletos."""
 import re
+
 import academic_intelligence
+import app
 import attendance_production_fix
+import exam_cancel_patch
 import quality_patch
 import reliable_exam_reminders
 import reliable_reminders
@@ -9,6 +12,7 @@ import routine_integration
 from telegram_api import delivery_error, delivery_ok, send_message as telegram_send_message
 
 MAX_ROUTINE_DELAY_MINUTES = 2
+
 
 async def _checked_send(token, chat_id, text, reply_markup=None, parse_mode=None):
     # Rotina 20:00 chegando 21:10 não é lembrete, é autópsia. Se o cron perdeu
@@ -27,13 +31,45 @@ async def _checked_send(token, chat_id, text, reply_markup=None, parse_mode=None
         raise RuntimeError(f"Telegram não confirmou entrega: {error}")
     return result
 
+
 class _QualityProxy:
     def __getattr__(self, name):
-        if name == "send_message": return _checked_send
+        if name == "send_message":
+            return _checked_send
         return getattr(quality_patch, name)
+
+
+def _sync_academic_menu():
+    """Compõe o menu acadêmico final depois dos patches de presença e provas.
+
+    ``attendance_production_fix`` é instalado depois do fluxo de cancelamento e
+    reescreve o menu acadêmico inteiro. Por isso o menu final é composto aqui,
+    numa etapa posterior do bootstrap, preservando faltas e edição de provas.
+    """
+    rows = [list(row) for row in attendance_production_fix.ACADEMIC_KB_FULL]
+    rows = [
+        row for row in rows
+        if "✏️ Editar prova" not in row and "🚫 Cancelar prova" not in row
+    ]
+    exam_actions = ["✏️ Editar prova", "🚫 Cancelar prova"]
+
+    insert_at = len(rows) - 1
+    for idx, row in enumerate(rows):
+        if "📝 Adicionar prova" in row or "📋 Provas" in row:
+            insert_at = idx + 1
+            break
+    rows.insert(insert_at, exam_actions)
+
+    attendance_production_fix.ACADEMIC_KB_FULL[:] = [list(row) for row in rows]
+    app.ACADEMIC_KB[:] = [list(row) for row in rows]
+    academic_intelligence.ACADEMIC_KB[:] = [list(row) for row in rows]
+    exam_cancel_patch.ACADEMIC_KB[:] = [list(row) for row in rows]
+    return rows
+
 
 def install():
     routine_integration.send_message = _checked_send
     attendance_production_fix.send_message = _checked_send
     reliable_reminders.quality_patch = _QualityProxy()
     academic_intelligence.exam_reminders = reliable_exam_reminders.exam_reminders
+    _sync_academic_menu()
