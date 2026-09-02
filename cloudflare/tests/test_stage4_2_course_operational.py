@@ -70,10 +70,13 @@ async def _state(db, uid=10):
     return row["state"], json.loads(row["payload"] or "{}")
 
 
-def test_main_menu_exposes_structured_courses_without_reusing_later_backlog_button():
-    flat = [button for row in operational_menu.MAIN_KB for button in row]
-    assert "📘 Cursos" in flat
-    assert "🎓 Cursos" not in flat
+def test_faculty_menu_exposes_structured_courses_without_reusing_later_backlog_button():
+    root = [button for row in operational_menu.MAIN_KB for button in row]
+    faculty = [button for row in operational_menu.FACULTY_KB for button in row]
+    assert "🎓 Faculdade" in root
+    assert "📘 Cursos" not in root
+    assert "📘 Cursos" in faculty
+    assert "🎓 Cursos" not in faculty
     assert operational_menu.MAIN_KB[-1] == ["🌙 Day-off"]
 
 

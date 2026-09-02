@@ -20,7 +20,7 @@ LATER_KB = [
     ["🎬 Filmes", "🎓 Cursos"],
     ["🗂️ Outras"],
     ["✏️ Editar item", "🗑️ Remover item"],
-    ["⬅️ Voltar ao cotidiano"],
+    ["⬅️ Minha vida"],
 ]
 CATEGORY_KB = [
     ["📚 Livro", "🎬 Filme"],
@@ -48,7 +48,9 @@ CATEGORY_TITLES = {
 CANCEL_KB = [["❌ Cancelar ação"]]
 
 LATER_ENTRY_TEXTS = {
+    "📌 Interesses",
     "📌 Ler/ver depois",
+    "⬅️ Minha vida",
     "⬅️ Voltar ao cotidiano",
     "➕ Adicionar à lista",
     "📚 Livros",
@@ -299,16 +301,17 @@ async def handle_message(db, token, message):
     if await _handle_later_state(db, token, chat_id, uid, text, state, payload):
         return True
 
-    if text == "📌 Ler/ver depois":
+    if text in {"📌 Interesses", "📌 Ler/ver depois"}:
         await _send(
             token,
             chat_id,
-            "📌 Ler/ver depois\n\nUma lista simples para guardar livros, filmes, cursos e outras coisas para depois.",
+            "📌 Interesses\n\nUma lista simples para guardar livros, filmes, cursos e outras coisas para depois.",
             LATER_KB,
         )
         return True
-    if text == "⬅️ Voltar ao cotidiano":
-        await _send(token, chat_id, "🏠 Cotidiano", app.COTIDIANO_KB)
+    if text in {"⬅️ Minha vida", "⬅️ Voltar ao cotidiano"}:
+        await app.clear_state(db, uid)
+        await _send(token, chat_id, "📋 Minha vida", app.COTIDIANO_KB)
         return True
     if text == "➕ Adicionar à lista":
         await app.set_state(db, uid, "later_add_category", {})

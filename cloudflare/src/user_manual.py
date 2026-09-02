@@ -38,6 +38,9 @@ SECTION_ALIASES = {
     "materias": "faculdade",
     "matérias": "faculdade",
     "ru": "faculdade",
+    "minha vida": "cotidiano",
+    "casa": "cotidiano",
+    "interesses": "cotidiano",
     "cotidiano": "cotidiano",
     "mercado": "cotidiano",
     "rotinas": "cotidiano",
@@ -53,8 +56,8 @@ MANUAL_KB = {
     "keyboard": [
         ["⏱️ Ajuda: Tempo", "📚 Ajuda: Estudo"],
         ["🗓️ Ajuda: Agenda", "🎓 Ajuda: Faculdade"],
-        ["🏠 Ajuda: Cotidiano", "🏋️ Ajuda: Treino"],
-        ["🌙 Ajuda: Day-off", "🏠 Menu principal"],
+        ["📋 Ajuda: Minha vida", "🏋️ Ajuda: Treino"],
+        ["🌙 Ajuda: Day-off", "⬅️ Início"],
     ],
     "resize_keyboard": True,
 }
@@ -68,8 +71,8 @@ def _section_from_text(text):
     """Resolve seção apenas quando o usuário pediu ajuda explicitamente.
 
     Não aceitar aliases crus aqui é essencial porque este handler roda antes dos
-    menus operacionais. Sem esse gate, botões como ``🏠 Cotidiano``, ``📚 Matérias``
-    e ``🏋️ Musculação`` eram confundidos com categorias do manual.
+    menus operacionais. Sem esse gate, botões de navegação poderiam ser
+    confundidos com categorias do manual.
     """
     n = _norm(text)
     requested = False
@@ -87,7 +90,9 @@ def _overview():
     return (
         "📖 Manual rápido do Butler\n\n"
         "Você pode falar naturalmente; não precisa decorar comandos. "
-        "Escolha uma categoria abaixo ou use exemplos como:\n\n"
+        "A tela inicial fica enxuta: Faculdade, Minha vida, Treino e Mais; "
+        "Adicionar e Hoje continuam como atalhos.\n\n"
+        "Exemplos:\n"
         "📝 `cria uma tarefa revisar cálculo amanhã às 20h`\n"
         "📅 `tenho dentista sexta às 14h`\n"
         "🔔 `me lembra amanhã às 9h de levar o documento`\n"
@@ -119,7 +124,7 @@ def _section_text(section):
     if section == "estudo":
         return (
             "📚 Modo Estudo\n\n"
-            "Iniciar:\n"
+            "Você pode abrir `🎓 Faculdade → 🧠 Modo Estudo` para ajuda rápida ou iniciar por frase:\n"
             "`modo estudo Cálculo I: limites, derivadas, integrais`\n\n"
             "Padrão: 25 min foco / 5 min pausa / 15 min pausa longa.\n"
             "Personalizar: `modo estudo 50/10/20 Cálculo I: limites, derivadas`\n\n"
@@ -137,6 +142,7 @@ def _section_text(section):
     if section == "agenda":
         return (
             "🗓️ Agenda, tarefas e compromissos\n\n"
+            "`🗓️ Hoje` continua na tela inicial. Tarefas e compromissos ficam em `📋 Minha vida`.\n\n"
             "Tarefa: `cria uma tarefa revisar cálculo amanhã às 20h`\n"
             "Compromisso: `tenho dentista amanhã às 15h`\n"
             "Lembrete: `me lembra amanhã às 9h de levar o documento`\n\n"
@@ -150,30 +156,33 @@ def _section_text(section):
     if section == "faculdade":
         return (
             "🎓 Faculdade\n\n"
-            "Use `📚 Matérias` para matérias, horários e presença.\n"
-            "Importação inicial aceita TXT ou PDF com texto pesquisável/selecionável.\n"
+            "Abra `🎓 Faculdade`. `📚 Matérias` reúne matérias, provas, faltas e importação da grade.\n"
+            "`🍽️ RU` consulta o cardápio e `🧠 Modo Estudo` abre a ajuda de estudo.\n"
+            "Importação acadêmica aceita TXT ou PDF com texto pesquisável/selecionável.\n"
             "Fonte recomendada no SIGAA: `Componente Curricular | Local | Horário`.\n\n"
             "Provas: `tenho prova de cálculo sexta`.\n"
-            "RU: abra `🏠 Cotidiano → 🍽️ RU` ou pergunte "
-            "`qual o almoço hoje?` / `qual o café amanhã?`.\n\n"
+            "RU: `🎓 Faculdade → 🍽️ RU` ou pergunte `qual o almoço hoje?` / `qual o café amanhã?`.\n\n"
             "O Butler não presume presença só porque a aula aconteceu."
         )
     if section == "cotidiano":
         return (
-            "🏠 Cotidiano\n\n"
-            "Mercado: `acabou café`, `tô sem detergente`, `o que está faltando?`\n"
-            "Rotinas: `🏠 Cotidiano → 🧘 Rotinas`\n"
-            "Metas: `🏠 Cotidiano → 🎯 Metas`\n"
-            "Ler/ver depois: `🏠 Cotidiano → 📌 Ler/ver depois`\n"
-            "Clima: `vai chover amanhã?`\n\n"
+            "📋 Minha vida\n\n"
+            "Tarefas e compromissos ficam direto nessa área.\n"
+            "Rotinas: `📋 Minha vida → 🧘 Rotinas`\n"
+            "Metas: `📋 Minha vida → 🎯 Metas`\n"
+            "Casa/mercado: `📋 Minha vida → 🛒 Casa`\n"
+            "Interesses para depois: `📋 Minha vida → 📌 Interesses`\n\n"
+            "Você também pode falar: `acabou café`, `tô sem detergente`, `o que está faltando?`.\n"
+            "Clima continua por linguagem natural, por exemplo `vai chover amanhã?`.\n\n"
             "Rotina é recorrente; tarefa é pontual."
         )
     if section == "treino":
         return (
-            "🏋️ Musculação\n\n"
-            "Abra `🏋️ Musculação`. Principais ações:\n"
+            "🏋️ Treino\n\n"
+            "Abra `🏋️ Treino`. Ele entra direto no menu de musculação, sem submenu intermediário.\n"
+            "Principais ações:\n"
             "`📅 Treino de hoje`\n"
-            "`🚀 Começar os trabalhos`\n"
+            "`🚀 Começar os trabalhos` quando disponível no seu perfil\n"
             "`📝 Registrar série`\n"
             "`🔁 Substituir exercício`\n"
             "`✅ Finalizar treino`\n"
@@ -185,7 +194,7 @@ def _section_text(section):
         return (
             "🌙 Day-off\n\n"
             "Use `🌙 Day-off` para suspender o comportamento normal do dia. "
-            "Ele não é automático em fins de semana.\n\n"
+            "Ele continua sozinho na última linha da tela inicial e não é automático em fins de semana.\n\n"
             "Cronômetros/alertas rápidos explicitamente iniciados e uma sessão "
             "de estudo já aberta continuam funcionando."
         )
