@@ -1,0 +1,263 @@
+from pathlib import Path
+
+domain_path = Path('cloudflare/src/course_domain.py')
+domain = domain_path.read_text(encoding='utf-8')
+if 'async def import_course_plan(' not in domain:
+    domain += r'''
+
+
+async def _bulk_insert_rows(db, sql_prefix, rows, width, *, chunk_rows=12):
+    'Executa INSERTs multi-row em lotes pequenos e portáveis para D1.'
+    if not rows:
+        return
+    width = int(width)
+    if width < 1:
+        raise ValueError("bulk insert width must be positive")
+    for start in range(0, len(rows), int(chunk_rows)):
+        chunk = rows[start:start + int(chunk_rows)]
+        placeholders = ",".join(
+            "(" + ",".join("?" for _ in range(width)) + ")" for _ in chunk
+        )
+        params = []
+        for row in chunk:
+            if len(row) != width:
+                raise ValueError("bulk insert row width mismatch")
+            params.extend(row)
+        await db.prepare(sql_prefix + placeholders).bind(*params).run()
+
+
+async def import_course_plan(db, user_id, plan):
+    'Persiste uma importação validada com poucas chamadas ao D1.'
+    if not isinstance(plan, dict):
+        raise ValueError("invalid course import plan")
+    mode = str(plan.get("mode") or "").strip()
+    if mode not in COURSE_MODES:
+        raise ValueError("invalid course mode")
+    modules = plan.get("modules") or []
+    if not modules:
+        raise ValueError("course import requires modules")
+
+    course_id = await create_course(
+        db,
+        user_id,
+        _clean_title(plan.get("title")),
+        mode=mode,
+        description=_clean_optional(plan.get("description")),
+    )
+    totals = {"modules": 0, "contents": 0, "materials": 0, "activities": 0}
+
+    try:
+        for module_pos, module in enumerate(modules, 1):
+            title = _clean_title(module.get("title"))
+            result = await db.prepare(
+                "INSERT INTO course_modules(course_id,position,title,description) VALUES(?,?,?,NULL)"
+            ).bind(int(course_id), int(module_pos), title).run()
+            module_id = _last_row_id(result)
+            if module_id is None:
+                row = await db.prepare(
+                    "SELECT id FROM course_modules WHERE course_id=? AND position=?"
+                ).bind(int(course_id), int(module_pos)).first()
+                module_id = int(_row(row, "id")) if row else None
+            if module_id is None:
+                raise RuntimeError("module insert did not return an id")
+            totals["modules"] += 1
+
+            contents = module.get("contents") or []
+            if not contents:
+                raise ValueError("imported module has no contents")
+
+            content_rows = []
+            for content_pos, content in enumerate(contents, 1):
+                kind = str(content.get("kind") or "lesson").strip()
+                if kind not in CONTENT_KINDS:
+                    raise ValueError("invalid content kind")
+                content_rows.append((
+                    int(module_id),
+                    int(content_pos),
+                    _clean_title(content.get("title")),
+                    kind,
+                    _clean_optional(content.get("scheduled_at"), max_len=80),
+                    _clean_optional(content.get("notes")),
+                ))
+
+            await _bulk_insert_rows(
+                db,
+                "INSERT INTO course_contents(module_id,position,title,kind,scheduled_at,notes) VALUES ",
+                content_rows,
+                6,
+            )
+            totals["contents"] += len(content_rows)
+
+            inserted = await _rows(
+                db.prepare(
+                    "SELECT id,position FROM course_contents WHERE module_id=? ORDER BY position"
+                ).bind(int(module_id))
+            )
+            content_ids = {int(_row(row, "position")): int(_row(row, "id")) for row in inserted}
+            if len(content_ids) != len(contents):
+                raise RuntimeError("course content mapping is incomplete")
+
+            material_rows = []
+            activity_rows = []
+            for content_pos, content in enumerate(contents, 1):
+                content_id = content_ids[int(content_pos)]
+                for material_pos, material in enumerate(content.get("materials") or [], 1):
+                    kind = str(material.get("kind") or "other").strip()
+                    if kind not in MATERIAL_KINDS:
+                        raise ValueError("invalid material kind")
+                    material_rows.append((
+                        int(content_id),
+                        int(material_pos),
+                        _clean_title(material.get("title")),
+                        kind,
+                        _clean_optional(material.get("reference"), max_len=4000),
+                    ))
+                for activity_pos, activity in enumerate(content.get("activities") or [], 1):
+                    activity_rows.append((
+                        int(content_id),
+                        int(activity_pos),
+                        _clean_title(activity.get("title")),
+                        _clean_optional(activity.get("notes")),
+                    ))
+
+            await _bulk_insert_rows(
+                db,
+                "INSERT INTO course_materials(content_id,position,title,kind,reference) VALUES ",
+                material_rows,
+                5,
+            )
+            await _bulk_insert_rows(
+                db,
+                "INSERT INTO course_activities(content_id,position,title,notes) VALUES ",
+                activity_rows,
+                4,
+            )
+            totals["materials"] += len(material_rows)
+            totals["activities"] += len(activity_rows)
+
+        await _event(db, course_id, "course_imported", detail=totals)
+        return course_id
+    except Exception:
+        await db.prepare("DELETE FROM courses WHERE id=? AND user_id=?").bind(
+            int(course_id), int(user_id)
+        ).run()
+        raise
+'''
+    domain_path.write_text(domain, encoding='utf-8')
+
+importer_path = Path('cloudflare/src/course_importer.py')
+importer = importer_path.read_text(encoding='utf-8')
+marker = 'async def persist_plan(db, user_id, plan):'
+pos = importer.index(marker)
+importer = importer[:pos] + '''async def persist_plan(db, user_id, plan):
+    'Valida a entrada e delega a persistência em lote à autoridade course_domain.'
+    plan = validate_plan(plan)
+    return await course_domain.import_course_plan(db, user_id, plan)
+'''
+importer_path.write_text(importer, encoding='utf-8')
+
+stage_path = Path('cloudflare/src/course_stage4.py')
+stage = stage_path.read_text(encoding='utf-8')
+start = stage.index('async def _handle_import_confirm(')
+end = stage.index('\n\nasync def handle_message(', start)
+replacement = '''async def _handle_import_confirm(db, token, chat_id, uid, text, payload):
+    if text in {"❌ Cancelar ação", "/cancelar"}:
+        return False
+    if text != "✅ Confirmar importação":
+        await course_operational._send(
+            token,
+            chat_id,
+            "Confira a prévia e escolha Confirmar importação ou Cancelar ação.",
+            [["✅ Confirmar importação"], ["❌ Cancelar ação"]],
+        )
+        return True
+    plan = payload.get("plan") or {}
+    await course_operational._send(
+        token,
+        chat_id,
+        "⏳ Importando o curso. Se ele for grande, isso pode levar alguns segundos.",
+        [["❌ Cancelar ação"]],
+    )
+    try:
+        course_id = await course_importer.persist_plan(db, uid, plan)
+    except (course_importer.CourseImportError, ValueError) as exc:
+        await course_operational._send(
+            token,
+            chat_id,
+            f"A importação foi interrompida por validação: {exc}.",
+            [["✅ Confirmar importação"], ["❌ Cancelar ação"]],
+        )
+        return True
+    except Exception as exc:
+        print(f"[course-import] failed type={type(exc).__name__} message={str(exc)[:300]}")
+        await course_operational._send(
+            token,
+            chat_id,
+            "❌ Não consegui concluir a importação. Nada parcial deve ser mantido; você pode tentar confirmar novamente ou cancelar.",
+            [["✅ Confirmar importação"], ["❌ Cancelar ação"]],
+        )
+        return True
+    await app.clear_state(db, uid)
+    await course_operational._send(
+        token,
+        chat_id,
+        "✅ Curso importado. Todos os conteúdos e atividades começam pendentes; nenhum progresso foi inferido do arquivo.",
+        None,
+    )
+    return await _show_course(db, token, chat_id, uid, course_id)
+'''
+stage = stage[:start] + replacement + stage[end:]
+stage_path.write_text(stage, encoding='utf-8')
+
+test_path = Path('cloudflare/tests/test_stage4_5_course_import.py')
+tests = test_path.read_text(encoding='utf-8')
+if 'test_large_import_uses_bulk_domain_persistence' not in tests:
+    tests += r'''
+
+
+def test_large_import_uses_bulk_domain_persistence():
+    async def scenario():
+        db = FakeD1()
+        calls = {"prepare": 0}
+        base_prepare = db.prepare
+
+        def counted_prepare(sql):
+            calls["prepare"] += 1
+            return base_prepare(sql)
+
+        db.prepare = counted_prepare
+        contents = []
+        for idx in range(1, 200):
+            contents.append(
+                {
+                    "title": f"Aula {idx}",
+                    "kind": "lesson",
+                    "scheduled_at": None,
+                    "materials": [
+                        {"title": f"Material {idx}-A", "kind": "file", "reference": f"a-{idx}.pdf"},
+                        {"title": f"Material {idx}-B", "kind": "video", "reference": f"b-{idx}.mp4"},
+                    ],
+                    "activities": [
+                        {"title": f"Exercício {idx}", "notes": None}
+                    ] if idx <= 89 else [],
+                }
+            )
+        plan = {
+            "title": "Curso grande",
+            "mode": "self_paced",
+            "description": "regressão de importação grande",
+            "modules": [{"title": "Módulo grande", "contents": contents}],
+        }
+
+        course_id = await course_importer.persist_plan(db, 10, plan)
+        assert course_id
+        assert db.conn.execute("SELECT COUNT(*) FROM course_contents").fetchone()[0] == 199
+        assert db.conn.execute("SELECT COUNT(*) FROM course_materials").fetchone()[0] == 398
+        assert db.conn.execute("SELECT COUNT(*) FROM course_activities").fetchone()[0] == 89
+        assert calls["prepare"] < 120
+
+    asyncio.run(scenario())
+'''
+    test_path.write_text(tests, encoding='utf-8')
+
+Path('.github/workflows/apply-course-import-bulk-fix.yml').unlink()
