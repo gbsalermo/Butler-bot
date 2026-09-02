@@ -72,7 +72,7 @@ A documentação final da branch também foi submetida ao mesmo workflow. O **he
 
 A reorganização do menu por áreas da vida não foi antecipada. Ela é o **fechamento obrigatório da Etapa 4**, executado depois deste gate e antes da Etapa 5.
 
-Também não entra IA/Groq; essa trilha continua pós-Etapa 10 + gate de estabilidade.
+Também não entra IA/Groq; essa trilha continua pós-Etapa 11 + gate de estabilidade.
 
 ## Próximo ponto oficial após este gate
 

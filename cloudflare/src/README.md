@@ -391,7 +391,7 @@ podem existir sem integrar o roteador central.
 
 Não religue Broad NLU/Library genérica por conveniência. Qualquer reativação futura precisa de caso de uso, precedência, isolamento, política de escrita e regressão.
 
-A trilha IA/Groq permanece pós-Etapa 10 + gate de estabilidade.
+A trilha IA/Groq permanece pós-Etapa 11 + gate de estabilidade.
 
 ---
 

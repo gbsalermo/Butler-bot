@@ -106,11 +106,12 @@ Base herdada ainda reutilizada, mas não é automaticamente a autoridade final p
 8. 🧠 Memória + Library seletiva             ⏳
 9. 🔒 Hardening                              ⏳
 10. 🌐 Abertura pública/escala               ⏳
+11. 🌍 Idiomas e internacionalização          ⏳
 ```
 
 A Etapa 5 está bloqueada até o fechamento do menu por áreas da vida.
 
-IA/Groq é pós-roadmap, depois da Etapa 10 + gate de estabilidade.
+IA/Groq é pós-roadmap, depois da Etapa 11 + gate de estabilidade.
 
 ---
 

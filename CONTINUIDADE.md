@@ -100,9 +100,10 @@ Quando uma lista numerada foi exibida, posições temporárias devem continuar v
 8. 🧠 Memória + Library seletiva             ⏳
 9. 🔒 Hardening                              ⏳
 10. 🌐 Abertura pública/capacidade/escala    ⏳
+11. 🌍 Idiomas e internacionalização          ⏳
 ```
 
-A trilha IA/Groq permanece pós-roadmap, somente após Etapa 10 + gate de estabilidade.
+A trilha IA/Groq permanece pós-roadmap, somente após Etapa 11 + gate de estabilidade.
 
 **Não iniciar Etapa 5 antes do fechamento do menu por áreas da vida.**
 

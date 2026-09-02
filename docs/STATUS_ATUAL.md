@@ -52,11 +52,12 @@ A raiz `src/` é runtime histórico/preservado e não governa produção.
 8. 🧠 Memória + Library seletiva             ⏳
 9. 🔒 Hardening                              ⏳
 10. 🌐 Abertura pública/capacidade/escala    ⏳
+11. 🌍 Idiomas e internacionalização          ⏳
 ```
 
 **Não avançar para a Etapa 5 antes do fechamento do menu por áreas da vida.**
 
-A trilha de IA/Groq permanece pós-roadmap e só começa depois da Etapa 10 + gate de estabilidade.
+A trilha de IA/Groq permanece pós-roadmap e só começa depois da Etapa 11 + gate de estabilidade.
 
 ---
 

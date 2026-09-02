@@ -93,6 +93,8 @@ ETAPA 8  🧠 Memória + Library seletiva             ⏳
 ETAPA 9  🔒 Hardening                              ⏳
              ↓
 ETAPA 10 🌐 Abertura pública + capacidade/escala   ⏳
+             ↓
+ETAPA 11 🌍 Idiomas e internacionalização          ⏳
 ```
 
 Correções urgentes podem ocorrer a qualquer momento, mas devem ser testadas/documentadas e o desenvolvimento retorna ao ponto oficial depois delas.

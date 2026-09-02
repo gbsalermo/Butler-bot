@@ -1,7 +1,7 @@
 # Etapa 10 — Abertura pública, capacidade e escala
 
 **Status:** ⏳ planejada  
-**Posição:** última etapa do roadmap, depois da Etapa 9 — Hardening  
+**Posição:** penúltima etapa do roadmap, depois da Etapa 9 — Hardening e antes da Etapa 11 — Idiomas e internacionalização  
 **Objetivo:** validar tecnicamente a abertura pública do Butler e elevar a capacidade real do sistema para suportar o maior número de usuários possível com segurança, previsibilidade e custo controlado.
 
 > Esta etapa não deve estimar capacidade apenas por número de usuários cadastrados. O critério é carga real: mensagens, leituras/escritas D1, cron, Durable Objects, chamadas Telegram, armazenamento, latência e custo por usuário ativo.

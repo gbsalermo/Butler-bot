@@ -412,7 +412,7 @@ Existir no repositório não significa estar no webhook.
 
 Broad NLU, Library genérica e camadas experimentais permanecem preservadas para etapas futuras. Não as ligue ao dispatcher central só para resolver uma lacuna local.
 
-A trilha IA/Groq continua depois da Etapa 10 + gate de estabilidade.
+A trilha IA/Groq continua depois da Etapa 11 + gate de estabilidade.
 
 ---
 

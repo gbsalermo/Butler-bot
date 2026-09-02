@@ -38,6 +38,7 @@ O snapshot de handoff está em [`docs/STATUS_ATUAL.md`](docs/STATUS_ATUAL.md). U
 8. 🧠 Memória + Library seletiva             ⏳
 9. 🔒 Hardening                              ⏳
 10. 🌐 Abertura pública/capacidade/escala    ⏳
+11. 🌍 Idiomas e internacionalização          ⏳
 ```
 
 Não iniciar a Etapa 5 antes de concluir o fechamento do menu por áreas da vida.

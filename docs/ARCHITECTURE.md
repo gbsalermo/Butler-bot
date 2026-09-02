@@ -375,7 +375,7 @@ conversational_*
 
 não formam o roteador central de produção só por existirem no repositório. Reativação futura exige posição explícita no dispatcher, isolamento, política de leitura/escrita e regressão.
 
-A trilha IA/Groq continua **pós-Etapa 10 + gate de estabilidade**.
+A trilha IA/Groq continua **pós-Etapa 11 + gate de estabilidade**.
 
 ---
 
