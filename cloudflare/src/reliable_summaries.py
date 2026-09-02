@@ -98,7 +98,7 @@ async def _morning_text(db, uid, today):
         )
 
     return (
-        "☀️ Resumo da manhã\n\n"
+        "🌅 Resumo da manhã\n\n"
         + text
         + extra
         + "\n\nNada demais. Só a administração básica de uma pequena empresa chamada sua vida. 😌"
