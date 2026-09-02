@@ -268,6 +268,6 @@ def test_large_import_uses_bulk_domain_persistence():
         assert db.conn.execute("SELECT COUNT(*) FROM course_contents").fetchone()[0] == 199
         assert db.conn.execute("SELECT COUNT(*) FROM course_materials").fetchone()[0] == 398
         assert db.conn.execute("SELECT COUNT(*) FROM course_activities").fetchone()[0] == 89
-        assert calls["prepare"] < 120
+        assert calls["prepare"] < 50  # D1 Free: máximo de 50 queries por invocação
 
     asyncio.run(scenario())
