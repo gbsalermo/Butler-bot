@@ -2,13 +2,19 @@ from datetime import datetime, timezone
 
 import exam_cancel_patch
 import reliable_exam_reminders
+import scheduled_delivery_guard
 import telegram_api
 
 
-def test_exam_edit_actions_are_exposed():
-    flat = [button for row in exam_cancel_patch.ACADEMIC_KB for button in row]
+def test_exam_edit_actions_survive_final_academic_menu_composition():
+    rows = scheduled_delivery_guard._sync_academic_menu()
+    flat = [button for row in rows for button in row]
     assert "✏️ Editar prova" in flat
     assert "🚫 Cancelar prova" in flat
+    assert "📊 Ver faltas" in flat
+    assert "✏️ Editar limite" in flat
+    assert ["✏️ Editar prova", "🚫 Cancelar prova"] in rows
+
     edit = [button for row in exam_cancel_patch.EDIT_KB for button in row]
     assert {"🏷️ Nome", "📚 Matéria", "📅 Data", "⏰ Horário"}.issubset(set(edit))
 
