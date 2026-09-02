@@ -20,6 +20,7 @@ MAX_TEXT_CHARS = 120_000
 MAX_MODULES = 50
 MAX_CONTENTS = 300
 MAX_CHILDREN_PER_CONTENT = 100
+MAX_PREVIEW_CHARS = 3500
 
 MODE_MAP = {
     "autogerido": "self_paced",
@@ -270,36 +271,75 @@ def parse_course_text(text):
 
 
 def preview_text(plan):
+    """Gera prévia curta o bastante para uma única mensagem do Telegram."""
     plan = validate_plan(plan)
     mode = "Autogerido" if plan["mode"] == "self_paced" else "Ao vivo"
+
+    total_contents = sum(len(module.get("contents") or []) for module in plan["modules"])
+    total_materials = sum(
+        len(content.get("materials") or [])
+        for module in plan["modules"]
+        for content in module.get("contents") or []
+    )
+    total_activities = sum(
+        len(content.get("activities") or [])
+        for module in plan["modules"]
+        for content in module.get("contents") or []
+    )
+
     lines = [
         "📥 Prévia da importação",
         f"Curso: {plan['title']}",
         f"Tipo: {mode}",
     ]
     if plan.get("description"):
-        lines.append(f"Descrição: {plan['description']}")
-    total_contents = 0
-    total_materials = 0
-    total_activities = 0
+        description = str(plan["description"])
+        if len(description) > 700:
+            description = description[:697].rstrip() + "..."
+        lines.append(f"Descrição: {description}")
+
+    shown_contents = 0
+    truncated = False
     for module in plan["modules"]:
-        lines.append(f"\n🧩 {module['title']}")
-        for content in module["contents"]:
-            total_contents += 1
+        module_line = f"\n🧩 {module['title']} — {len(module.get('contents') or [])} conteúdo(s)"
+        candidate = "\n".join(lines + [module_line])
+        if len(candidate) > MAX_PREVIEW_CHARS - 500:
+            truncated = True
+            break
+        lines.append(module_line)
+
+        for content in (module.get("contents") or [])[:3]:
             schedule = (
                 f" — {content['scheduled_at'].replace('T', ' ')}"
                 if content.get("scheduled_at")
                 else ""
             )
-            lines.append(f"  • {content['title']} ({content['kind']}){schedule}")
-            total_materials += len(content.get("materials") or [])
-            total_activities += len(content.get("activities") or [])
+            content_line = f"  • {content['title']} ({content['kind']}){schedule}"
+            candidate = "\n".join(lines + [content_line])
+            if len(candidate) > MAX_PREVIEW_CHARS - 500:
+                truncated = True
+                break
+            lines.append(content_line)
+            shown_contents += 1
+        if len(module.get("contents") or []) > 3:
+            lines.append(f"  … +{len(module['contents']) - 3} conteúdo(s) neste módulo")
+        if truncated:
+            break
+
+    if shown_contents < total_contents:
+        lines.append(
+            "\nℹ️ Prévia resumida para caber no Telegram. O arquivo completo será usado na importação."
+        )
+
     lines.append(
         f"\nResumo: {len(plan['modules'])} módulo(s), {total_contents} conteúdo(s), "
         f"{total_materials} material(is), {total_activities} atividade(s)."
     )
-    lines.append("Nada foi salvo ainda. Confira e confirme explicitamente.")
-    return "\n".join(lines)
+    lines.append("Nada foi salvo ainda. Confira o resumo e confirme explicitamente.")
+    preview = "\n".join(lines)
+    if len(preview) > MAX_PREVIEW_CHARS:
+        preview = preview[: MAX_PREVIEW_CHARS - 3].rstrip() + "..."
+    return preview
 
 
 async def document_text(token, document):
