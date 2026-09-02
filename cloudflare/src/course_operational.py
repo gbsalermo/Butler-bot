@@ -79,11 +79,16 @@ CONTENT_STATUS_LABELS = {
 }
 _STATE_UNSET = object()
 
-# O arquivo 🗄 normalmente chega do Telegram com U+FE0F (variation selector).
-# Aceitamos ambas as formas sem contaminar o ID/texto persistido.
-COURSE_BUTTON_RE = re.compile(r"^(?:📘|🗄\ufe0f?)\s+#(\d+)\b")
-MODULE_BUTTON_RE = re.compile(r"^🧩\s+#(\d+)\b")
-CONTENT_BUTTON_RE = re.compile(r"^📄\s+#(\d+)\b")
+# Reply keyboards podem devolver variation selector (U+FE0F) e NBSP mesmo
+# quando o texto visual é idêntico ao enviado. Normalize antes de extrair IDs.
+COURSE_BUTTON_RE = re.compile(r"^(?:📘|🗄)\s*#(\d+)(?:\s|$)")
+MODULE_BUTTON_RE = re.compile(r"^🧩\s*#(\d+)(?:\s|$)")
+CONTENT_BUTTON_RE = re.compile(r"^📄\s*#(\d+)(?:\s|$)")
+
+
+def _button_text(text):
+    value = str(text or "").replace("\ufe0f", "").replace("\u00a0", " ")
+    return " ".join(value.split()).strip()
 COURSE_DIRECT_TEXTS = {
     "📘 Cursos",
     "📚 Meus cursos",
@@ -152,17 +157,17 @@ def _content_button(content):
 
 
 def _course_id_from_text(text):
-    match = COURSE_BUTTON_RE.match(text or "")
+    match = COURSE_BUTTON_RE.match(_button_text(text))
     return int(match.group(1)) if match else None
 
 
 def _module_id_from_text(text):
-    match = MODULE_BUTTON_RE.match(text or "")
+    match = MODULE_BUTTON_RE.match(_button_text(text))
     return int(match.group(1)) if match else None
 
 
 def _content_id_from_text(text):
-    match = CONTENT_BUTTON_RE.match(text or "")
+    match = CONTENT_BUTTON_RE.match(_button_text(text))
     return int(match.group(1)) if match else None
 
 
@@ -439,6 +444,25 @@ async def _handle_state(db, token, chat_id, uid, text, state, payload):
             await _send(token, chat_id, "Operação cancelada. Nada foi alterado.", None)
             return await _show_course(db, token, chat_id, uid, int(course_id))
         await _send(token, chat_id, "Operação cancelada. Nada foi alterado.", COURSES_KB)
+        return True
+
+    # Navegação de nível superior deve funcionar em qualquer tela/wizard de Cursos.
+    # Isso também permite recuperar a interface caso um teclado antigo permaneça aberto.
+    if text in {"📘 Cursos", "⬅️ Voltar aos cursos"}:
+        await app.clear_state(db, uid)
+        await _show_course_menu(token, chat_id)
+        return True
+    if text == "📚 Meus cursos":
+        await app.clear_state(db, uid)
+        await _show_course_list(db, token, chat_id, uid)
+        return True
+    if text == "🗄️ Cursos arquivados":
+        await app.clear_state(db, uid)
+        await _show_course_list(db, token, chat_id, uid, archived=True)
+        return True
+    if text == "🏠 Menu principal":
+        await app.clear_state(db, uid)
+        await _send(token, chat_id, "🏠 Menu principal", app.MAIN_KB)
         return True
 
     if state == "course_create_title":
