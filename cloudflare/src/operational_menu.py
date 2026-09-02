@@ -434,6 +434,18 @@ async def handle_message(db, token, message):
         )
         return True
 
+    if text == "👤 Como me chamar":
+        if not uid:
+            return False
+        await app.set_state(db, uid, "rename", {})
+        await send_message(
+            token,
+            chat_id,
+            "Como quer que eu te chame?",
+            reply_markup=_kb([["❌ Cancelar ação"]]),
+        )
+        return True
+
     if text == "🧠 Modo Estudo":
         await _clear_navigation_state(db, uid)
         await send_message(
