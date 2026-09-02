@@ -389,11 +389,14 @@ async def _handle_import_confirm(db, token, chat_id, uid, text, payload):
         )
         return True
     except Exception as exc:
-        print(f"[course-import] failed type={type(exc).__name__} message={str(exc)[:300]}")
+        detail = " ".join(str(exc).split())[:240] or "sem detalhe adicional"
+        print(f"[course-import] failed type={type(exc).__name__} message={detail}")
         await course_operational._send(
             token,
             chat_id,
-            "❌ Não consegui concluir a importação. Nada parcial deve ser mantido; você pode tentar confirmar novamente ou cancelar.",
+            "❌ Não consegui concluir a importação. Nada parcial foi mantido.\n"
+            f"Diagnóstico: {type(exc).__name__}: {detail}\n"
+            "A prévia continua disponível para uma nova tentativa ou cancelamento.",
             [["✅ Confirmar importação"], ["❌ Cancelar ação"]],
         )
         return True
