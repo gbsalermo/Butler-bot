@@ -13,10 +13,49 @@ import json
 from js import Object, Uint8Array, fetch
 from pyodide.ffi import to_js as _to_js
 
+from owner_profile import is_owner
+
+
+OWNER_ONLY_REPLY_BUTTONS = {"📘 Cursos"}
+
 
 def _js(value):
     """Converte dict Python para objeto JS aceito por ``fetch`` no Pyodide."""
     return _to_js(value, dict_converter=Object.fromEntries)
+
+
+def _button_label(button):
+    if isinstance(button, str):
+        return button
+    if isinstance(button, dict):
+        return button.get("text")
+    return None
+
+
+def _filter_reply_markup(chat_id: int, reply_markup):
+    """Esconde recursos em standby do teclado de usuários comuns.
+
+    A filtragem fica na fronteira do Telegram para cobrir qualquer módulo que
+    reutilize ``app.MAIN_KB``. O proprietário continua vendo o teclado completo.
+    """
+    if reply_markup is None or is_owner(int(chat_id)) or not isinstance(reply_markup, dict):
+        return reply_markup
+    keyboard = reply_markup.get("keyboard")
+    if not isinstance(keyboard, list):
+        return reply_markup
+
+    rows = []
+    for row in keyboard:
+        if not isinstance(row, list):
+            rows.append(row)
+            continue
+        filtered = [button for button in row if _button_label(button) not in OWNER_ONLY_REPLY_BUTTONS]
+        if filtered:
+            rows.append(filtered)
+
+    cleaned = dict(reply_markup)
+    cleaned["keyboard"] = rows
+    return cleaned
 
 
 async def _post_telegram(token: str, method: str, payload: dict) -> dict:
@@ -61,8 +100,9 @@ def delivery_error(result: dict | None) -> str:
 async def send_message(token: str, chat_id: int, text: str, reply_markup=None, parse_mode=None):
     """Envia mensagem. Chamadores críticos devem validar o retorno com delivery_ok."""
     payload = {"chat_id": chat_id, "text": text}
-    if reply_markup is not None:
-        payload["reply_markup"] = reply_markup
+    filtered_markup = _filter_reply_markup(int(chat_id), reply_markup)
+    if filtered_markup is not None:
+        payload["reply_markup"] = filtered_markup
     if parse_mode is not None:
         payload["parse_mode"] = parse_mode
     return await _post_telegram(token, "sendMessage", payload)
