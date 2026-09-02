@@ -31,6 +31,34 @@ def test_format_forecast_does_not_turn_peak_hour_into_whole_day_rain():
     assert "Fonte: Open-Meteo" in text
 
 
+def test_format_forecast_today_prioritizes_current_cloudy_cool_conditions():
+    location = {"city": "Cruz das Almas - BA"}
+    forecast = {
+        "date": "2026-09-02",
+        "weather_code": 1,
+        "temperature_min": 21.0,
+        "temperature_max": 34.0,
+        "rain_probability_max": 8,
+        "rain_probability_mean": 3,
+        "rain_sum": 0.0,
+        "rain_hours": 0,
+        "cloud_cover_mean": 42,
+        "wind_max": 18.0,
+        "current_temperature": 23.0,
+        "current_apparent_temperature": 23.0,
+        "current_weather_code": 3,
+        "current_cloud_cover": 92,
+    }
+
+    text = format_forecast(location, forecast, heading="Tempo hoje")
+
+    assert "Agora: ☁️ nublado, 23 °C" in text
+    assert "No dia: sol entre nuvens; 21–34 °C" in text
+    assert "nublado" in text.lower()
+    assert "máxima do dia não descreve este momento" in text or "calor pode aparecer mais tarde" in text
+    assert "sol castigando" not in text
+
+
 def test_format_forecast_with_weak_rain_uses_low_possibility_and_range():
     location = {"city": "Cruz das Almas - Bahia"}
     forecast = {
