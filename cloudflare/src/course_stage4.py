@@ -25,6 +25,68 @@ _BASE_SHOW_COURSE = course_operational._show_course
 _BASE_SHOW_CONTENT = course_operational._show_content
 
 
+COURSE_IMPORT_HELP_TEXT = """📥 Importar curso
+
+O Butler importa cursos a partir de um texto estruturado. Você pode:
+• colar o texto diretamente;
+• enviar um arquivo .txt;
+• enviar um PDF com texto pesquisável.
+
+📷 Se o currículo estiver em imagem, print, PDF escaneado ou em um texto bagunçado, use uma IA para converter primeiro. Depois cole o resultado aqui ou salve como .txt.
+
+Formato que o Butler entende:
+
+CURSO: Java + Spring
+TIPO: AUTOGERIDO
+DESCRICAO: Trilha backend
+[MÓDULO] Fundamentos
+[CONTEÚDO] REST Controllers | aula
+[MATERIAL] Slides | link | https://exemplo.com
+[ATIVIDADE] Exercícios | implementar GET /health
+
+Tipos de conteúdo aceitos:
+aula, leitura, exercício, projeto, revisão, outro
+
+Tipos de material aceitos:
+link, arquivo, video, texto, outro
+
+Para curso AO VIVO:
+TIPO: AO VIVO
+[CONTEÚDO] Aula síncrona | aula | 15/09/2026 19:30
+
+🤖 PROMPT PARA PEDIR A UMA IA
+
+Converta o currículo/material de curso que vou enviar para o formato de importação do meu assistente Butler.
+
+O material pode vir como imagem, print, PDF ou texto bruto. Leia apenas o que estiver realmente presente e organize sem inventar informações.
+
+Use EXATAMENTE esta estrutura:
+CURSO: Nome do curso
+TIPO: AUTOGERIDO
+DESCRICAO: descrição curta
+[MÓDULO] Nome do módulo
+[CONTEÚDO] Nome do conteúdo | aula
+[MATERIAL] Nome do material | arquivo | referência
+[ATIVIDADE] Nome da atividade | observação
+
+Regras:
+1. Use TIPO: AUTOGERIDO, a menos que o material mostre aulas com datas/horários fixos; nesse caso use TIPO: AO VIVO.
+2. Conteúdo só pode ser: aula, leitura, exercício, projeto, revisão ou outro.
+3. Material só pode ser: link, arquivo, video, texto ou outro.
+4. Em curso AO VIVO, coloque a data somente quando ela estiver explícita, no formato DD/MM/AAAA HH:MM.
+5. Preserve a ordem real dos módulos e aulas.
+6. Não invente nomes, datas, links, materiais ou atividades.
+7. Se uma parte estiver ilegível ou incerta, use uma linha iniciada por # PENDÊNCIA: explicando o trecho.
+8. Não inclua status de conclusão ou progresso.
+9. Retorne SOMENTE o texto final no formato Butler, sem Markdown, sem ``` e sem explicações fora do bloco.
+
+Agora converta o material que vou enviar em seguida.
+
+Depois é só enviar o resultado aqui. O Butler mostrará uma prévia e só salvará quando você tocar em ✅ Confirmar importação.
+
+PDF escaneado/imagem não é lido diretamente pelo importador do Butler; converta com a IA antes."""
+
+
 def _row(row, key, default=None):
     if row is None:
         return default
@@ -260,15 +322,7 @@ async def _start_import(db, token, chat_id, uid):
     await course_operational._send(
         token,
         chat_id,
-        "📥 Envie um `.txt` ou PDF textual no formato abaixo. Também pode colar o texto diretamente.\n\n"
-        "CURSO: Java + Spring\n"
-        "TIPO: AUTOGERIDO\n"
-        "DESCRICAO: Trilha backend\n"
-        "[MÓDULO] Fundamentos\n"
-        "[CONTEÚDO] REST | aula\n"
-        "[MATERIAL] Slides | link | https://exemplo.com\n"
-        "[ATIVIDADE] Exercícios\n\n"
-        "Para curso ao vivo use `TIPO: AO VIVO` e, opcionalmente, uma terceira coluna no conteúdo: `15/09/2026 19:30`. Eu sempre mostro uma prévia antes de salvar; PDF sem texto pesquisável não entra.",
+        COURSE_IMPORT_HELP_TEXT,
         [["❌ Cancelar ação"]],
     )
     return True
