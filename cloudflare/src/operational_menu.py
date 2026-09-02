@@ -66,6 +66,44 @@ ADD_KB = [
     ["⬅️ Início"],
 ]
 
+# Menus locais sincronizados aqui apenas na dimensão de navegação. As ações
+# continuam pertencendo aos respectivos domínios.
+ACADEMIC_KB = [
+    ["📚 Minhas matérias", "⚙️ Gerenciar matérias"],
+    ["📝 Adicionar prova", "📋 Provas"],
+    ["✏️ Editar prova", "🚫 Cancelar prova"],
+    ["📊 Ver faltas", "⚙️ Limite de faltas"],
+    ["✏️ Editar limite", "🗑️ Excluir falta"],
+    ["📥 Importar grade por PDF/texto"],
+    ["⬅️ Faculdade"],
+]
+
+TASK_KB = [
+    ["✅ Concluir tarefa", "⏰ Adiar tarefa"],
+    ["📌 Manter pendente", "🚫 Cancelar tarefa"],
+    ["⬅️ Minha vida"],
+]
+
+ROUTINE_KB = [
+    ["➕ Adicionar rotina", "✏️ Editar rotina"],
+    ["📋 Minhas rotinas", "✅ Marcar rotina feita"],
+    ["🏁 Encerrar rotina hoje", "🗑️ Remover rotina"],
+    ["⬅️ Minha vida"],
+]
+
+GOAL_KB = [
+    ["➕ Nova meta", "📋 Minhas metas"],
+    ["✅ Registrar progresso", "🔗 Vincular rotina"],
+    ["✏️ Editar meta", "🏁 Concluir meta"],
+    ["🗑️ Remover meta", "⬅️ Minha vida"],
+]
+
+COURSES_KB = [
+    ["📚 Meus cursos", "➕ Novo curso"],
+    ["📥 Importar curso", "🗄️ Cursos arquivados"],
+    ["⬅️ Faculdade"],
+]
+
 RU_PUBLIC_KB = [
     ["🍽️ Cardápio de hoje", "📅 Cardápio da semana"],
     ["🗃️ Cardápios anteriores"],
@@ -105,6 +143,10 @@ GOAL_DIRECT_TEXTS = {
 
 def _kb(rows):
     return {"keyboard": rows, "resize_keyboard": True}
+
+
+def _clone(rows):
+    return [list(row) for row in rows]
 
 
 def _row(row, key, default=None):
@@ -220,25 +262,81 @@ async def _appointment_list(db, uid):
 
 
 def install():
-    app.MAIN_KB = [list(row) for row in MAIN_KB]
-    app.COTIDIANO_KB = [list(row) for row in MY_LIFE_KB]
-    app.GROCERY_KB = [list(row) for row in HOUSE_KB]
+    """Sincroniza a navegação sem mover regras de negócio para este módulo."""
+    app.MAIN_KB = _clone(MAIN_KB)
+    app.COTIDIANO_KB = _clone(MY_LIFE_KB)
+    app.GROCERY_KB = _clone(HOUSE_KB)
+    app.ACADEMIC_KB = _clone(ACADEMIC_KB)
+    app.GOALS_KB = _clone(GOAL_KB)
+    app.AGENDA_KB = _replace_button(app.AGENDA_KB, "🏠 Menu principal", "⬅️ Início")
+    app.WORKOUT_KB = _replace_button(app.WORKOUT_KB, "🏠 Menu principal", "⬅️ Início")
 
-    # Respostas internas do domínio nunca exibem a ação administrativa para usuários comuns.
-    # O proprietário recebe o botão de importação ao abrir explicitamente o menu RU.
-    ru_menu.RU_KB = [list(row) for row in RU_PUBLIC_KB]
+    # Respostas internas do RU nunca exibem a ação administrativa para usuários comuns.
+    ru_menu.RU_KB = _clone(RU_PUBLIC_KB)
+
+    # Cursos 4.3+ instala seu menu; depois alinhamos apenas a rota de retorno.
     course_stage4.install()
+    course_operational.COURSES_KB = _clone(COURSES_KB)
+
     goal_operational.install()
+    goal_operational.GOAL_KB = _clone(GOAL_KB)
     goal_polish.install()
     goal_deadline_patch.install()
     goal_routine_bridge.install()
 
+    runtime_guard.MAIN_KB = _clone(MAIN_KB)
+    runtime_guard.COTIDIANO_KB = _clone(MY_LIFE_KB)
+    runtime_guard.TASK_KB = _clone(TASK_KB)
+    runtime_guard.ROUTINE_KB = _clone(ROUTINE_KB)
+    runtime_guard.GENERIC_WORKOUT_KB = _replace_button(
+        runtime_guard.GENERIC_WORKOUT_KB, "🏠 Menu principal", "⬅️ Início"
+    )
+
+    # Menus locais continuam nos módulos de domínio, mas recebem a mesma rota de
+    # volta para impedir telas que transportem o usuário à hierarquia antiga.
     try:
-        runtime_guard.MAIN_KB = [list(row) for row in MAIN_KB]
+        import academic_intelligence
+        import attendance_production_fix
+        import exam_cancel_patch
+
+        academic_intelligence.ACADEMIC_KB = _clone(ACADEMIC_KB)
+        exam_cancel_patch.ACADEMIC_KB = _clone(ACADEMIC_KB)
+        attendance_production_fix.ACADEMIC_KB_FULL[:] = _clone(ACADEMIC_KB)
     except Exception:
         pass
+
     try:
-        runtime_guard.COTIDIANO_KB = [list(row) for row in MY_LIFE_KB]
+        import task_context_patch
+
+        task_context_patch.TASK_KB = _clone(TASK_KB)
+    except Exception:
+        pass
+
+    try:
+        import routine_integration
+        import routine_ui_patch
+        import quality_patch
+
+        routine_integration.ROUTINE_KB = _clone(ROUTINE_KB)
+        routine_ui_patch.ROUTINE_KB = _clone(ROUTINE_KB)
+        quality_patch.ROUTINE_KB = _clone(ROUTINE_KB)
+        quality_patch.GROCERY_KB = _clone(HOUSE_KB)
+    except Exception:
+        pass
+
+    try:
+        import grocery_phrase_patch
+
+        grocery_phrase_patch.GROCERY_KB = _clone(HOUSE_KB)
+    except Exception:
+        pass
+
+    try:
+        import user_manual
+
+        user_manual.MANUAL_KB["keyboard"] = _replace_button(
+            user_manual.MANUAL_KB.get("keyboard", []), "🏠 Menu principal", "⬅️ Início"
+        )
     except Exception:
         pass
 
