@@ -372,6 +372,12 @@ async def _handle_import_confirm(db, token, chat_id, uid, text, payload):
         )
         return True
     plan = payload.get("plan") or {}
+    await course_operational._send(
+        token,
+        chat_id,
+        "⏳ Importando o curso. Se ele for grande, isso pode levar alguns segundos.",
+        [["❌ Cancelar ação"]],
+    )
     try:
         course_id = await course_importer.persist_plan(db, uid, plan)
     except (course_importer.CourseImportError, ValueError) as exc:
@@ -379,7 +385,16 @@ async def _handle_import_confirm(db, token, chat_id, uid, text, payload):
             token,
             chat_id,
             f"A importação foi interrompida por validação: {exc}.",
-            [["❌ Cancelar ação"]],
+            [["✅ Confirmar importação"], ["❌ Cancelar ação"]],
+        )
+        return True
+    except Exception as exc:
+        print(f"[course-import] failed type={type(exc).__name__} message={str(exc)[:300]}")
+        await course_operational._send(
+            token,
+            chat_id,
+            "❌ Não consegui concluir a importação. Nada parcial deve ser mantido; você pode tentar confirmar novamente ou cancelar.",
+            [["✅ Confirmar importação"], ["❌ Cancelar ação"]],
         )
         return True
     await app.clear_state(db, uid)

@@ -371,54 +371,6 @@ async def document_text(token, document):
 
 
 async def persist_plan(db, user_id, plan):
-    """Orquestra apenas funções da autoridade course_domain após validação total."""
+    'Valida a entrada e delega a persistência em lote à autoridade course_domain.'
     plan = validate_plan(plan)
-    course_id = await course_domain.create_course(
-        db,
-        user_id,
-        plan["title"],
-        mode=plan["mode"],
-        description=plan.get("description"),
-    )
-    for module_pos, module in enumerate(plan["modules"], 1):
-        module_id = await course_domain.add_module(
-            db,
-            user_id,
-            course_id,
-            module["title"],
-            position=module_pos,
-        )
-        for content_pos, content in enumerate(module["contents"], 1):
-            content_id = await course_domain.add_content(
-                db,
-                user_id,
-                course_id,
-                module_id,
-                content["title"],
-                kind=content["kind"],
-                position=content_pos,
-                scheduled_at=content.get("scheduled_at"),
-            )
-            for material_pos, material in enumerate(content.get("materials") or [], 1):
-                await course_domain.add_material(
-                    db,
-                    user_id,
-                    course_id,
-                    content_id,
-                    material["title"],
-                    kind=material["kind"],
-                    reference=material.get("reference"),
-                    position=material_pos,
-                )
-            for activity_pos, activity in enumerate(content.get("activities") or [], 1):
-                await course_domain.add_activity(
-                    db,
-                    user_id,
-                    course_id,
-                    content_id,
-                    activity["title"],
-                    notes=activity.get("notes"),
-                    position=activity_pos,
-                )
-    await course_domain._event(db, course_id, "course_imported")
-    return course_id
+    return await course_domain.import_course_plan(db, user_id, plan)
