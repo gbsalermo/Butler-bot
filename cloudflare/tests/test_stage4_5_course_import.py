@@ -226,3 +226,48 @@ def test_invalid_import_persists_nothing(monkeypatch):
         assert (await _state(db))[0] == "course_import_wait"
 
     asyncio.run(scenario())
+
+
+
+def test_large_import_uses_bulk_domain_persistence():
+    async def scenario():
+        db = FakeD1()
+        calls = {"prepare": 0}
+        base_prepare = db.prepare
+
+        def counted_prepare(sql):
+            calls["prepare"] += 1
+            return base_prepare(sql)
+
+        db.prepare = counted_prepare
+        contents = []
+        for idx in range(1, 200):
+            contents.append(
+                {
+                    "title": f"Aula {idx}",
+                    "kind": "lesson",
+                    "scheduled_at": None,
+                    "materials": [
+                        {"title": f"Material {idx}-A", "kind": "file", "reference": f"a-{idx}.pdf"},
+                        {"title": f"Material {idx}-B", "kind": "video", "reference": f"b-{idx}.mp4"},
+                    ],
+                    "activities": [
+                        {"title": f"Exercício {idx}", "notes": None}
+                    ] if idx <= 89 else [],
+                }
+            )
+        plan = {
+            "title": "Curso grande",
+            "mode": "self_paced",
+            "description": "regressão de importação grande",
+            "modules": [{"title": "Módulo grande", "contents": contents}],
+        }
+
+        course_id = await course_importer.persist_plan(db, 10, plan)
+        assert course_id
+        assert db.conn.execute("SELECT COUNT(*) FROM course_contents").fetchone()[0] == 199
+        assert db.conn.execute("SELECT COUNT(*) FROM course_materials").fetchone()[0] == 398
+        assert db.conn.execute("SELECT COUNT(*) FROM course_activities").fetchone()[0] == 89
+        assert calls["prepare"] < 120
+
+    asyncio.run(scenario())

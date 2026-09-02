@@ -652,3 +652,142 @@ async def content_details(db, user_id, course_id, content_id):
             for item in activities
         ],
     }
+
+
+
+async def _bulk_insert_rows(db, sql_prefix, rows, width, *, chunk_rows=12):
+    'Executa INSERTs multi-row em lotes pequenos e portáveis para D1.'
+    if not rows:
+        return
+    width = int(width)
+    if width < 1:
+        raise ValueError("bulk insert width must be positive")
+    for start in range(0, len(rows), int(chunk_rows)):
+        chunk = rows[start:start + int(chunk_rows)]
+        placeholders = ",".join(
+            "(" + ",".join("?" for _ in range(width)) + ")" for _ in chunk
+        )
+        params = []
+        for row in chunk:
+            if len(row) != width:
+                raise ValueError("bulk insert row width mismatch")
+            params.extend(row)
+        await db.prepare(sql_prefix + placeholders).bind(*params).run()
+
+
+async def import_course_plan(db, user_id, plan):
+    'Persiste uma importação validada com poucas chamadas ao D1.'
+    if not isinstance(plan, dict):
+        raise ValueError("invalid course import plan")
+    mode = str(plan.get("mode") or "").strip()
+    if mode not in COURSE_MODES:
+        raise ValueError("invalid course mode")
+    modules = plan.get("modules") or []
+    if not modules:
+        raise ValueError("course import requires modules")
+
+    course_id = await create_course(
+        db,
+        user_id,
+        _clean_title(plan.get("title")),
+        mode=mode,
+        description=_clean_optional(plan.get("description")),
+    )
+    totals = {"modules": 0, "contents": 0, "materials": 0, "activities": 0}
+
+    try:
+        for module_pos, module in enumerate(modules, 1):
+            title = _clean_title(module.get("title"))
+            result = await db.prepare(
+                "INSERT INTO course_modules(course_id,position,title,description) VALUES(?,?,?,NULL)"
+            ).bind(int(course_id), int(module_pos), title).run()
+            module_id = _last_row_id(result)
+            if module_id is None:
+                row = await db.prepare(
+                    "SELECT id FROM course_modules WHERE course_id=? AND position=?"
+                ).bind(int(course_id), int(module_pos)).first()
+                module_id = int(_row(row, "id")) if row else None
+            if module_id is None:
+                raise RuntimeError("module insert did not return an id")
+            totals["modules"] += 1
+
+            contents = module.get("contents") or []
+            if not contents:
+                raise ValueError("imported module has no contents")
+
+            content_rows = []
+            for content_pos, content in enumerate(contents, 1):
+                kind = str(content.get("kind") or "lesson").strip()
+                if kind not in CONTENT_KINDS:
+                    raise ValueError("invalid content kind")
+                content_rows.append((
+                    int(module_id),
+                    int(content_pos),
+                    _clean_title(content.get("title")),
+                    kind,
+                    _clean_optional(content.get("scheduled_at"), max_len=80),
+                    _clean_optional(content.get("notes")),
+                ))
+
+            await _bulk_insert_rows(
+                db,
+                "INSERT INTO course_contents(module_id,position,title,kind,scheduled_at,notes) VALUES ",
+                content_rows,
+                6,
+            )
+            totals["contents"] += len(content_rows)
+
+            inserted = await _rows(
+                db.prepare(
+                    "SELECT id,position FROM course_contents WHERE module_id=? ORDER BY position"
+                ).bind(int(module_id))
+            )
+            content_ids = {int(_row(row, "position")): int(_row(row, "id")) for row in inserted}
+            if len(content_ids) != len(contents):
+                raise RuntimeError("course content mapping is incomplete")
+
+            material_rows = []
+            activity_rows = []
+            for content_pos, content in enumerate(contents, 1):
+                content_id = content_ids[int(content_pos)]
+                for material_pos, material in enumerate(content.get("materials") or [], 1):
+                    kind = str(material.get("kind") or "other").strip()
+                    if kind not in MATERIAL_KINDS:
+                        raise ValueError("invalid material kind")
+                    material_rows.append((
+                        int(content_id),
+                        int(material_pos),
+                        _clean_title(material.get("title")),
+                        kind,
+                        _clean_optional(material.get("reference"), max_len=4000),
+                    ))
+                for activity_pos, activity in enumerate(content.get("activities") or [], 1):
+                    activity_rows.append((
+                        int(content_id),
+                        int(activity_pos),
+                        _clean_title(activity.get("title")),
+                        _clean_optional(activity.get("notes")),
+                    ))
+
+            await _bulk_insert_rows(
+                db,
+                "INSERT INTO course_materials(content_id,position,title,kind,reference) VALUES ",
+                material_rows,
+                5,
+            )
+            await _bulk_insert_rows(
+                db,
+                "INSERT INTO course_activities(content_id,position,title,notes) VALUES ",
+                activity_rows,
+                4,
+            )
+            totals["materials"] += len(material_rows)
+            totals["activities"] += len(activity_rows)
+
+        await _event(db, course_id, "course_imported", detail=totals)
+        return course_id
+    except Exception:
+        await db.prepare("DELETE FROM courses WHERE id=? AND user_id=?").bind(
+            int(course_id), int(user_id)
+        ).run()
+        raise
