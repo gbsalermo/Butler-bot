@@ -1,8 +1,8 @@
 """Comentários curtos do Butler para a previsão do tempo.
 
-A classificação usa os mesmos dados diários já retornados pelo Open-Meteo. Não
-substitui os números da previsão: apenas traduz o cenário em uma frase curta e
-útil antes dos dados técnicos.
+A classificação usa os dados do Open-Meteo para traduzir o cenário em uma frase
+curta e útil. Para "hoje", condições atuais têm prioridade sobre a máxima do
+dia para evitar descrever uma manhã fresca/nublada como se já estivesse quente.
 """
 
 
@@ -39,6 +39,14 @@ def forecast_comment(forecast, heading="Tempo", city=""):
     code = int(forecast.get("weather_code", -1) or -1)
     period = _period(heading)
 
+    current_temp = _number(forecast.get("current_temperature"))
+    current_cloud = _number(forecast.get("current_cloud_cover"))
+    current_code_raw = forecast.get("current_weather_code")
+    try:
+        current_code = int(current_code_raw) if current_code_raw is not None else None
+    except (TypeError, ValueError):
+        current_code = None
+
     if code in {95, 96, 99} or rain >= 15:
         category = "storm"
         options = (
@@ -59,6 +67,40 @@ def forecast_comment(forecast, heading="Tempo", city=""):
             f"{period} pode cair uma chuva rápida. Nada apocalíptico, mas é bom não ser pego de surpresa.",
             f"{period} existe chance de umas gotas atrapalharem o roteiro. Uma proteção leve já resolve a novela.",
             f"{period} a chuva pode dar uma passada por aí. Não parece o fim do mundo, só o suficiente para incomodar.",
+        )
+    elif (
+        period == "Hoje"
+        and current_temp is not None
+        and (
+            current_code in {3, 45, 48}
+            or (current_cloud is not None and current_cloud >= 75)
+        )
+    ):
+        category = "current_cloudy"
+        if current_temp <= 24 and tmax is not None and tmax >= 30:
+            options = (
+                "Agora está nublado e mais fresco. Pode esquentar bastante mais tarde, então a máxima do dia não descreve este momento.",
+                "O começo do dia está mais fechado e fresco. A temperatura pode subir depois, mas por enquanto o sol não está mandando em nada.",
+                "Neste momento o céu está bem nublado e a temperatura mais baixa. O calor pode aparecer mais tarde, não agora.",
+            )
+        else:
+            options = (
+                "Agora o céu está bem fechado. Mesmo que a previsão mude ao longo do dia, neste momento o cenário é de bastante nuvem.",
+                "Por enquanto está nublado. A previsão do restante do dia pode melhorar, mas o céu agora está fazendo hora extra.",
+                "Neste momento tem bastante nuvem no céu. Melhor separar o clima de agora da tendência para o resto do dia.",
+            )
+    elif (
+        period == "Hoje"
+        and current_temp is not None
+        and current_temp <= 24
+        and tmax is not None
+        and tmax >= 30
+    ):
+        category = "current_cool_then_hot"
+        options = (
+            "Agora está mais fresco, mas a temperatura deve subir ao longo do dia. A máxima é para mais tarde, não para este momento.",
+            "A manhã ainda está comportada na temperatura. O calor deve aparecer mais tarde, então não confunde a máxima com o clima de agora.",
+            "Por enquanto a temperatura está agradável. Mais tarde deve esquentar bem, mas ainda não chegou nessa parte do roteiro.",
         )
     elif tmax is not None and tmax >= 33 and (cloud is None or cloud <= 55):
         category = "very_hot"
