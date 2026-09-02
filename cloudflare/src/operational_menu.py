@@ -1,4 +1,9 @@
-"""Menus enxutos e autoritativos do Butler operacional."""
+"""Menus enxutos e autoritativos do Butler operacional.
+
+O fechamento da Etapa 4 usa uma raiz minimalista e organiza descoberta por áreas
+humanas. Regras de negócio continuam nos módulos de domínio; este arquivo só
+orquestra navegação, atalhos e compatibilidade com rótulos antigos.
+"""
 
 import app
 import course_operational
@@ -15,38 +20,61 @@ from task_context_patch import _task_list
 from telegram_api import send_message
 
 
+# Raiz aprovada para o fechamento da Etapa 4.
 MAIN_KB = [
     ["➕ Adicionar", "🗓️ Hoje"],
-    ["🛒 Item faltando", "📚 Matérias"],
-    ["🏠 Cotidiano", "🏋️ Musculação"],
-    ["📘 Cursos"],
-    ["📖 Manual"],
+    ["🎓 Faculdade", "📋 Minha vida"],
+    ["🏋️ Treino", "⚙️ Mais"],
     ["🌙 Day-off"],
 ]
 
-COTIDIANO_KB = [
+FACULTY_KB = [
+    ["📚 Matérias", "🍽️ RU"],
+    ["🧠 Modo Estudo", "📘 Cursos"],
+    ["⬅️ Início"],
+]
+
+MY_LIFE_KB = [
     ["✅ Tarefas", "📅 Compromissos"],
     ["🧘 Rotinas", "🎯 Metas"],
+    ["🛒 Casa", "📌 Interesses"],
+    ["⬅️ Início"],
+]
+
+# Alias de compatibilidade: módulos antigos ainda referenciam app.COTIDIANO_KB.
+COTIDIANO_KB = MY_LIFE_KB
+
+HOUSE_KB = [
     ["🛒 O que está faltando?", "➕ Item faltando"],
-    ["📌 Ler/ver depois", "🍽️ RU"],
-    ["👤 Como me chamar", "🏠 Menu principal"],
+    ["⬅️ Minha vida"],
+]
+
+MORE_KB = [
+    ["👤 Como me chamar", "📖 Manual"],
+    ["⬅️ Início"],
+]
+
+STUDY_DISCOVERY_KB = [
+    ["📊 Status do estudo", "📚 Histórico de estudo"],
+    ["⬅️ Faculdade"],
 ]
 
 ADD_KB = [
     ["✅ Tarefa", "📅 Compromisso"],
     ["🧘 Rotinas", "🎯 Metas"],
-    ["➕ Item faltando", "🏠 Menu principal"],
+    ["➕ Item faltando"],
+    ["⬅️ Início"],
 ]
 
 RU_PUBLIC_KB = [
     ["🍽️ Cardápio de hoje", "📅 Cardápio da semana"],
     ["🗃️ Cardápios anteriores"],
-    ["⬅️ Voltar ao cotidiano"],
+    ["⬅️ Faculdade"],
 ]
 RU_OWNER_KB = [
     ["🍽️ Cardápio de hoje", "📅 Cardápio da semana"],
     ["📤 Atualizar cardápio RU", "🗃️ Cardápios anteriores"],
-    ["⬅️ Voltar ao cotidiano"],
+    ["⬅️ Faculdade"],
 ]
 RU_OPEN_TEXTS = {"🍽️ RU", "🍽️ Restaurante Universitário"}
 RU_IMPORT_STATES = {"ru_import_wait", "ru_import_confirm"}
@@ -105,6 +133,26 @@ async def _rows(stmt):
 async def _uid(db, chat_id):
     row = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(chat_id).first()
     return int(_row(row, "id")) if row else None
+
+
+async def _clear_navigation_state(db, uid):
+    """Área/Voltar é sempre rota de fuga de um wizard antigo."""
+    if not uid:
+        return
+    await app.clear_state(db, uid)
+    try:
+        await runtime_guard._clear(db, uid)
+    except Exception:
+        pass
+
+
+def _replace_button(rows, old, new):
+    return [[new if button == old else button for button in row] for row in rows]
+
+
+def _workout_keyboard(chat_id):
+    base = app.WORKOUT_KB if is_owner(chat_id) else runtime_guard.GENERIC_WORKOUT_KB
+    return _replace_button(base, "🏠 Menu principal", "⬅️ Início")
 
 
 async def _ru_source_uid(db, fallback_uid):
@@ -173,7 +221,9 @@ async def _appointment_list(db, uid):
 
 def install():
     app.MAIN_KB = [list(row) for row in MAIN_KB]
-    app.COTIDIANO_KB = [list(row) for row in COTIDIANO_KB]
+    app.COTIDIANO_KB = [list(row) for row in MY_LIFE_KB]
+    app.GROCERY_KB = [list(row) for row in HOUSE_KB]
+
     # Respostas internas do domínio nunca exibem a ação administrativa para usuários comuns.
     # O proprietário recebe o botão de importação ao abrir explicitamente o menu RU.
     ru_menu.RU_KB = [list(row) for row in RU_PUBLIC_KB]
@@ -188,7 +238,7 @@ def install():
     except Exception:
         pass
     try:
-        runtime_guard.COTIDIANO_KB = [list(row) for row in COTIDIANO_KB]
+        runtime_guard.COTIDIANO_KB = [list(row) for row in MY_LIFE_KB]
     except Exception:
         pass
 
@@ -228,6 +278,76 @@ async def handle_message(db, token, message):
         state=state,
         payload=state_payload,
     ):
+        return True
+
+    # Navegação de áreas. Rótulos antigos continuam como aliases temporários.
+    if text in {"⬅️ Início", "🏠 Menu principal"}:
+        await _clear_navigation_state(db, uid)
+        await send_message(token, chat_id, "🏠 Início", reply_markup=_kb(MAIN_KB))
+        return True
+
+    if text in {"🎓 Faculdade", "⬅️ Faculdade"}:
+        await _clear_navigation_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "🎓 Faculdade. Matérias, RU e ferramentas de estudo ficam aqui.",
+            reply_markup=_kb(FACULTY_KB),
+        )
+        return True
+
+    if text in {"📋 Minha vida", "🏠 Cotidiano", "⬅️ Minha vida", "⬅️ Voltar ao cotidiano"}:
+        await _clear_navigation_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "📋 Minha vida. Organização pessoal, casa e interesses sem transformar a raiz num painel de avião.",
+            reply_markup=_kb(MY_LIFE_KB),
+        )
+        return True
+
+    if text == "🛒 Casa":
+        await _clear_navigation_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "🛒 Casa. O que acabou e o que precisa entrar na lista fica aqui.",
+            reply_markup=_kb(HOUSE_KB),
+        )
+        return True
+
+    if text in {"🏋️ Treino", "🏋️ Musculação"}:
+        await _clear_navigation_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "🏋️ Treino. Ficha, registro e progresso sem outra camada no caminho.",
+            reply_markup=_kb(_workout_keyboard(chat_id)),
+        )
+        return True
+
+    if text == "⚙️ Mais":
+        await _clear_navigation_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "⚙️ Mais. Preferências simples e ajuda do Butler.",
+            reply_markup=_kb(MORE_KB),
+        )
+        return True
+
+    if text == "🧠 Modo Estudo":
+        await _clear_navigation_state(db, uid)
+        await send_message(
+            token,
+            chat_id,
+            "🧠 Modo Estudo\n\n"
+            "Para começar, diga por exemplo:\n"
+            "`quero estudar Física agora: ondas, exercícios`\n\n"
+            "Você também pode consultar o status ou o histórico pelos botões abaixo. "
+            "O fim do timer nunca conclui um tópico sozinho.",
+            reply_markup=_kb(STUDY_DISCOVERY_KB),
+        )
         return True
 
     # O cardápio é público para todos os usuários, mas a manutenção do TXT fica
@@ -274,16 +394,8 @@ async def handle_message(db, token, message):
         if await goal_operational.handle_message(db, token, message):
             return True
 
-    if text == "🏠 Cotidiano":
-        await send_message(
-            token,
-            chat_id,
-            "🏠 Cotidiano. Tarefas, compromissos, rotinas, metas, cardápio do RU, lista para depois e o que está faltando em casa.",
-            reply_markup=_kb(COTIDIANO_KB),
-        )
-        return True
-
     if text == "➕ Adicionar":
+        await _clear_navigation_state(db, uid)
         await send_message(token, chat_id, "O que vamos adicionar?", reply_markup=_kb(ADD_KB))
         return True
 
@@ -295,7 +407,7 @@ async def handle_message(db, token, message):
         return True
 
     if text == "📅 Compromissos":
-        await send_message(token, chat_id, await _appointment_list(db, uid), reply_markup=_kb(COTIDIANO_KB))
+        await send_message(token, chat_id, await _appointment_list(db, uid), reply_markup=_kb(MY_LIFE_KB))
         return True
 
     if text == "📅 Compromisso":
@@ -309,7 +421,7 @@ async def handle_message(db, token, message):
         return True
 
     if text in ("🛒 O que está faltando?", "🛒 Item faltando", "📋 Ver itens faltando"):
-        await send_message(token, chat_id, await app.grocery_text(db, uid), reply_markup=_kb(app.GROCERY_KB))
+        await send_message(token, chat_id, await app.grocery_text(db, uid), reply_markup=_kb(HOUSE_KB))
         return True
 
     if text in ROUTINE_DIRECT_BUTTONS:
