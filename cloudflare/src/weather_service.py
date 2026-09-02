@@ -62,6 +62,10 @@ def _number(value, default=None):
         return default
 
 
+def _heading_is_today(heading):
+    return "hoje" in (heading or "").lower()
+
+
 async def _get_json(url):
     response = await fetch(url)
     if not response.ok:
@@ -185,6 +189,7 @@ async def fetch_daily_forecast(location, target):
     day = target.isoformat()
     params = (
         f"latitude={location['latitude']}&longitude={location['longitude']}"
+        "&current=temperature_2m,apparent_temperature,weather_code,cloud_cover"
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,"
         "precipitation_probability_max,precipitation_probability_mean,"
         "precipitation_sum,precipitation_hours,cloud_cover_mean,wind_speed_10m_max"
@@ -192,6 +197,7 @@ async def fetch_daily_forecast(location, target):
     )
     data = await _get_json(f"{FORECAST_URL}?{params}")
     daily = data.get("daily") or {}
+    current = data.get("current") or {}
     times = daily.get("time") or []
     if not times:
         raise ValueError("previsão indisponível")
@@ -200,6 +206,7 @@ async def fetch_daily_forecast(location, target):
         values = daily.get(name) or []
         return values[0] if values else default
 
+    current_code = current.get("weather_code")
     return {
         "date": times[0],
         "weather_code": int(first("weather_code", -1)),
@@ -211,6 +218,10 @@ async def fetch_daily_forecast(location, target):
         "rain_hours": first("precipitation_hours"),
         "cloud_cover_mean": first("cloud_cover_mean"),
         "wind_max": first("wind_speed_10m_max"),
+        "current_temperature": current.get("temperature_2m"),
+        "current_apparent_temperature": current.get("apparent_temperature"),
+        "current_weather_code": int(current_code) if current_code is not None else None,
+        "current_cloud_cover": current.get("cloud_cover"),
     }
 
 
@@ -247,6 +258,21 @@ def _day_condition(forecast):
     return WEATHER_CODES.get(forecast.get("weather_code"), ("🌤️", "condição variável"))
 
 
+def _current_line(forecast):
+    current_temp = _number(forecast.get("current_temperature"))
+    if current_temp is None:
+        return None
+
+    current_code = forecast.get("current_weather_code")
+    icon, condition = WEATHER_CODES.get(current_code, ("🌤️", "condição variável"))
+    apparent = _number(forecast.get("current_apparent_temperature"))
+
+    line = f"• Agora: {icon} {condition}, {round(current_temp)} °C"
+    if apparent is not None and abs(apparent - current_temp) >= 2:
+        line += f" (sensação {round(apparent)} °C)"
+    return line
+
+
 def format_forecast(location, forecast, heading="Tempo"):
     icon, condition = _day_condition(forecast)
     tmin = _number(forecast.get("temperature_min"))
@@ -257,12 +283,17 @@ def format_forecast(location, forecast, heading="Tempo"):
     rain_hours = _number(forecast.get("rain_hours"))
     wind = _number(forecast.get("wind_max"))
 
-    lines = [
-        f"{icon} {heading} — {location['city']}",
-        forecast_comment(forecast, heading=heading, city=location["city"]),
-    ]
+    lines = [f"{icon} {heading} — {location['city']}"]
+
+    if _heading_is_today(heading):
+        current = _current_line(forecast)
+        if current:
+            lines.append(current)
+
+    lines.append(forecast_comment(forecast, heading=heading, city=location["city"]))
+
     if tmin is not None and tmax is not None:
-        lines.append(f"• {condition}; {round(tmin)}–{round(tmax)} °C")
+        lines.append(f"• No dia: {condition}; {round(tmin)}–{round(tmax)} °C")
 
     if rain_sum is not None:
         if rain_sum <= 0.1:
