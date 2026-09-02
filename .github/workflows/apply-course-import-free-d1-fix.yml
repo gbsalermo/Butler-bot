@@ -17,6 +17,13 @@ jobs:
           ref: fix/course-import-free-d1-limit
           fetch-depth: 0
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest "pypdf>=5,<7"
+
       - name: Apply patch
         run: python tools/apply_course_import_free_d1_fix.py
 
