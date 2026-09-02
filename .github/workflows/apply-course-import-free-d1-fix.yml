@@ -29,8 +29,9 @@ jobs:
 
       - name: Run focused tests
         run: |
-          python -m py_compile cloudflare/src/course_domain.py cloudflare/src/course_importer.py cloudflare/src/course_stage4.py
-          python -m pytest cloudflare/tests/test_stage4_5_course_import.py -q
+          cd cloudflare
+          python -m py_compile src/course_domain.py src/course_importer.py src/course_stage4.py
+          python -m pytest tests/test_stage4_5_course_import.py -q
 
       - name: Remove temporary files
         run: |
