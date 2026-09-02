@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import app
 import language_primitives as language
+from grocery_phrase_patch import unscheduled_purchase_reminder_items
 from nlu import parse_date, parse_time, validate_future
 from settings import UTC_OFFSET_HOURS
 from telegram_api import send_message
@@ -148,6 +149,13 @@ async def handle_message(db, token, message):
         return await _save(db, token, chat_id, uid, title, due, tm)
 
     if not _looks_like_request(text):
+        return False
+
+    # Regra conversacional do domínio Casa: sem data/hora, pedir para lembrar de
+    # comprar algo significa registrar o item na lista. O handler de compras será
+    # executado depois deste e fará a persistência. Se houver data/hora, continua
+    # sendo um lembrete temporal normal.
+    if unscheduled_purchase_reminder_items(text):
         return False
 
     title = _clean_title(text)
