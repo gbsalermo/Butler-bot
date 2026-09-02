@@ -15,7 +15,10 @@ from grocery_phrase_patch import handle_message as handle_grocery
 from notification_ack import handle_message as handle_notification_ack
 from operational_informal_fastpath import handle_message as handle_informal_action
 from quick_time import handle_message as handle_quick_time
-from routine_natural_fastpath import handle_message as handle_natural_routine
+from routine_natural_fastpath import (
+    _looks_like_completion as looks_like_routine_completion,
+    handle_message as handle_natural_routine,
+)
 from study_mode import handle_message as handle_study_mode, install as install_study_mode
 from task_context_patch import handle_message as handle_task_context
 from ux_bugfixes import handle_global_navigation
@@ -98,6 +101,8 @@ def is_core_candidate(text):
         return False
     stripped = language.normalize_text(language.strip_butler(text))
     if stripped in CORE_BUTTONS:
+        return True
+    if looks_like_routine_completion(text):
         return True
     if _has_core_action(text):
         return True
