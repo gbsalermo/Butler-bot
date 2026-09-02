@@ -1,0 +1,75 @@
+name: Apply roadmap language update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-roadmap-language-update.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Update official roadmap references
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          markdown_files = list(Path('.').rglob('*.md'))
+          for path in markdown_files:
+              text = path.read_text(encoding='utf-8')
+              original = text
+
+              # Roadmap compacto usado em README/STATUS/CONTINUIDADE.
+              line = '10. 🌐 Abertura pública/capacidade/escala    ⏳'
+              add = '11. 🌍 Idiomas e internacionalização          ⏳'
+              if line in text and add not in text:
+                  text = text.replace(line, line + '\n' + add)
+
+              # Variante curta do Dossiê Mestre.
+              line2 = '10. 🌐 Abertura pública/escala               ⏳'
+              if line2 in text and add not in text:
+                  text = text.replace(line2, line2 + '\n' + add)
+
+              # Trilha visual definitiva.
+              line3 = 'ETAPA 10 🌐 Abertura pública + capacidade/escala   ⏳'
+              if line3 in text and 'ETAPA 11 🌍 Idiomas e internacionalização' not in text:
+                  text = text.replace(
+                      line3,
+                      line3 + '\n             ↓\nETAPA 11 🌍 Idiomas e internacionalização          ⏳',
+                  )
+
+              # IA continua pós-roadmap, portanto passa a depender da nova última etapa.
+              text = text.replace('Etapa 10 + gate de estabilidade', 'Etapa 11 + gate de estabilidade')
+
+              # Etapa 10 deixa de ser a última etapa oficial.
+              text = text.replace(
+                  '**Posição:** última etapa do roadmap, depois da Etapa 9 — Hardening  ',
+                  '**Posição:** penúltima etapa do roadmap, depois da Etapa 9 — Hardening e antes da Etapa 11 — Idiomas e internacionalização  ',
+              )
+
+              if text != original:
+                  path.write_text(text, encoding='utf-8')
+
+          # O arquivo é temporário e não deve permanecer no repositório.
+          Path('.github/workflows/apply-roadmap-language-update.yml').unlink()
+          PY
+
+      - name: Commit documentation update
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: adicionar idiomas ao fim do roadmap"
+          git push origin HEAD:main
