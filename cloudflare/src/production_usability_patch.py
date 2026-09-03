@@ -9,6 +9,7 @@ operacionais com uma definição própria. Menus são autoritativos em
 import json
 
 import app
+import inbox_operational
 import operational_menu
 from nlu import parse_date, parse_time, validate_future
 from performance_patch import reset_request_cache
@@ -109,7 +110,17 @@ async def ensure_schema(db):
     ).run()
 
 
+def _has_button(rows, label):
+    return any(label in row for row in rows)
+
+
 def install():
+    # A Etapa 5 entra como descoberta em Minha vida e no fluxo Adicionar, sem
+    # aumentar a raiz minimalista aprovada no fechamento da Etapa 4.
+    if not _has_button(operational_menu.MY_LIFE_KB, "📥 Inbox"):
+        operational_menu.MY_LIFE_KB.insert(2, ["📥 Inbox"])
+    if not _has_button(operational_menu.ADD_KB, "📥 Capturar na Inbox"):
+        operational_menu.ADD_KB.insert(2, ["📥 Capturar na Inbox"])
     app.MAIN_KB = [list(row) for row in operational_menu.MAIN_KB]
     app.COTIDIANO_KB = [list(row) for row in operational_menu.COTIDIANO_KB]
 
@@ -287,6 +298,14 @@ async def handle_message(db, token, message):
     if uid is None:
         return False
     state, payload = await app.get_state(db, uid)
+
+    # Inbox roda aqui para aproveitar o usuário/estado já consultados e, ao mesmo
+    # tempo, ficar antes dos parsers de criação. O gate lexical dentro do módulo é
+    # estreito e não captura um simples "anota".
+    if await inbox_operational.handle_message(
+        db, token, message, uid=uid, state=state, payload=payload
+    ):
+        return True
 
     relevant_state = state in {"natural_when", "natural_when_time"} or bool(state and state.startswith("later_"))
     if not relevant_state and text not in LATER_ENTRY_TEXTS:

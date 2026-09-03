@@ -1,8 +1,8 @@
 # Butler — Manual do Usuário
 
-**Data-base:** 02/09/2026
+**Data-base:** 03/09/2026
 
-Butler é um assistente pessoal multiusuário no Telegram. Ele organiza tarefas, compromissos, rotinas, metas, universidade, estudo, cursos, musculação, itens faltando, cardápio do RU, clima e listas para depois.
+Butler é um assistente pessoal multiusuário no Telegram. Ele organiza tarefas, compromissos, rotinas, metas, universidade, estudo, cursos, musculação, itens faltando, caixa de entrada, cardápio do RU, clima e listas para depois.
 
 O Butler tenta aceitar texto natural, mas mudanças importantes continuam sendo determinísticas. Quando uma ação é ambígua ou exige confirmação, o bot pergunta antes de gravar.
 
@@ -44,6 +44,7 @@ Durante a transição, alguns botões antigos ainda são aceitos como aliases, c
 ```text
 ✅ Tarefas            📅 Compromissos
 🧘 Rotinas            🎯 Metas
+📥 Inbox
 🛒 Casa               📌 Interesses
 ⬅️ Início
 ```
@@ -146,6 +147,63 @@ quero terminar o projeto X
 ```
 
 Ações disponíveis incluem registrar progresso, editar, concluir, remover e, quando aplicável, vincular uma rotina. Em listas filtradas, a numeração se refere ao conjunto mostrado na tela.
+
+---
+
+## 4A. Caixa de entrada / captura rápida
+
+Use a Inbox quando você quer **guardar algo agora e decidir depois o que aquilo é**.
+
+Pelo menu:
+
+```text
+📋 Minha vida
+→ 📥 Inbox
+```
+
+ou pelo atalho:
+
+```text
+➕ Adicionar
+→ 📥 Capturar na Inbox
+```
+
+Também funciona por texto quando a intenção de Inbox é explícita:
+
+```text
+joga na inbox: revisar autenticação do SGL
+anota estudar cálculo pra eu organizar depois
+```
+
+Capturar na Inbox **não cria tarefa nem compromisso automaticamente**.
+
+Dentro dela você pode:
+
+```text
+➕ Capturar
+📋 Pendentes
+🗄️ Arquivados
+```
+
+Ao abrir um item pendente:
+
+```text
+🧭 Processar
+🗄️ Arquivar
+```
+
+Processar permite escolher explicitamente:
+
+```text
+✅ Virar tarefa
+📅 Virar compromisso
+```
+
+Quando um item vira tarefa ou compromisso, ele sai dos pendentes da Inbox e fica ligado ao objeto criado. O Butler protege essa conversão contra repetição para não gerar duas tarefas iguais por causa de retry do Telegram.
+
+Arquivar não cria nada. Um item arquivado pode ser reaberto depois.
+
+A palavra `anota` sozinha não força uma captura na Inbox; isso evita sequestrar pedidos normais de tarefa, lembrete e outros domínios.
 
 ---
 
@@ -338,6 +396,7 @@ Se o serviço meteorológico falhar, a agenda não deve desaparecer por causa di
 ```text
 ✅ Tarefa              📅 Compromisso
 🧘 Rotinas             🎯 Metas
+📥 Capturar na Inbox
 ➕ Item faltando
 ⬅️ Início
 ```
@@ -367,6 +426,7 @@ acabou o café
 segunda não vou pra Sistemas Digitais
 hoje não vou conseguir treinar
 cria uma rotina de estudar inglês
+joga na inbox: revisar autenticação do SGL
 ```
 
 O contexto curto permite referências recentes como:
@@ -420,7 +480,7 @@ Ações exclusivas não devem ficar disponíveis operacionalmente para usuários
 
 ## 19. Privacidade operacional
 
-Dados pessoais são isolados por usuário no banco. Um usuário não deve conseguir listar ou alterar tarefas, metas, cursos, estudos ou outros registros de outra conta.
+Dados pessoais são isolados por usuário no banco. Um usuário não deve conseguir listar ou alterar tarefas, metas, cursos, estudos, Inbox ou outros registros de outra conta.
 
 Os registros de erro de runtime guardam metadados técnicos, não o texto completo da conversa.
 
@@ -432,6 +492,6 @@ Os registros de erro de runtime guardam metadados técnicos, não o texto comple
 - IA/Groq está planejada somente para depois do roadmap principal e do gate de estabilidade;
 - importações oficiais de acadêmico/cursos não dependem de OCR;
 - `📘 Cursos` estruturados permanece em standby e owner-only até nova estabilização;
-- recursos futuros de Inbox/Projetos/Memória seletiva ainda não devem ser tratados como prontos.
+- recursos futuros de Projetos/Memória seletiva ainda não devem ser tratados como prontos.
 
 Para o estado técnico exato consulte `docs/STATUS_ATUAL.md`.
