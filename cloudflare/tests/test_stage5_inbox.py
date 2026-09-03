@@ -92,6 +92,11 @@ def test_natural_capture_requires_explicit_inbox_semantics():
     assert inbox_operational._natural_capture("me lembra de estudar amanhã") == (False, None)
 
 
+def test_dynamic_archived_button_survives_telegram_unicode_variant():
+    assert inbox_operational._item_id("🗄️ #7 item antigo") == 7
+    assert inbox_operational._item_id("📥 #8 item pendente") == 8
+
+
 def test_conversion_to_daily_item_is_idempotent_and_marks_inbox_once():
     async def scenario():
         db = FakeD1()
@@ -170,6 +175,35 @@ def test_operational_natural_capture_then_process_to_task_without_duplication():
             assert converted["converted_domain"] == "tarefa"
             assert db.conn.execute("SELECT COUNT(*) FROM daily_items").fetchone()[0] == 1
             assert any("não ficou uma cópia" in text for _, text, _ in sent)
+        finally:
+            inbox_operational.send_message = original
+
+    asyncio.run(scenario())
+
+
+def test_back_to_my_life_is_a_real_escape_route_from_inbox_state():
+    async def scenario():
+        db = FakeD1()
+        sent = []
+
+        async def fake_send(token, chat_id, text, reply_markup=None):
+            sent.append((text, reply_markup))
+            return True
+
+        original = inbox_operational.send_message
+        inbox_operational.send_message = fake_send
+        try:
+            item_id = await inbox_domain.capture(db, 10, "coisa para depois")
+            await inbox_operational._show_item(db, "token", 1010, 10, item_id)
+            state = db.conn.execute("SELECT state FROM user_sessions WHERE user_id=10").fetchone()[0]
+            assert state == "inbox_view"
+            assert await inbox_operational.handle_message(
+                db, "token", {"chat": {"id": 1010}, "text": "⬅️ Minha vida"}
+            )
+            state = db.conn.execute("SELECT state FROM user_sessions WHERE user_id=10").fetchone()[0]
+            assert state is None
+            assert sent[-1][0] == "📋 Minha vida"
+            assert sent[-1][1]["keyboard"] == operational_menu.MY_LIFE_KB
         finally:
             inbox_operational.send_message = original
 
