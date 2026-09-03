@@ -31,6 +31,7 @@ def test_areas_group_features_without_losing_fast_actions():
     assert operational_menu.MY_LIFE_KB == [
         ["✅ Tarefas", "📅 Compromissos"],
         ["🧘 Rotinas", "🎯 Metas"],
+        ["📥 Inbox"],
         ["🛒 Casa", "📌 Interesses"],
         ["⬅️ Início"],
     ]
@@ -73,6 +74,7 @@ def test_academic_exam_actions_survive_menu_reorganization():
 
 def test_install_synchronizes_runtime_navigation():
     operational_menu.install()
+    production_usability_patch.install()
     assert app.MAIN_KB == operational_menu.MAIN_KB
     assert app.COTIDIANO_KB == operational_menu.MY_LIFE_KB
     assert app.GROCERY_KB == operational_menu.HOUSE_KB
