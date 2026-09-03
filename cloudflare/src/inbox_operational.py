@@ -44,6 +44,7 @@ DIRECT_TEXTS = {
     "📋 Pendentes",
     "🗄️ Arquivados",
     "⬅️ Inbox",
+    "⬅️ Minha vida",
     "⬅️ Voltar ao item",
     "🧭 Processar",
     "🗄️ Arquivar",
@@ -222,6 +223,11 @@ async def _handle_state(db, token, chat_id, uid, text, state, payload):
     if not state or not str(state).startswith("inbox_"):
         return False
 
+    if text == "⬅️ Minha vida":
+        await app.clear_state(db, uid)
+        await _send(token, chat_id, "📋 Minha vida", app.COTIDIANO_KB)
+        return True
+
     if text in {"❌ Cancelar ação", "/cancelar"}:
         item_id = payload.get("inbox_id")
         await app.clear_state(db, uid)
@@ -372,6 +378,10 @@ async def handle_message(db, token, message, *, uid=None, state=_STATE_UNSET, pa
     if text == "🗄️ Arquivados":
         await app.clear_state(db, uid)
         return await _show_list(db, token, chat_id, uid, archived=True)
+    if text == "⬅️ Minha vida":
+        await app.clear_state(db, uid)
+        await _send(token, chat_id, "📋 Minha vida", app.COTIDIANO_KB)
+        return True
 
     item_id = _item_id(text)
     if item_id is not None:
