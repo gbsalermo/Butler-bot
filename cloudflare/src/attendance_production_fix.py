@@ -104,8 +104,16 @@ async def _dispatch_pre(db, token, session, uid, chat_id, sid, today, now, start
     pre_target = start_target - timedelta(minutes=PRE_CLASS_MINUTES)
     if not (pre_target <= now < start_target):
         return
+
+    name = attendance._row(session, "name")
+    start_text = attendance._row(session, "start_time")
     pre_key = f"attendance:pre:{today}:{sid}"
-    if await _already_sent(db, uid, pre_key):
+    legacy_key = f"class:{today}:{name}:{start_text}"
+
+    # O scheduler legado ainda roda por compatibilidade com outros recursos.
+    # Usar as duas chaves faz o aviso T-10 novo e o legado se reconhecerem como
+    # o mesmo evento, evitando duas mensagens para a mesma aula.
+    if await _already_sent(db, uid, pre_key, legacy_key):
         return
 
     minutes = max(0, int((start_target - now).total_seconds() / 60))
@@ -113,11 +121,12 @@ async def _dispatch_pre(db, token, session, uid, chat_id, sid, today, now, start
         token,
         chat_id,
         f"⏰ Aula em {minutes if minutes else 'menos de 1'} min: "
-        f"{attendance._row(session,'name')} — {attendance._row(session,'start_time')}–{end_text}"
+        f"{name} — {start_text}–{end_text}"
         + (f" ({attendance._row(session,'location')})" if attendance._row(session, "location") else "")
         + "\nVai ajeitando as coisas. O conhecimento infelizmente ainda exige presença física às vezes.",
     )
     await _mark_sent(db, uid, pre_key)
+    await _mark_sent(db, uid, legacy_key)
 
 
 async def _dispatch_start(db, token, session, uid, chat_id, sid, today, now, start_target, end_target, end_text):
