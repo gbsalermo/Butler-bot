@@ -5,6 +5,7 @@ uma escolha explícita e usa o gateway ``core_actions`` para não duplicar regra
 """
 from __future__ import annotations
 
+from datetime import date
 import re
 
 import app
@@ -51,7 +52,8 @@ DIRECT_TEXTS = {
     "📅 Virar compromisso",
 }
 ITEM_BUTTON_RE = re.compile(r"^📥\s+#(\d+)\b")
-ARCHIVED_BUTTON_RE = re.compile(r"^🗄️\s+#(\d+)\b")
+# _item_id remove U+FE0F antes do match para sobreviver às variantes do Telegram.
+ARCHIVED_BUTTON_RE = re.compile(r"^🗄\s+#(\d+)\b")
 
 
 def _kb(rows):
@@ -108,7 +110,6 @@ def _natural_capture(text):
     if explicit_inbox:
         if ":" in raw:
             return True, raw.split(":", 1)[1].strip()
-        # Sem dois pontos, remove somente uma instrução explícita no início.
         content = re.sub(
             r"^(?:joga|manda|bota|p[oõ]e|anota|guarda|salva)\s+(?:isso\s+)?(?:na|pra|para\s+a)?\s*(?:inbox|caixa\s+de\s+entrada)\s*",
             "",
@@ -117,7 +118,6 @@ def _natural_capture(text):
         ).strip(" :-")
         return True, content
 
-    # Ex.: "anota revisar autenticação pra eu organizar depois"
     content = re.sub(r"^(?:anota|guarda|salva)\s+", "", raw, flags=re.IGNORECASE)
     content = re.sub(
         r"\s+(?:pra|para)(?:\s+eu)?\s+organizar\s+depois\s*$",
@@ -248,12 +248,7 @@ async def _handle_state(db, token, chat_id, uid, text, state, payload):
             if not item or _row(item, "status") != "pending":
                 return await _show_item(db, token, chat_id, uid, item_id)
             await app.set_state(db, uid, "inbox_process", {"inbox_id": item_id})
-            await _send(
-                token,
-                chat_id,
-                "O que esse item virou? Eu só converto depois da sua escolha.",
-                PROCESS_KB,
-            )
+            await _send(token, chat_id, "O que esse item virou? Eu só converto depois da sua escolha.", PROCESS_KB)
             return True
         if text == "🗄️ Arquivar":
             await inbox_domain.archive(db, uid, item_id)
@@ -308,7 +303,10 @@ async def _handle_state(db, token, chat_id, uid, text, state, payload):
         if tm is None and not (text == "⏭️ Sem horário" or n in {"sem horario", "sem hora"}):
             await _send(token, chat_id, "Não reconheci o horário. Use `15h`, `15:30` ou Sem horário.", TIME_KB)
             return True
-        due = app.parse_date(payload["due_date"], app.now_local().date()) if payload.get("due_date") else None
+        try:
+            due = date.fromisoformat(payload["due_date"]) if payload.get("due_date") else None
+        except ValueError:
+            due = None
         if due:
             ok, msg = app.validate_future(due, tm, app.now_local())
             if not ok:
