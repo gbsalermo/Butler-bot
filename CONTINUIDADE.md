@@ -1,6 +1,6 @@
 # Continuidade do desenvolvimento — Butler
 
-**Data-base:** 01/09/2026
+**Data-base:** 08/09/2026
 
 > Este é o handoff duradouro do projeto. Para andamento exato use `docs/STATUS_ATUAL.md`; para runtime use `docs/ARCHITECTURE.md`; para visão geral use `docs/BUTLER_DOSSIE_MESTRE.md`; para a ordem oficial use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
 
@@ -26,7 +26,9 @@ Princípios permanentes:
 10. `cloudflare/migrations/` é a fonte formal do schema D1;
 11. `ensure_schema()` é apenas tolerância operacional;
 12. CI verde não é prova de deploy Cloudflare;
-13. não criar, reorganizar nem pular o roadmap oficial por conta própria.
+13. não criar, reorganizar nem pular o roadmap oficial por conta própria;
+14. existência técnica de uma feature não encerra o trabalho se o fluxo cotidiano continuar excessivamente trabalhoso;
+15. reduzir passos nunca autoriza inferência ampla ou escrita silenciosa.
 
 ---
 
@@ -79,23 +81,24 @@ Quando uma lista numerada foi exibida, posições temporárias devem continuar v
 
 ---
 
-## 4. Roadmap oficial
+## 4. Roadmap oficial atual
 
 ```text
 0. 🧹 Arrumar a casa                         ✅
 1. 🗣️ Linguagem natural + conversa real     ✅
 2. 🎓 Importação acadêmica confiável         ✅
 3. ⏱️ Auxiliares de Tempo / Modo Estudo     ✅
-4. 📚 Cursos e trilhas de estudo             ▶️ fechamento pendente
-   4.1 Modelo + autoridade                   ✅
-   4.2 CRUD + navegação                      ✅
-   4.3 Progresso / Continuar curso           ✅
-   4.4 Integração com Modo Estudo            ✅
-   4.5 Importação                            ✅
-   4.6 Gate final                            ✅
-   fechamento: menu por áreas da vida        ▶️ próximo e obrigatório
-5. 📥 Caixa de entrada                       ⏳
-6. 🗂️ Projetos e trabalho                    ⏳
+4. 📚 Cursos e trilhas de estudo             ✅
+   fechamento: menu por áreas da vida        ✅
+5. 📥 Caixa de entrada                       ✅
+5.5 ⚡ Usabilidade operacional                ▶️ atual
+   5.5.1 Rotinas múltiplas                   ▶️ atual
+   5.5.2 Edição direta                       ⏳
+   5.5.3 Ações em lote                       ⏳
+   5.5.4 Respostas curtas                    ⏳
+   5.5.5 Fluxos contínuos                    ⏳
+   5.5.6 Gate de UX real                     ⏳
+6. 🗂️ Projetos e trabalho                    ⏳ bloqueada
 7. 🧭 Resumo/contexto/priorização             ⏳
 8. 🧠 Memória + Library seletiva             ⏳
 9. 🔒 Hardening                              ⏳
@@ -105,25 +108,45 @@ Quando uma lista numerada foi exibida, posições temporárias devem continuar v
 
 A trilha IA/Groq permanece pós-roadmap, somente após Etapa 11 + gate de estabilidade.
 
-**Não iniciar Etapa 5 antes do fechamento do menu por áreas da vida.**
+---
+
+## 5. Decisão duradoura de 08/09/2026 — Etapa 5.5
+
+Após uso real do produto, foi decidido **não iniciar a Etapa 6 imediatamente após a Inbox**.
+
+Motivo: o Butler já acumulou funcionalidade suficiente, mas alguns fluxos ainda exigem passos demais para operações simples. O roadmap passa a medir também a qualidade operacional do uso cotidiano.
+
+A Etapa 5.5 foi inserida oficialmente entre 5 e 6 com esta ordem:
+
+```text
+5.5.1 Rotinas múltiplas e criação contínua
+→ 5.5.2 Edição direta
+→ 5.5.3 Ações em lote
+→ 5.5.4 Respostas curtas
+→ 5.5.5 Fluxos contínuos
+→ 5.5.6 Gate de UX real
+→ Etapa 6
+```
+
+Documento detalhado:
+
+```text
+docs/ETAPA_5_5_USABILIDADE_OPERACIONAL.md
+```
+
+A Etapa 6 permanece bloqueada até o gate 5.5.6.
 
 ---
 
-## 5. Etapas 0–3 consolidadas
+## 6. Domínios consolidados
 
-### Etapa 0 — Arrumar a casa ✅
+### Tarefas / compromissos / rotinas / metas
 
-- `entry.py` governa precedência do dispatcher;
-- `operational_menu.py` governa o menu principal;
-- `reliable_reminders.py` governa lembretes de `daily_items`;
-- schema formal vem de migrations;
-- runtime Cloudflare ativo é separado da raiz histórica.
+Continuam multiusuário e determinísticos. Seleção numérica deve manter o objeto exibido entre turnos.
 
-### Etapa 1 — Linguagem natural + conversa real ✅
+A Etapa 5.5 pode melhorar UX, edição direta e lotes, mas não pode criar mutações ambíguas.
 
-Negação, contexto curto, correções e mensagens compostas continuam conservadores. Reconhecer uma intenção não autoriza escrita silenciosa.
-
-### Etapa 2 — Importação acadêmica confiável ✅
+### Acadêmico
 
 Modelo:
 
@@ -134,9 +157,7 @@ subject_sessions
 
 Entrada oficial de grade: TXT ou PDF textual pesquisável/selecionável com prévia e confirmação. Presença nunca é presumida.
 
-### Etapa 3 — Tempo / Modo Estudo ✅
-
-Migrations:
+### Tempo / Modo Estudo
 
 ```text
 0010_quick_timers.sql
@@ -151,103 +172,18 @@ Invariante:
 fim de foco/timer ≠ conclusão de tópico
 ```
 
----
+### Cursos estruturados
 
-## 6. Domínios existentes
-
-Tarefas, compromissos, rotinas e metas continuam multiusuário e determinísticos. Seleção numérica deve manter o objeto exibido entre turnos.
-
-O cardápio do RU é compartilhado para leitura, mas manutenção/importação continua restrita ao proprietário enquanto essa política permanecer documentada.
-
-Ler/Ver Depois possui:
-
-```text
-📚 Livros
-🎬 Filmes
-🎓 Cursos
-🗂️ Outras
-```
-
-**`🎓 Cursos` é backlog simples. Nunca reinterpretar silenciosamente como o domínio estruturado `📘 Cursos`.**
-
-Musculação mantém ficha/progresso por usuário. Carga e repetição só existem quando informadas.
-
----
-
-## 7. Etapa 4 — Cursos e trilhas
-
-### 4.1 — Modelo + autoridade ✅
-
-Migration:
+Ativos principais:
 
 ```text
 0013_courses.sql
-```
-
-Modelo:
-
-```text
-Curso
-├── Módulos
-│   └── Conteúdos
-│       ├── Materiais
-│       └── Atividades
-└── Eventos / histórico
-```
-
-Autoridade única:
-
-```text
-cloudflare/src/course_domain.py
-```
-
-Modos:
-
-```text
-self_paced
-live
-```
-
-Status de conteúdo:
-
-```text
-pending
-completed
-skipped
-```
-
-`skipped` é resolvido, não concluído/aprendido.
-
-### 4.2 — CRUD + navegação ✅
-
-Camada:
-
-```text
-cloudflare/src/course_operational.py
-```
-
-Entregue: criar/editar/arquivar/reativar curso; módulos; conteúdos; calendário `scheduled_at`; navegação sem progresso implícito.
-
-Snapshot funcional histórico: `4987327cae69e16d9973bee4a97aa3229c36f5d2`.
-
-### 4.3 — Progresso + Continuar curso ✅
-
-Camada incremental:
-
-```text
-cloudflare/src/course_stage4.py
-```
-
-Operações:
-
-```text
-▶️ Continuar curso
-📊 Progresso
-✅ Concluir conteúdo
-⏭️ Pular conteúdo
-↩️ Voltar para pendente
-🏁 Concluir curso
-↩️ Reabrir curso
+0014_course_study_links.sql
+course_domain.py
+course_operational.py
+course_stage4.py
+course_study_bridge.py
+course_importer.py
 ```
 
 Invariantes:
@@ -255,89 +191,48 @@ Invariantes:
 ```text
 abrir/navegar         ≠ concluir
 Continuar curso       ≠ concluir
+fim do Modo Estudo    ≠ concluir conteúdo
 último item resolvido ≠ concluir curso
 ```
 
-Conclusão do curso exige confirmação explícita.
+`🎓 Cursos` em Ler/Ver Depois continua sendo backlog simples e não o domínio estruturado `📘 Cursos`.
 
-### 4.4 — Integração com Modo Estudo ✅
+### Inbox
 
-Migration:
-
-```text
-0014_course_study_links.sql
-```
-
-Ponte:
+Migration e autoridade:
 
 ```text
-cloudflare/src/course_study_bridge.py
+0015_inbox.sql
+inbox_domain.py
+inbox_operational.py
 ```
 
-Conteúdo pendente de curso ativo pode iniciar Modo Estudo, mas:
+Captura não classifica nem executa automaticamente. Conversão para tarefa/compromisso é explícita e idempotente.
+
+---
+
+## 7. Etapa 5.5.1 — decisão de implementação atual
+
+O schema de `routines` já aceita várias rotinas por usuário; não existe constraint que limite uma rotina ativa por usuário.
+
+O primeiro problema corrigido é de linguagem/continuidade de fluxo. Depois de criar uma rotina, formas naturais como:
 
 ```text
-tempo de foco ≠ concluir conteúdo
-fim do tópico ≠ concluir conteúdo
-fim da sessão ≠ concluir conteúdo
+cria outra rotina de Academia...
+adiciona mais uma rotina Curso DIO...
 ```
 
-Sessão ativa/pausada não é substituída silenciosamente.
+passam a ser reconhecidas explicitamente pelo parser de rotina e pelo fast path.
 
-### 4.5 — Importação ✅
-
-Parser/orquestrador:
+Arquivos do primeiro incremento:
 
 ```text
-cloudflare/src/course_importer.py
+cloudflare/src/routine_natural_fastpath.py
+cloudflare/src/core_fast_path.py
+cloudflare/tests/test_stage5_5_operational_usability.py
 ```
 
-Entrada Telegram:
-
-```text
-📥 Importar curso
-```
-
-Aceita TXT, PDF textual pesquisável ou texto colado no formato explícito:
-
-```text
-CURSO:
-TIPO:
-DESCRICAO:
-[MÓDULO]
-[CONTEÚDO]
-[MATERIAL]
-[ATIVIDADE]
-```
-
-Princípios:
-
-- parser determinístico;
-- linha desconhecida/ambígua bloqueia importação;
-- PDF sem texto pesquisável é recusado; sem OCR;
-- plano inteiro é validado antes da escrita;
-- sempre mostrar prévia;
-- prévia não persiste nada;
-- somente confirmação explícita persiste;
-- persistência usa funções de `course_domain.py`;
-- conteúdos/atividades importados começam pendentes.
-
-### 4.6 — Gate final ✅
-
-Regressões:
-
-```text
-cloudflare/tests/test_stage4_3_course_progress.py
-cloudflare/tests/test_stage4_4_course_study_bridge.py
-cloudflare/tests/test_stage4_5_course_import.py
-cloudflare/tests/test_stage4_6_course_gate.py
-```
-
-Gate cobre ordem self-paced, calendário live, progresso explícito, histórico, integração com Modo Estudo sem progresso automático, importação com prévia e isolamento multiusuário.
-
-Evidência de código: commit `7b41c42d4f151b126f405c7be9bceffcd452b9f9`, GitHub Actions `Butler regression` run #286, job `deterministic-regression` verde.
-
-**PR final de merge: #46.** O PR draft #45 foi fechado sem merge por limitação do conector ao convertê-lo para Ready e substituído pelo #46 usando a mesma branch funcional.
+O gate 5.5.1 só fecha quando houver regressão completa provando várias rotinas persistidas, listadas, editadas, concluídas e agendadas independentemente.
 
 ---
 
@@ -358,9 +253,12 @@ Evidência de código: commit `7b41c42d4f151b126f405c7be9bceffcd452b9f9`, GitHub
 0012_runtime_errors.sql
 0013_courses.sql
 0014_course_study_links.sql
+0015_inbox.sql
 ```
 
 Migration destrutiva exige backup/export D1 e plano de rollback. Não usar `ensure_schema()` como substituto de migration.
+
+A Etapa 5.5 deve preferir corrigir fluxo/autoridade existente e não adicionar schema sem necessidade real.
 
 ---
 
@@ -385,22 +283,19 @@ Regras:
 
 ## 10. Próximo trabalho oficial
 
-A Etapa 4.1–4.6 está concluída. Falta o fechamento obrigatório já previsto no roadmap:
+Continuar **Etapa 5.5.1 — Rotinas múltiplas e criação contínua**.
 
-**reorganizar o menu por áreas da vida.**
+Ordem:
 
-Essa reorganização deve usar os domínios atuais como fonte de verdade, não recriar handlers concorrentes e não reinterpretar `🎓 Cursos` como `📘 Cursos`.
-
-Sequência:
-
-1. confirmar merge/CI do PR #46;
-2. verificar deploy Cloudflare separadamente;
-3. ler `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` e o documento do fechamento;
-4. implementar o menu por áreas da vida;
-5. atualizar testes de contrato do menu;
-6. rodar regressão completa;
-7. atualizar documentação;
-8. somente então liberar a **Etapa 5 — Caixa de entrada**.
+1. validar CI do primeiro incremento;
+2. criar regressão integrada com pelo menos 3 rotinas do mesmo usuário;
+3. provar listagem completa;
+4. provar edição isolada;
+5. provar conclusão isolada;
+6. provar scheduler independente por rotina;
+7. revisar passos desnecessários do fluxo de criação;
+8. fechar 5.5.1;
+9. somente então iniciar 5.5.2 — Edição direta.
 
 ---
 
@@ -411,9 +306,10 @@ Antes de alterar qualquer coisa:
 1. ler `docs/STATUS_ATUAL.md`;
 2. ler este `CONTINUIDADE.md`;
 3. ler `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`;
-4. confirmar `main` e deploy real;
-5. identificar o módulo autoritativo do domínio;
-6. não criar novo roadmap;
-7. não avançar etapa sem gate/regressão da anterior.
+4. abrir `docs/ETAPA_5_5_USABILIDADE_OPERACIONAL.md`;
+5. confirmar `main`, branch atual e deploy real;
+6. identificar o módulo autoritativo do domínio;
+7. não criar novo roadmap;
+8. não avançar etapa sem gate/regressão da anterior.
 
-**Ponto de retomada: fechamento da Etapa 4 — menu por áreas da vida.**
+**Ponto de retomada: Etapa 5.5.1 — Rotinas múltiplas e criação contínua.**
