@@ -45,10 +45,11 @@ async def _rows(stmt):
 
 def _looks_like_create(text):
     n = _norm(text)
+    routine_article = r"(?:(?:uma|outra|nova|mais\s+uma)\s+)?"
     patterns = (
-        r"^(?:butler\s+)?(?:quero|preciso|gostaria de|vou)\s+(?:adicionar|criar|cadastrar|montar|colocar|botar)\s+(?:uma\s+)?rotina\b",
-        r"^(?:butler\s+)?(?:cria|crie|faz|faca|monta|monte|adiciona|adicione|cadastra|cadastre|anota|anote|coloca|coloque|bota|registre|registra)\s+(?:ai\s+)?(?:uma\s+)?rotina\b",
-        r"^(?:butler\s+)?(?:nova\s+)?rotina\s+(?:de\s+)?\S+",
+        rf"^(?:butler\s+)?(?:quero|preciso|gostaria de|vou)\s+(?:adicionar|criar|cadastrar|montar|colocar|botar)\s+{routine_article}rotina\b",
+        rf"^(?:butler\s+)?(?:cria|crie|faz|faca|monta|monte|adiciona|adicione|cadastra|cadastre|anota|anote|coloca|coloque|bota|registre|registra)\s+(?:ai\s+)?{routine_article}rotina\b",
+        rf"^(?:butler\s+)?{routine_article}rotina\s+(?:de\s+)?\S+",
         r"^(?:butler\s+)?(?:todo dia|todos os dias)\s+(?:quero|vou|preciso)\s+.+",
     )
     return any(re.search(pattern, n) for pattern in patterns)
@@ -56,10 +57,11 @@ def _looks_like_create(text):
 
 def _extract_name(text):
     value = (text or "").strip()
+    routine_article = r"(?:(?:uma|outra|nova|mais\s+uma)\s+)?"
     patterns = (
-        r"^(?:Butler[,!:\-]?\s*)?(?:quero|preciso|gostaria de|vou)\s+(?:adicionar|criar|cadastrar|montar|colocar|botar)\s+(?:uma\s+)?rotina\s*(?:de\s+)?",
-        r"^(?:Butler[,!:\-]?\s*)?(?:cria|crie|faz|faça|faca|monta|monte|adiciona|adicione|cadastra|cadastre|anota|anote|coloca|coloque|bota|registra|registre)\s+(?:aí\s+|ai\s+)?(?:uma\s+)?rotina\s*(?:de\s+)?",
-        r"^(?:Butler[,!:\-]?\s*)?(?:nova\s+)?rotina\s*(?:de\s+)?",
+        rf"^(?:Butler[,!:\-]?\s*)?(?:quero|preciso|gostaria de|vou)\s+(?:adicionar|criar|cadastrar|montar|colocar|botar)\s+{routine_article}rotina\s*(?:de\s+)?",
+        rf"^(?:Butler[,!:\-]?\s*)?(?:cria|crie|faz|faça|faca|monta|monte|adiciona|adicione|cadastra|cadastre|anota|anote|coloca|coloque|bota|registra|registre)\s+(?:aí\s+|ai\s+)?{routine_article}rotina\s*(?:de\s+)?",
+        rf"^(?:Butler[,!:\-]?\s*)?{routine_article}rotina\s*(?:de\s+)?",
         r"^(?:Butler[,!:\-]?\s*)?(?:todo dia|todos os dias)\s+(?:quero|vou|preciso)\s+",
     )
     for pattern in patterns:

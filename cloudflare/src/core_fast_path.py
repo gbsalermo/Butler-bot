@@ -17,6 +17,7 @@ from operational_informal_fastpath import handle_message as handle_informal_acti
 from quick_time import handle_message as handle_quick_time
 from routine_natural_fastpath import (
     _looks_like_completion as looks_like_routine_completion,
+    _looks_like_create as looks_like_routine_create,
     handle_message as handle_natural_routine,
 )
 from study_mode import handle_message as handle_study_mode, install as install_study_mode
@@ -101,6 +102,8 @@ def is_core_candidate(text):
         return False
     stripped = language.normalize_text(language.strip_butler(text))
     if stripped in CORE_BUTTONS:
+        return True
+    if looks_like_routine_create(text):
         return True
     if looks_like_routine_completion(text):
         return True
