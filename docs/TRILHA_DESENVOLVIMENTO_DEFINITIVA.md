@@ -1,14 +1,14 @@
 # Butler — Trilha Definitiva de Desenvolvimento
 
 **Roadmap mestre de evolução do produto e da arquitetura**  
-**Versão:** 1.6  
-**Data-base:** 01/09/2026  
+**Versão:** 1.7  
+**Data-base:** 08/09/2026  
 **Status:** oficial  
-**Fase atual:** **Fechamento obrigatório da Etapa 4 — menu por áreas da vida**
+**Fase atual:** **Etapa 5.5 — Usabilidade Operacional**
 
 > Este documento define **para onde o Butler evolui e em qual ordem**. Ele não substitui `docs/ARCHITECTURE.md` como fonte de verdade do runtime nem `docs/STATUS_ATUAL.md` como snapshot de andamento.
 >
-> Outra IA/agente deve continuar o ponto atual. **Não criar outro roadmap, não reorganizar etapas e não pular gates.**
+> Outra IA/agente deve continuar o ponto atual. **Não criar outro roadmap, não reorganizar etapas e não pular gates sem decisão explícita do proprietário.**
 
 ---
 
@@ -48,6 +48,7 @@ Qual é a próxima coisa realmente importante?
 13. **Uma etapa só avança quando o gate estiver fechado.**
 14. **Broad NLU/Library preservadas não voltam ao dispatcher central por conveniência.**
 15. **Correção urgente de produção não muda automaticamente a etapa oficial.**
+16. **Existência técnica não basta:** fluxo cotidiano também precisa ser confortável e proporcional à ação executada.
 
 ---
 
@@ -78,13 +79,15 @@ ETAPA 2  🎓 Acadêmico completo + importação        ✅ concluída
              ↓
 ETAPA 3  ⏱️ Auxiliares de Tempo / Modo Estudo     ✅ concluída
              ↓
-ETAPA 4  📚 Cursos e trilhas de estudo             ✅ 4.1–4.6 concluídas
+ETAPA 4  📚 Cursos e trilhas de estudo             ✅ concluída
              ↓
-FECHAMENTO 4  🧭 Reformulação do menu por áreas    ▶️ próximo / obrigatório
+FECHAMENTO 4  🧭 Reformulação do menu por áreas    ✅ concluída
              ↓
-ETAPA 5  📥 Caixa de entrada                       ⏳
+ETAPA 5  📥 Caixa de entrada                       ✅ concluída / mergeada
              ↓
-ETAPA 6  🗂️ Projetos e trabalho                    ⏳
+ETAPA 5.5 ⚡ Usabilidade operacional                ▶️ atual / obrigatória
+             ↓
+ETAPA 6  🗂️ Projetos e trabalho                    ⏳ bloqueada pela 5.5
              ↓
 ETAPA 7  🧭 Resumo/contexto/priorização             ⏳
              ↓
@@ -176,7 +179,7 @@ Tópico só muda por conclusão/pulo explícito.
 
 ---
 
-# ETAPA 4 — 📚 Cursos e trilhas de estudo ✅ 4.1–4.6
+# ETAPA 4 — 📚 Cursos e trilhas de estudo ✅
 
 ## Objetivo
 
@@ -310,29 +313,27 @@ Documento: `docs/ETAPA_4_6_GATE_FINAL_CURSOS.md`.
 
 ---
 
-# FECHAMENTO OBRIGATÓRIO DA ETAPA 4 — 🧭 Menu por áreas da vida ▶️
+# FECHAMENTO DA ETAPA 4 — 🧭 Menu por áreas da vida ✅
 
-**Este é o próximo trabalho oficial. Etapa 5 continua bloqueada.**
+Concluído pela reorganização minimalista do menu, mergeada na `main` pela PR #54.
 
-Antes da Etapa 5:
+Direção consolidada:
 
-- inventariar menus ativos;
-- comparar pelo menos dois protótipos;
-- reorganizar por áreas humanas da vida;
-- preservar atalhos frequentes;
-- manter linguagem natural independente do menu;
-- esconder ações exclusivas do proprietário;
-- manter Voltar/Cancelar consistentes;
-- manter Day-off protegido contra toque acidental;
-- preservar distinção `🎓 Cursos` backlog × `📘 Cursos` estruturados;
-- adicionar regressões de navegação/menu;
-- atualizar documentação/runtime depois do gate.
+- raiz minimalista;
+- organização por áreas humanas da vida;
+- atalhos frequentes preservados;
+- linguagem natural independente do menu;
+- ações exclusivas do proprietário escondidas para usuários comuns;
+- Voltar/Cancelar consistentes;
+- Day-off protegido;
+- distinção `🎓 Cursos` backlog × `📘 Cursos` estruturados preservada;
+- regressões de navegação/menu adicionadas.
 
 Documento de referência: `ETAPA_4_FECHAMENTO_REFORMULACAO_MENU_AREAS_DA_VIDA.md`.
 
 ---
 
-# ETAPA 5 — 📥 Caixa de entrada / captura rápida ⏳
+# ETAPA 5 — 📥 Caixa de entrada / captura rápida ✅
 
 ## Objetivo
 
@@ -343,13 +344,56 @@ anota isso pra eu organizar depois
 joga na inbox: revisar autenticação do SGL
 ```
 
+Entrega consolidada em `docs/ETAPA_5_CAIXA_DE_ENTRADA.md` e mergeada pela PR #57.
+
 Gate:
 
-- [ ] captura por botão/texto;
-- [ ] listar/processar/arquivar;
-- [ ] conversão segura para domínios;
-- [ ] sem duplicação ao converter;
-- [ ] isolamento multiusuário.
+- [x] captura por botão/texto;
+- [x] listar/processar/arquivar;
+- [x] conversão segura para domínios;
+- [x] sem duplicação ao converter;
+- [x] isolamento multiusuário.
+
+---
+
+# ETAPA 5.5 — ⚡ Usabilidade Operacional ▶️
+
+## Objetivo
+
+Antes de adicionar novos domínios, reduzir o atrito dos fluxos que já existem e tornar o Butler confortável para uso cotidiano.
+
+Problemas que motivaram a subetapa:
+
+- dificuldade percebida para criar várias rotinas em sequência;
+- edição simples exigindo navegação/wizards desnecessários;
+- ações como conclusão de tarefas limitadas a um alvo por operação;
+- respostas com mais texto do que a ação exige;
+- fluxos que encerram e obrigam o usuário a reentrar no domínio para continuar.
+
+Ordem oficial:
+
+```text
+5.5.1 Rotinas múltiplas e criação contínua
+→ 5.5.2 Edição direta
+→ 5.5.3 Ações em lote
+→ 5.5.4 Respostas curtas
+→ 5.5.5 Fluxos contínuos
+→ 5.5.6 Gate de UX real
+```
+
+Gate macro:
+
+- [ ] várias rotinas podem ser criadas, listadas, editadas e concluídas independentemente;
+- [ ] pedidos diretos evitam wizard quando alvo + alteração já são claros;
+- [ ] ações em lote funcionam com segurança e confirmação quando necessário;
+- [ ] confirmações simples são curtas e orientadas à ação;
+- [ ] fluxos de domínio permitem continuar trabalhando sem reentrada desnecessária;
+- [ ] bateria mínima de 20 cenários reais de UX passa;
+- [ ] CI verde e deploy validados separadamente.
+
+Documento: `docs/ETAPA_5_5_USABILIDADE_OPERACIONAL.md`.
+
+**A Etapa 6 permanece bloqueada até o fechamento da 5.5.6.**
 
 ---
 
@@ -530,4 +574,4 @@ Uma feature/subetapa só é concluída quando, conforme aplicável:
 7. não pular etapa;
 8. correções de produção podem ocorrer fora da sequência, mas devem retornar ao gate oficial.
 
-**Em 01/09/2026: Etapas 0–3 concluídas; Etapa 4.1–4.6 concluída; próximo ponto oficial é o fechamento obrigatório da Etapa 4 — menu por áreas da vida.**
+**Em 08/09/2026: Etapas 0–5 concluídas; Etapa 5.5 — Usabilidade Operacional é o ponto oficial atual; Etapa 6 permanece bloqueada até o fechamento do gate 5.5.6.**
