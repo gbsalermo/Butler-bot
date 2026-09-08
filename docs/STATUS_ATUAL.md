@@ -1,13 +1,14 @@
 # Butler — Status Atual e Handoff
 
-**Data-base:** 01/09/2026  
+**Data-base:** 08/09/2026  
 **Branch de produção:** `main`  
-**Etapas 0–3:** ✅ concluídas  
-**Etapa 4 — Cursos e trilhas:** ✅ subetapas 4.1–4.6 concluídas  
-**Próximo trabalho oficial:** **fechamento obrigatório da Etapa 4 — menu por áreas da vida**  
-**PR final da implementação 4.3–4.6:** #46
+**Branch de trabalho atual:** `feat/etapa-5-5-usabilidade-operacional`  
+**Etapas 0–5:** ✅ concluídas  
+**Etapa atual:** **5.5 — ⚡ Usabilidade Operacional**  
+**Subetapa atual:** **5.5.1 — Rotinas múltiplas e criação contínua**  
+**Etapa 6 — Projetos e trabalho:** bloqueada até o gate 5.5.6
 
-> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para decisões duradouras use `CONTINUIDADE.md`; para runtime use `docs/ARCHITECTURE.md`; para ordem futura use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`.
+> Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para decisões duradouras use `CONTINUIDADE.md`; para runtime use `docs/ARCHITECTURE.md`; para ordem futura use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`; para o gate atual use `docs/ETAPA_5_5_USABILIDADE_OPERACIONAL.md`.
 
 ---
 
@@ -38,16 +39,17 @@ A raiz `src/` é runtime histórico/preservado e não governa produção.
 1. 🗣️ Linguagem natural + conversa real     ✅
 2. 🎓 Importação acadêmica confiável         ✅
 3. ⏱️ Auxiliares de Tempo / Modo Estudo     ✅
-4. 📚 Cursos e trilhas de estudo             ▶️ fechamento pendente
-   4.1 Modelo + autoridade                   ✅
-   4.2 CRUD + navegação                      ✅
-   4.3 Progresso / Continuar curso           ✅
-   4.4 Integração com Modo Estudo            ✅
-   4.5 Importação                            ✅
-   4.6 Gate final                            ✅
-   fechamento: menu por áreas da vida        ▶️ próximo e obrigatório
-5. 📥 Caixa de entrada                       ⏳
-6. 🗂️ Projetos e trabalho                    ⏳
+4. 📚 Cursos e trilhas de estudo             ✅
+   fechamento: menu por áreas da vida        ✅
+5. 📥 Caixa de entrada                       ✅
+5.5 ⚡ Usabilidade operacional                ▶️ atual
+   5.5.1 Rotinas múltiplas                   ▶️ atual
+   5.5.2 Edição direta                       ⏳
+   5.5.3 Ações em lote                       ⏳
+   5.5.4 Respostas curtas                    ⏳
+   5.5.5 Fluxos contínuos                    ⏳
+   5.5.6 Gate de UX real                     ⏳
+6. 🗂️ Projetos e trabalho                    ⏳ bloqueada
 7. 🧭 Resumo/contexto/priorização             ⏳
 8. 🧠 Memória + Library seletiva             ⏳
 9. 🔒 Hardening                              ⏳
@@ -55,13 +57,33 @@ A raiz `src/` é runtime histórico/preservado e não governa produção.
 11. 🌍 Idiomas e internacionalização          ⏳
 ```
 
-**Não avançar para a Etapa 5 antes do fechamento do menu por áreas da vida.**
-
 A trilha de IA/Groq permanece pós-roadmap e só começa depois da Etapa 11 + gate de estabilidade.
 
 ---
 
-## 3. Invariantes que não podem ser quebrados
+## 3. Motivo da Etapa 5.5
+
+O produto já possui muitos recursos, mas o teste cotidiano mostrou que a existência técnica não garante uma boa experiência operacional.
+
+Problemas confirmados que passam a bloquear a Etapa 6:
+
+- criar/manter várias rotinas precisa ser natural e confiável;
+- edição simples não deve exigir navegar por várias telas quando alvo + alteração já estão claros;
+- tarefas/rotinas precisam aceitar ações em lote quando o pedido for explícito;
+- confirmações simples devem ser curtas;
+- o usuário não deve precisar reentrar no mesmo domínio depois de cada ação simples.
+
+Princípio novo do gate:
+
+```text
+feature existente + fluxo ruim = trabalho ainda não fechado
+```
+
+Documento autoritativo do gate: `docs/ETAPA_5_5_USABILIDADE_OPERACIONAL.md`.
+
+---
+
+## 4. Invariantes que não podem ser quebrados
 
 1. reconhecer linguagem não autoriza escrita;
 2. presença em aula nunca é presumida;
@@ -74,273 +96,128 @@ A trilha de IA/Groq permanece pós-roadmap e só começa depois da Etapa 11 + ga
 9. prévia de importação não persiste dados;
 10. dados são isolados por usuário;
 11. migration é fonte formal do D1;
-12. `ensure_schema()` é apenas tolerância operacional;
-13. CI verde não prova deploy Cloudflare — verificar `Workers Builds: salbutler-bot` separadamente;
-14. `🌙 Day-off` permanece sozinho na última linha do menu até o fechamento oficial;
-15. `🎓 Cursos` de Ler/Ver Depois é backlog simples e não é o domínio estruturado `📘 Cursos`.
+12. CI verde não prova deploy Cloudflare — verificar `Workers Builds: salbutler-bot` separadamente;
+13. `🌙 Day-off` permanece protegido contra toque acidental;
+14. `🎓 Cursos` de Ler/Ver Depois é backlog simples e não é o domínio estruturado `📘 Cursos`;
+15. ações em lote ou diretas só podem escrever quando os alvos estiverem explícitos/seguros;
+16. reduzir passos não autoriza inferência ampla ou silenciosa.
 
 ---
 
-## 4. Etapas 0–3 consolidadas
+## 5. Etapas consolidadas
 
-### Linguagem/contexto
+### Etapas 0–3 ✅
+
+Entregas principais:
+
+- estrutura/runtime estabilizados;
+- linguagem natural conservadora + contexto curto;
+- domínio acadêmico/importação;
+- quick timers;
+- Modo Estudo persistente.
+
+### Etapa 4 — Cursos ✅
+
+Modelo estruturado:
+
+```text
+Curso
+→ módulos
+→ conteúdos
+→ materiais/atividades
+→ progresso explícito
+```
 
 Ativos principais:
 
 ```text
-language_primitives.py
-short_context.py
-correction_patch.py
-compound_router.py
-temporal_language.py
+0013_courses.sql
+0014_course_study_links.sql
+course_domain.py
+course_operational.py
+course_stage4.py
+course_study_bridge.py
+course_importer.py
 ```
 
-Contexto curto usa janela limitada, isolamento por usuário e referências recentes/posicionais. NLU ampla histórica não foi religada.
+Fechamento da Etapa 4: menu minimalista por áreas, mergeado pela PR #54.
 
-### Acadêmico
+### Etapa 5 — Inbox ✅
 
-Modelo preservado:
+Migration:
 
 ```text
-subjects
-subject_sessions
+0015_inbox.sql
 ```
-
-Importação inicial usa TXT ou PDF textual pesquisável/selecionável, com prévia e confirmação. Não usar OCR como caminho oficial.
-
-### Tempo / Modo Estudo
-
-```text
-0010_quick_timers.sql
-0011_study_mode.sql
-quick_timers
-study_sessions
-study_topics
-study_events
-```
-
-Tópico de estudo só muda por ação explícita do usuário. Fim de foco/pausa não conclui tópico.
-
----
-
-## 5. Diagnóstico e manual
 
 Ativos:
 
 ```text
-/status runtime
-/status_runtime
-/manual
-/ajuda
-📖 Manual
-```
-
-`runtime_errors` registra somente metadados técnicos; não persiste texto da conversa.
-
----
-
-## 6. Etapa 4.1 — modelo + autoridade ✅
-
-Migration formal:
-
-```text
-0013_courses.sql
-```
-
-Tabelas:
-
-```text
-courses
-course_modules
-course_contents
-course_materials
-course_activities
-course_events
-```
-
-Autoridade:
-
-```text
-cloudflare/src/course_domain.py
-```
-
-Modos:
-
-```text
-self_paced
-live
-```
-
-Estados de conteúdo:
-
-```text
-pending
-completed
-skipped
-```
-
-`skipped` conta como resolvido, mas não como concluído/aprendido.
-
-Documento: `docs/ETAPA_4_1_MODELO_CURSOS.md`.
-
----
-
-## 7. Etapa 4.2 — CRUD + navegação ✅
-
-Camada operacional:
-
-```text
-cloudflare/src/course_operational.py
+inbox_domain.py
+inbox_operational.py
+core_actions.py
 ```
 
 Entrega:
 
-```text
-📘 Cursos
-├── 📚 Meus cursos
-├── ➕ Novo curso
-├── 🗄️ Cursos arquivados
-└── curso
-    ├── módulos: criar / renomear / abrir
-    ├── conteúdos: criar / editar / abrir
-    ├── editar curso
-    └── arquivar / reativar
-```
-
-Curso ao vivo persiste `scheduled_at`. Arquivamento preserva estrutura/histórico. O handler Telegram não faz mutações SQL de cursos fora da autoridade.
-
-Snapshot funcional da 4.2: `4987327cae69e16d9973bee4a97aa3229c36f5d2`.
-
-Documento: `docs/ETAPA_4_2_CRUD_NAVEGACAO_CURSOS.md`.
-
----
-
-## 8. Etapa 4.3 — progresso + Continuar curso ✅
-
-Implementação incremental:
-
-```text
-cloudflare/src/course_stage4.py
-```
-
-UX entregue:
-
-```text
-▶️ Continuar curso
-📊 Progresso
-✅ Concluir conteúdo
-⏭️ Pular conteúdo
-↩️ Voltar para pendente
-🏁 Concluir curso
-↩️ Reabrir curso
-```
-
-Regras:
-
-- `Continuar curso` apenas abre `next_content()`;
-- autogerido segue posição de módulo/conteúdo;
-- ao vivo respeita calendário persistido;
-- navegação/duração não alteram progresso;
-- último conteúdo resolvido não conclui curso;
-- conclusão do curso exige confirmação explícita.
-
-Documento: `docs/ETAPA_4_3_PROGRESSO_CURSOS.md`.
-
----
-
-## 9. Etapa 4.4 — Cursos ↔ Modo Estudo ✅
-
-Migration formal:
-
-```text
-0014_course_study_links.sql
-```
-
-Ponte:
-
-```text
-cloudflare/src/course_study_bridge.py
-```
-
-Fluxo em conteúdo pendente:
-
-```text
-🧠 Estudar no Modo Estudo
-→ cria study_session
-→ cria course_study_link
-→ conteúdo continua pending
-```
-
-Uma sessão ativa/pausada não é substituída silenciosamente. Concluir tópico ou sessão de estudo não conclui o conteúdo do curso.
-
-Documento: `docs/ETAPA_4_4_MODO_ESTUDO_CURSOS.md`.
-
----
-
-## 10. Etapa 4.5 — importação ✅
-
-Implementação:
-
-```text
-cloudflare/src/course_importer.py
-```
-
-Entrada:
-
-```text
-📥 Importar curso
-```
-
-Aceita `.txt`, PDF textual pesquisável e texto colado em formato explícito.
-
-Estrutura suportada:
-
-```text
-CURSO:
-TIPO:
-DESCRICAO:
-[MÓDULO]
-[CONTEÚDO]
-[MATERIAL]
-[ATIVIDADE]
-```
-
-O parser recusa linhas ambíguas em vez de inferir. Sempre há prévia; somente `✅ Confirmar importação` persiste. OCR não é usado. Todas as escritas são orquestradas pelas funções de `course_domain.py`.
-
-Documento: `docs/ETAPA_4_5_IMPORTACAO_CURSOS.md`.
-
----
-
-## 11. Etapa 4.6 — gate final ✅
-
-Regressões novas:
-
-```text
-cloudflare/tests/test_stage4_3_course_progress.py
-cloudflare/tests/test_stage4_4_course_study_bridge.py
-cloudflare/tests/test_stage4_5_course_import.py
-cloudflare/tests/test_stage4_6_course_gate.py
-```
-
-Gate integrado valida:
-
-- sequência autogerida;
-- calendário de curso ao vivo;
-- progresso explícito;
-- histórico de eventos;
-- Modo Estudo separado do progresso do curso;
-- importação com prévia;
+- captura por botão/texto;
+- pendentes/arquivados;
+- processamento explícito;
+- conversão para tarefa/compromisso;
+- idempotência por `source_inbox_id`;
 - isolamento multiusuário.
 
-Evidência de código: no commit `7b41c42d4f151b126f405c7be9bceffcd452b9f9`, o GitHub Actions `Butler regression` run #286 terminou com `success`; compilação do Worker e suíte determinística ficaram verdes.
-
-PR final de merge: **#46**. O draft #45 foi fechado sem merge por limitação do conector ao convertê-lo para Ready e foi substituído pelo #46 com a mesma branch funcional.
-
-Documento: `docs/ETAPA_4_6_GATE_FINAL_CURSOS.md`.
+PR de merge: #57.
 
 ---
 
-## 12. Banco e migrations
+## 6. Etapa 5.5.1 — trabalho atual
+
+### Problema inicial
+
+O modelo D1 já permite várias linhas em `routines` para o mesmo usuário; não existe unicidade por usuário que limite o cadastro a uma rotina.
+
+O atrito encontrado está no fluxo de linguagem/UX. Um exemplo concreto era a continuação natural:
+
+```text
+cria uma rotina de Estudar inglês...
+cria outra rotina de Academia...
+adiciona mais uma rotina Curso DIO...
+```
+
+O parser reconhecia bem a primeira forma, mas `outra rotina` / `mais uma rotina` não tinham contrato explícito equivalente.
+
+### Primeiro incremento já aplicado na branch
+
+Arquivos alterados:
+
+```text
+cloudflare/src/routine_natural_fastpath.py
+cloudflare/src/core_fast_path.py
+cloudflare/tests/test_stage5_5_operational_usability.py
+```
+
+Mudança:
+
+- criação natural reconhece `uma`, `outra`, `nova` e `mais uma` rotina;
+- `core_fast_path` considera explicitamente qualquer criação de rotina reconhecida pelo parser;
+- regressão cobre uma sequência de três pedidos consecutivos.
+
+### Gate restante da 5.5.1
+
+- [ ] criar pelo menos 3 rotinas distintas em sequência no fluxo completo;
+- [ ] listar todas as rotinas ativas;
+- [ ] editar uma sem alterar as demais;
+- [ ] concluir uma sem concluir as demais;
+- [ ] scheduler processar cada rotina independentemente;
+- [x] parser reconhecer `outra rotina` / `mais uma rotina`;
+- [ ] regressão integrada do fluxo completo;
+- [ ] CI verde;
+- [ ] deploy validado separadamente.
+
+---
+
+## 7. Banco e migrations
 
 Migrations formais atuais:
 
@@ -359,25 +236,26 @@ Migrations formais atuais:
 0012_runtime_errors.sql
 0013_courses.sql
 0014_course_study_links.sql
+0015_inbox.sql
 ```
+
+A Etapa 5.5 não deve criar schema novo sem necessidade real; os problemas atuais são predominantemente de operação/UX.
 
 ---
 
-## 13. Próximo trabalho exato
+## 8. Próximo trabalho exato
 
-**Fechamento obrigatório da Etapa 4 — reorganizar o menu por áreas da vida.**
+Continuar **somente a Etapa 5.5.1** até o gate de rotinas múltiplas ficar verde.
 
-Não reabrir 4.3–4.6 sem regressão concreta. Não iniciar Etapa 5 ainda.
+Próximos passos:
 
-Ao assumir:
+1. validar a branch `feat/etapa-5-5-usabilidade-operacional` em CI;
+2. adicionar regressão integrada que simule múltiplas rotinas persistidas para o mesmo usuário;
+3. cobrir edição/conclusão isolada por `routine_id`;
+4. cobrir scheduler com múltiplas rotinas;
+5. revisar fluxo de criação para remover passos desnecessários sem ampliar inferência;
+6. mergear/validar deploy;
+7. marcar 5.5.1 concluída;
+8. iniciar somente então 5.5.2 — Edição direta.
 
-1. confirmar merge/CI do PR #46 em `main`;
-2. verificar separadamente o deploy Cloudflare; CI verde não basta;
-3. ler `docs/ETAPA_4_6_GATE_FINAL_CURSOS.md`;
-4. ler `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md` para a definição do fechamento;
-5. executar somente o fechamento do menu por áreas da vida;
-6. rodar regressão completa;
-7. atualizar este arquivo e `CONTINUIDADE.md`;
-8. somente então liberar a Etapa 5 — Caixa de entrada.
-
-**Próximo ponto oficial: fechamento da Etapa 4 — menu por áreas da vida.**
+**Próximo ponto oficial: Etapa 5.5.1 — Rotinas múltiplas e criação contínua.**
