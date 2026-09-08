@@ -1,5 +1,6 @@
 import asyncio
 
+import routine_editing
 import routine_integration
 import runtime_guard
 from core_fast_path import is_core_candidate
@@ -32,6 +33,10 @@ class _Stmt:
                 if routine["id"] == rid and (uid is None or routine["user_id"] == uid):
                     return dict(routine)
             return None
+        if "FROM routine_logs WHERE routine_id=?" in self.sql:
+            rid, log_date = self.args[:2]
+            status = self.db.routine_logs.get((int(rid), log_date))
+            return {"status": status} if status is not None else None
         if "FROM goals" in self.sql:
             return None
         return None
@@ -64,6 +69,12 @@ class _Stmt:
                 }
             )
             return None
+        if "UPDATE routines SET time_hhmm=?" in self.sql:
+            time_hhmm, rid, uid = self.args[:3]
+            for routine in self.db.routines:
+                if routine["id"] == int(rid) and routine["user_id"] == int(uid):
+                    routine["time_hhmm"] = time_hhmm
+            return None
         if "INSERT INTO routine_logs" in self.sql:
             rid, log_date = self.args[:2]
             self.db.routine_logs[(int(rid), log_date)] = "feito"
@@ -82,6 +93,14 @@ class _DB:
 
     def prepare(self, sql):
         return _Stmt(self, sql)
+
+
+def _three_routines():
+    return [
+        {"id": 1, "user_id": 1, "name": "Inglês", "category": "Estudos", "time_hhmm": "18:00", "weekdays": "terça", "active": 1},
+        {"id": 2, "user_id": 1, "name": "Academia", "category": "Musculação", "time_hhmm": "19:00", "weekdays": "terça", "active": 1},
+        {"id": 3, "user_id": 1, "name": "Curso DIO", "category": "Programação", "time_hhmm": "20:00", "weekdays": "terça", "active": 1},
+    ]
 
 
 def test_criar_outra_rotina_entra_no_fastpath():
@@ -145,6 +164,17 @@ def test_fluxo_guiado_persiste_tres_rotinas_do_mesmo_usuario(monkeypatch):
     assert "Curso DIO" in listing
 
 
+def test_editar_uma_rotina_nao_altera_as_demais():
+    async def scenario():
+        db = _DB()
+        db.routines = _three_routines()
+        await routine_editing._save_times(db, 1, 2, ["21:00"])
+        return db.routines
+
+    routines = asyncio.run(scenario())
+    assert [r["time_hhmm"] for r in routines] == ["18:00", "21:00", "20:00"]
+
+
 def test_concluir_uma_rotina_nao_conclui_as_demais(monkeypatch):
     async def fake_send(_token, _chat, _text, **_kwargs):
         return None
@@ -153,11 +183,7 @@ def test_concluir_uma_rotina_nao_conclui_as_demais(monkeypatch):
 
     async def scenario():
         db = _DB()
-        db.routines = [
-            {"id": 1, "user_id": 1, "name": "Inglês", "category": "Estudos", "time_hhmm": "18:00", "weekdays": "terça", "active": 1},
-            {"id": 2, "user_id": 1, "name": "Academia", "category": "Musculação", "time_hhmm": "19:00", "weekdays": "terça", "active": 1},
-            {"id": 3, "user_id": 1, "name": "Curso DIO", "category": "Programação", "time_hhmm": "20:00", "weekdays": "terça", "active": 1},
-        ]
+        db.routines = _three_routines()
         await runtime_guard._set_state(db, 1, "guard_routine_done", {})
         assert await runtime_guard._handle_state(db, "token", 12345, 1, "#2")
         return db
@@ -177,11 +203,9 @@ def test_scheduler_percorre_cada_rotina_independentemente(monkeypatch):
 
     async def scenario():
         db = _DB()
-        db.routines = [
-            {"id": 1, "user_id": 1, "name": "Inglês", "category": "Estudos", "time_hhmm": "18:00", "weekdays": "todos os dias", "active": 1},
-            {"id": 2, "user_id": 1, "name": "Academia", "category": "Musculação", "time_hhmm": "19:00", "weekdays": "todos os dias", "active": 1},
-            {"id": 3, "user_id": 1, "name": "Curso DIO", "category": "Programação", "time_hhmm": "20:00", "weekdays": "todos os dias", "active": 1},
-        ]
+        db.routines = _three_routines()
+        for routine in db.routines:
+            routine["weekdays"] = "todos os dias"
         await routine_integration._routine_reminders(db, "token")
 
     asyncio.run(scenario())
