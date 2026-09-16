@@ -12,7 +12,8 @@ from settings import (
     WEEKLY_SUMMARY_MINUTE,
 )
 from telegram_api import delivery_error, delivery_ok, send_message
-from weather_service import safe_forecast_text
+from weather_service import fetch_daily_forecast, get_location
+from weather_personality import forecast_comment
 
 LOCAL_TZ = timezone(timedelta(hours=UTC_OFFSET_HOURS))
 MORNING_RECOVERY_MINUTES = 300
@@ -66,43 +67,100 @@ async def _already_sent(db, uid, key):
     return bool(existing)
 
 
-async def _morning_text(db, uid, today):
-    text = await app.agenda_text(db, uid, today, True)
-    weather = await safe_forecast_text(
-        db,
-        uid,
-        today,
-        heading="Tempo hoje",
-        morning_only=True,
-    )
-    grocery = await _rows(
-        db.prepare("SELECT name FROM grocery_items WHERE user_id=? AND missing=1 ORDER BY name LIMIT 5").bind(uid)
-    )
-    extra = ""
-    if weather:
-        extra += "\n\n" + weather
-    if grocery:
-        extra += "\n\n🛒 Faltando em casa: " + ", ".join(_row(r, "name") for r in grocery)
+def _join_names(names):
+    names = [str(name).strip() for name in names if str(name).strip()]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} e {names[1]}"
+    return ", ".join(names[:-1]) + f" e {names[-1]}"
 
-    yesterday = today - timedelta(days=1)
-    pending = await _rows(
+
+async def _brief_weather(db, uid, today):
+    """Entrega conselho meteorológico, não um boletim cheio de números."""
+    try:
+        location = await get_location(db, uid)
+        if not location or not location.get("morning_enabled", True):
+            return None
+        forecast = await fetch_daily_forecast(location, today)
+        return forecast_comment(forecast, heading="Hoje", city=location["city"])
+    except Exception as exc:
+        print(f"[summary] weather-error type={type(exc).__name__} message={str(exc)[:240]}")
+        return None
+
+
+async def _morning_context(db, uid, today):
+    weekday = app.WEEKDAY_NAMES[today.weekday()]
+    classes = await _rows(
         db.prepare(
-            "SELECT title FROM daily_items WHERE user_id=? AND kind='tarefa' AND status='pendente' AND due_date=?"
-        ).bind(uid, yesterday.isoformat())
+            "SELECT s.name,ss.start_time FROM subjects s "
+            "JOIN subject_sessions ss ON ss.subject_id=s.id "
+            "WHERE s.user_id=? AND s.active=1 AND ss.weekday=? "
+            "ORDER BY ss.start_time"
+        ).bind(uid, weekday)
     )
-    if pending:
-        extra += (
-            "\n\n📎 Ontem deixou herança:\n"
-            + "\n".join(f"• {_row(r, 'title')}" for r in pending)
-            + "\nElas sobreviveram à virada do dia. Impressionante persistência."
+    tasks = await _rows(
+        db.prepare(
+            "SELECT title,due_time FROM daily_items "
+            "WHERE user_id=? AND kind='tarefa' AND status='pendente' AND due_date=? "
+            "ORDER BY COALESCE(due_time,'99:99'),id"
+        ).bind(uid, today.isoformat())
+    )
+    overdue = await _rows(
+        db.prepare(
+            "SELECT title FROM daily_items "
+            "WHERE user_id=? AND kind='tarefa' AND status='pendente' AND due_date<? "
+            "ORDER BY due_date,id LIMIT 3"
+        ).bind(uid, today.isoformat())
+    )
+    return classes, tasks, overdue
+
+
+def _agenda_brief(classes, tasks, overdue):
+    parts = []
+
+    class_names = [_row(item, "name", "") for item in classes]
+    if class_names:
+        parts.append(
+            f"Tem {len(class_names)} aula{'s' if len(class_names) != 1 else ''} hoje: "
+            f"{_join_names(class_names)}. Eu te aviso quando estiver chegando a hora."
         )
 
-    return (
-        "🌅 Resumo da manhã\n\n"
-        + text
-        + extra
-        + "\n\nNada demais. Só a administração básica de uma pequena empresa chamada sua vida. 😌"
-    )
+    untimed = [_row(item, "title", "") for item in tasks if not _row(item, "due_time")]
+    timed = [item for item in tasks if _row(item, "due_time")]
+    if untimed:
+        if len(untimed) == 1:
+            parts.append(f"A tarefa sem horário é {_join_names(untimed)}; essa vale deixar no radar.")
+        else:
+            parts.append(f"As tarefas sem horário são {_join_names(untimed)}; essas valem deixar no radar.")
+    if timed:
+        parts.append(
+            f"As outras {len(timed)} tarefa{'s' if len(timed) != 1 else ''} têm horário; "
+            "os lembretes chegam no momento certo."
+        )
+
+    if overdue:
+        names = [_row(item, "title", "") for item in overdue]
+        parts.append(f"Ficou pendente de antes: {_join_names(names)}.")
+
+    if not parts:
+        return "A manhã está mais livre por enquanto."
+    return " ".join(parts)
+
+
+async def _morning_text(db, uid, today):
+    weather = await _brief_weather(db, uid, today)
+    classes, tasks, overdue = await _morning_context(db, uid, today)
+    agenda = _agenda_brief(classes, tasks, overdue)
+
+    lines = ["Bom dia, chefe."]
+    if weather:
+        lines.append(weather)
+    lines.append(agenda)
+    lines.append("Toca a manhã; se precisar lembrar de algo, dá um salve.")
+    return "\n\n".join(lines)
 
 
 async def _weekly_text(db, uid, today):
@@ -152,10 +210,6 @@ async def dispatch_summaries(db, token):
         uid = int(_row(user, "id"))
         chat = int(_row(user, "telegram_chat_id"))
 
-        # O resumo é nominalmente das 07:00, mas se o cron/deploy/Telegram falhar
-        # nessa janela o Butler continua tentando ao longo da manhã. A checagem
-        # acontece ANTES de montar o texto para não consultar serviços externos
-        # todo minuto depois que a entrega daquele dia já foi confirmada.
         if _within_window(
             now,
             MORNING_SUMMARY_HOUR,
