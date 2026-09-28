@@ -50,7 +50,7 @@ from task_context_patch import handle_message as handle_task_context, install as
 from task_emoji_patch import install as install_task_emoji_patch
 from telegram_api import send_message
 from ux_bugfixes import handle_global_navigation, install as install_ux_bugfixes
-from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress
+from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress\nfrom workout_quick_log import handle_message as handle_workout_quick_log
 
 
 install_performance_patches()
