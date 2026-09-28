@@ -5,7 +5,7 @@
 **Branch de trabalho atual:** `feat/etapa-5-5-usabilidade-operacional`  
 **Etapas 0–5:** ✅ concluídas  
 **Etapa atual:** **5.5 — ⚡ Usabilidade Operacional**  
-**Subetapa atual:** **5.5.1 — Rotinas múltiplas e criação contínua**  
+**Subetapa atual:** **5.5.1 — Rotinas múltiplas e criação contínua**  \n**Patch paralelo em validação:** registro rápido de séries com conexão instável (`feat/treino-registro-rapido-conexao-instavel`)  
 **Etapa 6 — Projetos e trabalho:** bloqueada até o gate 5.5.6
 
 > Este é o primeiro arquivo para uma nova IA/agente consultar ao assumir o Butler. Para decisões duradouras use `CONTINUIDADE.md`; para runtime use `docs/ARCHITECTURE.md`; para ordem futura use `docs/TRILHA_DESENVOLVIMENTO_DEFINITIVA.md`; para o gate atual use `docs/ETAPA_5_5_USABILIDADE_OPERACIONAL.md`.
@@ -259,3 +259,4 @@ Próximos passos:
 8. iniciar somente então 5.5.2 — Edição direta.
 
 **Próximo ponto oficial: Etapa 5.5.1 — Rotinas múltiplas e criação contínua.**
+\n\n## Patch paralelo — treino com conexão instável\n\nBranch de validação: `feat/treino-registro-rapido-conexao-instavel`. Cada série pode ser enviada como `Exercício | carga | repetições` e processada independentemente quando a mensagem chegar ao bot. A migration 0016 adiciona idempotência por `message_id` do Telegram. Este patch não altera a ordem do roadmap e ainda precisa de CI/deploy antes de produção.\n
