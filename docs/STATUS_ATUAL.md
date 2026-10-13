@@ -260,3 +260,18 @@ Próximos passos:
 
 **Próximo ponto oficial: Etapa 5.5.1 — Rotinas múltiplas e criação contínua.**
 \n\n## Patch paralelo — treino com conexão instável\n\nBranch de validação: `feat/treino-registro-rapido-conexao-instavel`. Cada série pode ser enviada como `Exercício | carga | repetições` e processada independentemente quando a mensagem chegar ao bot. A migration 0016 adiciona idempotência por `message_id` do Telegram. Este patch não altera a ordem do roadmap e ainda precisa de CI/deploy antes de produção.\n
+
+---
+
+## Patch paralelo — experiência de treino (13/10/2026)
+
+Branch `feat/treino-registro-rapido-conexao-instavel`, PR #59 (não incorporada à
+`main`). Inclui registro autossuficiente de séries após conexão instável,
+idempotência por mensagem do Telegram, menu por estado, semana completa e
+navegação em semanas futuras. Encerrar preserva histórico; reiniciar exige
+confirmação explícita antes de apagar registros. Consulte
+`docs/TREINO_CONEXAO_INSTAVEL.md`.
+
+Validação pendente: regressão determinística da PR, aplicação da migration
+`0016_workout_quick_log.sql` no ambiente correto e teste de fluxo real no Telegram.
+Não confundir código da branch com deploy em produção.
