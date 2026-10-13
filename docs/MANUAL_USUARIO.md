@@ -371,7 +371,17 @@ Antes de salvar, sempre mostra uma prévia. Nada é persistido até a confirmaç
 
 ## 12. Treino
 
-Abra `🏋️ Treino` na tela inicial. O botão entra direto nos fluxos de musculação.
+Abra `🏋️ Treino` na tela inicial. O botão mostra ações compatíveis com seu perfil e com o estado do protocolo.
+
+- `📅 Treino de hoje`: ficha com séries e andamento por exercício;
+- `🗓️ Semana completa`: todos os dias da semana, com exercícios previstos ou indicação de dia sem treino;
+- `📆 Próximas semanas`: próximas semanas do protocolo e botões `📆 Semana 2`, `📆 Semana 3` etc.;
+- `📝 Registrar série`: fluxo guiado; ou envie diretamente `Supino reto | 40 kg | 10 reps`;
+- `📊 Histórico de cargas`: consulte o registro de cargas e repetições.
+
+No perfil com protocolo pessoal de 12 semanas, `🚀 Começar os trabalhos` aparece somente antes da primeira ativação. Durante o protocolo, ficam disponíveis `⏹️ Encerrar trabalhos` (preserva os registros) e `🔄 Reiniciar os trabalhos` (apaga o histórico após confirmação). Ao encerrar, o recomeço exige reinício. `✅ Finalizar treino` é só para o treino do dia.
+
+Uma série enviada após conexão instável só é salva quando o Telegram entrega a mensagem ao bot; o Worker não opera offline. Cada mensagem deve ser completa. Use exatamente o nome do exercício na ficha. A gravação evita duplicação quando a mesma mensagem do Telegram é entregue novamente. Consultar uma semana futura não avança o protocolo.
 
 O Butler registra carga/repetições apenas quando esses dados foram informados. Ausência de treino não cria séries fictícias. Substituição de exercício deve preservar rastreabilidade do original.
 
