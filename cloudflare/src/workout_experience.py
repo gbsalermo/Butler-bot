@@ -148,7 +148,7 @@ async def show_week(db, token, chat, uid, owner, week):
             await send_message(token, chat, "\n\n".join(chunks))
             chunks = [title + " (continuação)"]
         chunks.append(section)
-    menu = workout_keyboard(owner, active, finished, current)
+    menu = weeks_keyboard(owner)
     if owner:
         browse = []
         if week > 1:
@@ -431,7 +431,7 @@ async def handle_message(db, token, message):
             lines.append(f"• Semana {number}: {n} dia(s) de treino")
         lines.append("\nToque na semana desejada ou digite: semana 3")
         menu = [[f"📆 Semana {w}" for w in remaining[i:i + 3]] for i in range(0, len(remaining), 3)]
-        menu.extend(workout_keyboard(owner, active, finished, current))
+        menu.append([BACK])
         await send_message(token, int(chat), "\n".join(lines), reply_markup=_kb(menu))
         return True
     if match:
