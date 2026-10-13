@@ -20,24 +20,31 @@ A data usada é a da mensagem original no Telegram, e não a data da conexão de
 Se a mensagem não chegar ao Telegram, não há fila local sob controle do Worker:
 não se trata de suporte totalmente offline.
 
-## Menu contextual
+## Menu contextual enxuto
 
 ```text
 🏋️ Treino
-📅 Treino de hoje            📅 Treino de amanhã
-🗓️ Escolher dia             🗓️ Semana completa
-📆 Próximas semanas          📝 Registrar série
-✅ Finalizar treino          📊 Histórico de cargas
-🔁 Substituir exercício      📈 Progresso
-[estado do protocolo]        📥 Importar treino por PDF/texto
+📅 Treino de hoje           🗓️ Escolher dia
+📆 Ver semanas             📝 Registrar série
+📈 Progresso               ⚙️ Mais opções
 ⬅️ Início
 ```
 
-A ação de protocolo depende do estado:
+Para o dono com protocolo ainda não iniciado, aparece adicionalmente
+`🚀 Começar os trabalhos`. Depois de iniciar, o botão desaparece.
 
-- ainda não iniciado: `🚀 Começar os trabalhos`;
-- ativo: `⏹️ Encerrar trabalhos` e `🔄 Reiniciar os trabalhos`;
-- encerrado: somente `🔄 Reiniciar os trabalhos`.
+O objetivo é não apresentar simultaneamente todas as funcionalidades:
+
+- `🗓️ Escolher dia`: submenu com **amanhã e os sete dias da semana**;
+- `📆 Ver semanas`: submenu com **semana completa e próximas semanas**;
+- `⚙️ Mais opções`: finalizar/registrar ausência do dia, histórico de cargas,
+  substituição de exercício, importação e gestão do protocolo;
+- ações de gestão: com protocolo ativo, `⏹️ Encerrar trabalhos` e
+  `🔄 Reiniciar os trabalhos`; após encerramento, somente reinício.
+
+Após registrar uma série pelo assistente guiado, o teclado também volta para
+o menu compacto. Os comandos digitados `treino de amanhã`, `treino de sexta`,
+`semana 2` continuam funcionando independentemente dos submenus.
 
 Encerrar preserva histórico e exige confirmação `ENCERRAR`. Reiniciar volta à
 semana 1 e apaga registros do perfil **apenas** após `APAGAR TREINOS`.
@@ -46,7 +53,7 @@ e não encerra o protocolo.
 
 ## Consulta por dia e por semana
 
-- `📅 Treino de amanhã` abre somente a ficha de amanhã;
+- `📅 Treino de amanhã` no submenu Escolher dia abre somente a ficha de amanhã;
 - `🗓️ Escolher dia` permite tocar em Segunda, Terça, Quarta, Quinta, Sexta,
   Sábado ou Domingo, ou digitar o dia enquanto o seletor estiver aberto;
 - comandos livres e explícitos também funcionam: `treino de amanhã`,
@@ -58,8 +65,8 @@ e não encerra o protocolo.
   de dia estiver aberta;
 - consultas de dias futuros exibem a ficha planejada, não fingem séries
   registradas e não avançam o protocolo;
-- `🗓️ Semana completa` mostra os sete dias (inclusive sem treino);
-- `📆 Próximas semanas` lista as semanas seguintes do protocolo;
+- `📆 Ver semanas → 🗓️ Semana completa` mostra os sete dias (inclusive sem treino);
+- `📆 Ver semanas → 📆 Próximas semanas` lista as semanas seguintes do protocolo;
 - `📆 Semana 2` ou `semana 2` abre a ficha completa da semana escolhida;
 - consultar semanas futuras não muda `current_week` e não registra progresso.
 

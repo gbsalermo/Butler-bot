@@ -12,6 +12,9 @@ CHOOSE_DAY = "🗓️ Escolher dia"
 CHOOSE_STATE = "workout_choose_day"
 WEEK = "🗓️ Semana completa"
 NEXT = "📆 Próximas semanas"
+VIEW_WEEKS = "📆 Ver semanas"
+MORE = "⚙️ Mais opções"
+BACK = "⬅️ Treinos"
 START = "🚀 Começar os trabalhos"
 END = "⏹️ Encerrar trabalhos"
 RESTART = "🔄 Reiniciar os trabalhos"
@@ -27,21 +30,38 @@ def _get(row, key, default=None):
 
 
 def workout_keyboard(owner, active=False, finished=False, week=None):
+    """Menu da academia: apenas consulta, registro e acompanhamento diário."""
     rows = [
-        [TODAY, TOMORROW],
-        [CHOOSE_DAY, WEEK],
-        [NEXT, "📝 Registrar série"],
-        ["✅ Finalizar treino", "📊 Histórico de cargas"],
-        ["🔁 Substituir exercício", "📈 Progresso"],
+        [TODAY, CHOOSE_DAY],
+        [VIEW_WEEKS, "📝 Registrar série"],
+        ["📈 Progresso", MORE],
+    ]
+    if owner and not active and not finished:
+        rows.append([START])
+    rows.append(["⬅️ Início"])
+    return rows
+
+
+def weeks_keyboard(owner):
+    rows = [[WEEK]]
+    if owner:
+        rows[0].append(NEXT)
+    rows.append([BACK])
+    return rows
+
+
+def more_keyboard(owner, active=False, finished=False):
+    """Ações infrequentes fora da tela principal, sem retirar recursos."""
+    rows = [
+        ["✅ Finalizar treino", "😕 Não consegui treinar hoje"],
+        ["📊 Histórico de cargas", "🔁 Substituir exercício"],
     ]
     if owner:
         if active:
             rows.append([END, RESTART])
         elif finished:
             rows.append([RESTART])
-        else:
-            rows.append([START])
-    rows.extend([["📥 Importar treino por PDF/texto"], ["⬅️ Início"]])
+    rows.extend([["📥 Importar treino por PDF/texto"], [BACK]])
     return rows
 
 
@@ -128,7 +148,7 @@ async def show_week(db, token, chat, uid, owner, week):
             await send_message(token, chat, "\n\n".join(chunks))
             chunks = [title + " (continuação)"]
         chunks.append(section)
-    menu = workout_keyboard(owner, active, finished, current)
+    menu = weeks_keyboard(owner)
     if owner:
         browse = []
         if week > 1:
@@ -254,6 +274,7 @@ async def handle_message(db, token, message):
     choices = {
         app.norm("🏋️ Treino"), app.norm("🏋️ Musculação"), app.norm(TODAY),
         app.norm(TOMORROW), app.norm(CHOOSE_DAY),
+        app.norm(VIEW_WEEKS), app.norm(MORE), app.norm(BACK),
         app.norm(WEEK), app.norm(NEXT), app.norm(START), app.norm(END),
         app.norm(RESTART), app.norm("🔄 Reiniciar treinos"),
     }
@@ -262,7 +283,7 @@ async def handle_message(db, token, message):
     bare_day = _day_key(command)
     # Fora da seleção de dias, "sexta"/"amanhã" continuam sendo da agenda.
     confirmations = {"encerrar", "apagar treinos", "cancelar", "nao", app.norm("❌ Cancelar ação")}
-    back = command == app.norm("⬅️ Treinos")
+    back = command == app.norm(BACK)
     if command not in choices and not match and not requested_day and not bare_day and command not in confirmations and not back:
         return False
     user = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(int(chat)).first()
@@ -329,7 +350,22 @@ async def handle_message(db, token, message):
             info = f"Semana atual: {current}/{len(app.WEEKS)} • " + ("Em andamento" if active else ("Encerrado" if finished else "Ainda não iniciado"))
         else:
             info = "Sua ficha pessoal • consulte os exercícios ou importe sua divisão"
-        await send(f"🏋️ TREINOS\n{info}\n\nConsulte a ficha, registre séries e acompanhe as cargas pelo menu.")
+        await send(f"🏋️ TREINOS\n{info}\n\nO que precisa fazer?")
+        return True
+    if back:
+        await send("🏋️ Treinos. Escolha a próxima ação.")
+        return True
+    if command == app.norm(VIEW_WEEKS):
+        await send_message(
+            token, int(chat), "📆 Planejamento: quer ver a semana atual ou as próximas?",
+            reply_markup=_kb(weeks_keyboard(owner)),
+        )
+        return True
+    if command == app.norm(MORE):
+        await send_message(
+            token, int(chat), "⚙️ Outras ações de treino:",
+            reply_markup=_kb(more_keyboard(owner, active, finished)),
+        )
         return True
     if command == app.norm(START):
         if not owner:
@@ -395,7 +431,7 @@ async def handle_message(db, token, message):
             lines.append(f"• Semana {number}: {n} dia(s) de treino")
         lines.append("\nToque na semana desejada ou digite: semana 3")
         menu = [[f"📆 Semana {w}" for w in remaining[i:i + 3]] for i in range(0, len(remaining), 3)]
-        menu.extend(workout_keyboard(owner, active, finished, current))
+        menu.append([BACK])
         await send_message(token, int(chat), "\n".join(lines), reply_markup=_kb(menu))
         return True
     if match:
@@ -408,16 +444,7 @@ async def handle_message(db, token, message):
 
 
 def install():
-    # Teclados legados (inclusive resposta ao salvar uma série) nunca devem
-    # continuar exibindo Começar os trabalhos após a ativação.
-    # Respostas do fluxo guiado usam o teclado legado do app; mantenha nelas
-    # as mesmas consultas rápidas disponíveis ao abrir a área Treino.
-    replaced = {START, "🔄 Reiniciar treinos", TODAY, TOMORROW, CHOOSE_DAY,
-                WEEK, NEXT, "📝 Registrar série"}
-    base = [[item for item in row if item not in replaced] for row in app.WORKOUT_KB]
-    base = [row for row in base if row]
-    app.WORKOUT_KB = [
-        [TODAY, TOMORROW],
-        [CHOOSE_DAY, WEEK],
-        [NEXT, "📝 Registrar série"],
-    ] + base
+    # Respostas do assistente antigo (incluindo após registrar uma série)
+    # voltam ao mesmo menu enxuto. Estado/ativação são avaliados ao entrar
+    # em Treino; por isso o teclado estático não exibe ações destrutivas.
+    app.WORKOUT_KB = workout_keyboard(owner=False)
