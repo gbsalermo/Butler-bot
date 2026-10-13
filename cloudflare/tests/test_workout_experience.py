@@ -105,9 +105,13 @@ def test_menu_e_protocolo_trocam_acoes_sem_duplicar_inicio(monkeypatch):
     assert run("🏋️ Treino")
     assert ux.START in _buttons(sent[-1][1])
     assert ux.END not in _buttons(sent[-1][1])
+    assert ux.RESTART not in _buttons(sent[-1][1])
     assert run(ux.START)
     assert run("🏋️ Treino")
     assert ux.START not in _buttons(sent[-1][1])
+    assert ux.END not in _buttons(sent[-1][1])
+    assert ux.MORE in _buttons(sent[-1][1])
+    assert run(ux.MORE)
     assert ux.END in _buttons(sent[-1][1])
     assert ux.RESTART in _buttons(sent[-1][1])
     assert run(ux.START)
@@ -129,6 +133,8 @@ def test_fim_preserva_historico_e_reinicio_exige_confirmacao(monkeypatch):
     assert db.count("protocol_mass_set_logs") == 1
     assert run("🏋️ Treino")
     assert ux.START not in _buttons(sent[-1][1])
+    assert ux.RESTART not in _buttons(sent[-1][1])
+    assert run(ux.MORE)
     assert ux.RESTART in _buttons(sent[-1][1])
 
     assert run(ux.RESTART)
@@ -290,7 +296,7 @@ def test_comandos_de_treino_nao_interrompem_fluxos_de_agenda(monkeypatch):
     assert state == "agenda_date"
 
 
-def test_menu_legado_tambem_oferece_escolher_dia_apos_registro(monkeypatch):
+def test_menu_legado_retorna_ao_menu_enxuto_apos_registro(monkeypatch):
     monkeypatch.setattr(app, "WORKOUT_KB", [
         [ux.START, ux.TODAY],
         ["📝 Registrar série", "🔁 Substituir exercício"],
@@ -299,8 +305,93 @@ def test_menu_legado_tambem_oferece_escolher_dia_apos_registro(monkeypatch):
     ])
     ux.install()
     buttons = [button for row in app.WORKOUT_KB for button in row]
-    assert ux.TOMORROW in buttons
     assert ux.CHOOSE_DAY in buttons
-    assert ux.WEEK in buttons
+    assert ux.VIEW_WEEKS in buttons
+    assert ux.MORE in buttons
+    assert ux.WEEK not in buttons
+    assert ux.TOMORROW not in buttons
     assert ux.START not in buttons
+    assert ux.RESTART not in buttons
     assert buttons.count("📝 Registrar série") == 1
+    assert len(buttons) == 7
+
+
+def test_menu_compacto_prioriza_consulta_registro_e_progresso(monkeypatch):
+    db, sent = _setup(monkeypatch)
+    run = lambda text: asyncio.run(ux.handle_message(db, "token", _message(text)))
+    assert run(ux.START)
+    assert run("🏋️ Treino")
+    main = _buttons(sent[-1][1])
+    assert main == [
+        ux.TODAY, ux.CHOOSE_DAY,
+        ux.VIEW_WEEKS, "📝 Registrar série",
+        "📈 Progresso", ux.MORE,
+        "⬅️ Início",
+    ]
+    assert ux.TOMORROW not in main
+    assert ux.NEXT not in main
+    assert "📊 Histórico de cargas" not in main
+    assert "📥 Importar treino por PDF/texto" not in main
+    assert ux.END not in main and ux.RESTART not in main
+
+    assert run(ux.MORE)
+    advanced = _buttons(sent[-1][1])
+    assert "✅ Finalizar treino" in advanced
+    assert "😕 Não consegui treinar hoje" in advanced
+    assert "📊 Histórico de cargas" in advanced
+    assert "🔁 Substituir exercício" in advanced
+    assert ux.END in advanced and ux.RESTART in advanced
+    assert ux.BACK in advanced
+    assert run(ux.BACK)
+    assert _buttons(sent[-1][1]) == main
+
+
+def test_submenu_semanas_mantem_acesso_a_atual_e_futuras(monkeypatch):
+    db, sent = _setup_calendar(monkeypatch)
+    run = lambda text: asyncio.run(ux.handle_message(db, "token", _message(text)))
+    assert run(ux.VIEW_WEEKS)
+    assert _buttons(sent[-1][1]) == [ux.WEEK, ux.NEXT, ux.BACK]
+    assert run(ux.WEEK)
+    assert "Supino reto" in sent[-1][0]
+    assert ux.BACK in _buttons(sent[-1][1])
+    assert ux.MORE not in _buttons(sent[-1][1])
+    assert run(ux.BACK)
+    assert ux.MORE in _buttons(sent[-1][1])
+    assert run(ux.VIEW_WEEKS)
+    assert run(ux.NEXT)
+    assert "Semana 2" in sent[-1][0]
+    assert ux.BACK in _buttons(sent[-1][1])
+
+
+def test_inicio_e_reinicio_nao_confundem_estado_e_nem_expoem_acao_perigosa(monkeypatch):
+    db, sent = _setup(monkeypatch)
+    run = lambda text: asyncio.run(ux.handle_message(db, "token", _message(text)))
+    assert run("🏋️ Treino")
+    assert ux.START in _buttons(sent[-1][1])
+    assert run(ux.MORE)
+    assert ux.RESTART not in _buttons(sent[-1][1])
+    assert ux.END not in _buttons(sent[-1][1])
+    assert run(ux.START)
+    assert run("🏋️ Treino")
+    assert ux.START not in _buttons(sent[-1][1])
+    assert run(ux.MORE)
+    assert ux.RESTART in _buttons(sent[-1][1])
+    assert run(ux.RESTART)
+    assert db.conn.execute("SELECT active FROM protocol_mass_state").fetchone()[0] == 1
+    assert run("❌ Cancelar ação")
+    assert db.conn.execute("SELECT active FROM protocol_mass_state").fetchone()[0] == 1
+
+
+def test_perfil_generico_nao_exibe_acoes_de_protocolo(monkeypatch):
+    db, sent = _setup(monkeypatch)
+    monkeypatch.setattr(ux, "is_owner", lambda _: False)
+    run = lambda text: asyncio.run(ux.handle_message(db, "token", _message(text)))
+    assert run("🏋️ Treino")
+    assert ux.START not in _buttons(sent[-1][1])
+    assert run(ux.MORE)
+    advanced = _buttons(sent[-1][1])
+    assert ux.END not in advanced
+    assert ux.RESTART not in advanced
+    assert "📥 Importar treino por PDF/texto" in advanced
+    assert run(ux.VIEW_WEEKS)
+    assert _buttons(sent[-1][1]) == [ux.WEEK, ux.BACK]
