@@ -1,14 +1,8 @@
-# Treino — registro rápido com conexão instável
+# Butler — experiência de musculação e conexão instável
 
-## Problema
+## Registro rápido
 
-O Butler roda remotamente em Telegram → Cloudflare Worker. Sem internet, o
-Worker não recebe a mensagem e portanto não consegue manter uma fila local no
-celular.
-
-## Solução aplicada
-
-Cada série pode ser enviada como uma mensagem autossuficiente:
+A entrada padrão por mensagem autossuficiente é:
 
 ```text
 Supino reto | 40 kg | 12 reps
@@ -16,22 +10,57 @@ Supino reto | 45 kg | 10 reps
 Supino reto | 50 kg | 8 reps
 ```
 
-Quando essas mensagens chegarem ao Telegram/Worker, cada uma é processada
-independentemente e na ordem recebida. O usuário não precisa manter o wizard
-"Registrar série" aberto entre uma mensagem e outra.
+Cada mensagem tem exercício, carga e repetições completos. O nome precisa ser igual
+ao da ficha do dia; dados inválidos não são gravados. O registro rápido é processado
+antes dos fluxos guiados, e a confirmação é enviada somente após o banco reconhecer
+a mensagem. A migration `0016_workout_quick_log.sql` adiciona o identificador de
+origem e índices únicos ao histórico para proteger contra reentrega do Telegram.
 
-O nome do exercício precisa corresponder ao treino do dia. Isso evita gravar
-silenciosamente uma série em um exercício digitado errado.
+A data usada é a da mensagem original no Telegram, e não a data da conexão de volta.
+Se a mensagem não chegar ao Telegram, não há fila local sob controle do Worker:
+não se trata de suporte totalmente offline.
 
-## Idempotência
+## Menu contextual
 
-A migration `0016_workout_quick_log.sql` adiciona `source_message_id` às duas
-fontes atuais de séries e índices únicos por usuário. Se o mesmo update do
-Telegram for entregue novamente, a série não é duplicada.
+```text
+🏋️ Treino
+📅 Treino de hoje            🗓️ Semana completa
+📆 Próximas semanas          📝 Registrar série
+✅ Finalizar treino          📊 Histórico de cargas
+🔁 Substituir exercício      📈 Progresso
+[estado do protocolo]        📥 Importar treino por PDF/texto
+⬅️ Início
+```
 
-## Limite arquitetural
+A ação de protocolo depende do estado:
 
-Isto não transforma o Worker em aplicativo offline. Se o cliente Telegram não
-conseguir armazenar/enviar uma mensagem sem conexão, o Butler não tem acesso a
-ela. A melhoria garante processamento seguro quando a mensagem efetivamente
-for entregue ao bot.
+- ainda não iniciado: `🚀 Começar os trabalhos`;
+- ativo: `⏹️ Encerrar trabalhos` e `🔄 Reiniciar os trabalhos`;
+- encerrado: somente `🔄 Reiniciar os trabalhos`.
+
+Encerrar preserva histórico e exige confirmação `ENCERRAR`. Reiniciar volta à
+semana 1 e apaga registros do perfil **apenas** após `APAGAR TREINOS`.
+Cancelar não altera o banco. `✅ Finalizar treino` trata somente o dia atual,
+e não encerra o protocolo.
+
+## Consulta semanal
+
+- `🗓️ Semana completa` mostra os sete dias (inclusive sem treino);
+- `📆 Próximas semanas` lista as semanas seguintes do protocolo;
+- `📆 Semana 2` ou `semana 2` abre a ficha completa da semana escolhida;
+- consultar semanas futuras não muda `current_week` e não registra progresso.
+
+O perfil genérico mantém a própria divisão semanal, sem acesso ao protocolo
+pessoal. A progressão automática entre semanas **não** foi adicionada: a semana
+atual permanece determinada pelo estado já existente, sem avanços silenciosos.
+
+## Validação e deploy
+
+- `python -m compileall -q src`
+- `pytest -q`
+- conferir aplicação da migration 0016 no D1 correto;
+- validar webhook/deploy do Worker `salbutler-bot` separadamente;
+- testar no Telegram real com 2 séries distintas, 1 reenvio, menu antes/depois
+  de iniciar e consulta de semana futura.
+
+**CI verde não significa deploy executado.**
