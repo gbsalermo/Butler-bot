@@ -288,3 +288,19 @@ def test_comandos_de_treino_nao_interrompem_fluxos_de_agenda(monkeypatch):
     assert asyncio.run(ux.handle_message(db, "token", _message("treino de sexta"))) is False
     state, _ = asyncio.run(app.get_state(db, 1))
     assert state == "agenda_date"
+
+
+def test_menu_legado_tambem_oferece_escolher_dia_apos_registro(monkeypatch):
+    monkeypatch.setattr(app, "WORKOUT_KB", [
+        [ux.START, ux.TODAY],
+        ["📝 Registrar série", "🔁 Substituir exercício"],
+        ["✅ Finalizar treino", "🔄 Reiniciar treinos"],
+        ["⬅️ Início"],
+    ])
+    ux.install()
+    buttons = [button for row in app.WORKOUT_KB for button in row]
+    assert ux.TOMORROW in buttons
+    assert ux.CHOOSE_DAY in buttons
+    assert ux.WEEK in buttons
+    assert ux.START not in buttons
+    assert buttons.count("📝 Registrar série") == 1
