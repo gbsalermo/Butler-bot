@@ -1,0 +1,66 @@
+# Butler — experiência de musculação e conexão instável
+
+## Registro rápido
+
+A entrada padrão por mensagem autossuficiente é:
+
+```text
+Supino reto | 40 kg | 12 reps
+Supino reto | 45 kg | 10 reps
+Supino reto | 50 kg | 8 reps
+```
+
+Cada mensagem tem exercício, carga e repetições completos. O nome precisa ser igual
+ao da ficha do dia; dados inválidos não são gravados. O registro rápido é processado
+antes dos fluxos guiados, e a confirmação é enviada somente após o banco reconhecer
+a mensagem. A migration `0016_workout_quick_log.sql` adiciona o identificador de
+origem e índices únicos ao histórico para proteger contra reentrega do Telegram.
+
+A data usada é a da mensagem original no Telegram, e não a data da conexão de volta.
+Se a mensagem não chegar ao Telegram, não há fila local sob controle do Worker:
+não se trata de suporte totalmente offline.
+
+## Menu contextual
+
+```text
+🏋️ Treino
+📅 Treino de hoje            🗓️ Semana completa
+📆 Próximas semanas          📝 Registrar série
+✅ Finalizar treino          📊 Histórico de cargas
+🔁 Substituir exercício      📈 Progresso
+[estado do protocolo]        📥 Importar treino por PDF/texto
+⬅️ Início
+```
+
+A ação de protocolo depende do estado:
+
+- ainda não iniciado: `🚀 Começar os trabalhos`;
+- ativo: `⏹️ Encerrar trabalhos` e `🔄 Reiniciar os trabalhos`;
+- encerrado: somente `🔄 Reiniciar os trabalhos`.
+
+Encerrar preserva histórico e exige confirmação `ENCERRAR`. Reiniciar volta à
+semana 1 e apaga registros do perfil **apenas** após `APAGAR TREINOS`.
+Cancelar não altera o banco. `✅ Finalizar treino` trata somente o dia atual,
+e não encerra o protocolo.
+
+## Consulta semanal
+
+- `🗓️ Semana completa` mostra os sete dias (inclusive sem treino);
+- `📆 Próximas semanas` lista as semanas seguintes do protocolo;
+- `📆 Semana 2` ou `semana 2` abre a ficha completa da semana escolhida;
+- consultar semanas futuras não muda `current_week` e não registra progresso.
+
+O perfil genérico mantém a própria divisão semanal, sem acesso ao protocolo
+pessoal. A progressão automática entre semanas **não** foi adicionada: a semana
+atual permanece determinada pelo estado já existente, sem avanços silenciosos.
+
+## Validação e deploy
+
+- `python -m compileall -q src`
+- `pytest -q`
+- conferir aplicação da migration 0016 no D1 correto;
+- validar webhook/deploy do Worker `salbutler-bot` separadamente;
+- testar no Telegram real com 2 séries distintas, 1 reenvio, menu antes/depois
+  de iniciar e consulta de semana futura.
+
+**CI verde não significa deploy executado.**
