@@ -187,6 +187,10 @@ async def handle_message(db, token, message):
         app.norm(RESTART), app.norm("🔄 Reiniciar treinos"),
     }
     match = re.fullmatch(r"(?:semana)\s+(\d{1,2})", command)
+    # Conversas e fluxos alheios a treino não devem pagar consultas ao D1.
+    confirmations = {"encerrar", "apagar treinos", "cancelar", "nao", app.norm("❌ Cancelar ação")}
+    if command not in choices and not match and command not in confirmations:
+        return False
     user = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(int(chat)).first()
     if not user:
         return False
@@ -194,6 +198,9 @@ async def handle_message(db, token, message):
     state, _ = await app.get_state(db, uid)
     confirmation = state in ("workout_end_confirm", "workout_restart_confirm")
     if not confirmation and command not in choices and not match:
+        return False
+    # "semana 2" pode ser a resposta de outro wizard: preserve-o.
+    if match and state and not confirmation:
         return False
     current, active, finished = await _status(db, uid, owner)
 
