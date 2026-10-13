@@ -263,7 +263,7 @@ async def handle_message(db, token, message):
     # Fora da seleção de dias, "sexta"/"amanhã" continuam sendo da agenda.
     confirmations = {"encerrar", "apagar treinos", "cancelar", "nao", app.norm("❌ Cancelar ação")}
     back = command == app.norm("⬅️ Treinos")
-    if command not in choices and not match and not requested_day and not bare_day and not confirmations and not back:
+    if command not in choices and not match and not requested_day and not bare_day and command not in confirmations and not back:
         return False
     user = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(int(chat)).first()
     if not user:
