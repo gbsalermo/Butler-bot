@@ -185,3 +185,122 @@ def test_registro_inativo_bloqueado_e_parser_estrito(monkeypatch):
     assert quick.parse_quick_series("Supino reto | pesado | 10 reps") is None
     assert quick.parse_quick_series("Supino reto | 20 kg | muitas reps") is None
     assert quick.parse_quick_series("Supino reto | 20 kg | 10 reps") is not None
+
+
+def _setup_calendar(monkeypatch, reference=datetime(2026, 10, 13, 9, 0, tzinfo=app.LOCAL_TZ)):
+    # Terça-feira fixa; evita que a suíte dependa do dia do CI.
+    monkeypatch.setattr(app, "now_local", lambda: reference)
+    db, sent = _setup(monkeypatch)
+    monkeypatch.setattr(app, "WEEKS", {
+        "1": {
+            "terça-feira": [{"name": "Supino reto", "series": 3, "reps": "10"}],
+            "quarta-feira": [{"name": "Remada baixa", "series": 3, "reps": "12"}],
+            "sexta-feira": [{"name": "Puxada alta", "series": 4, "reps": "10"}],
+            "sábado": [{"name": "Agachamento", "series": 3, "reps": "12"}],
+        },
+        "2": {"sexta-feira": [{"name": "Outra ficha", "series": 3, "reps": "10"}]},
+    })
+    return db, sent
+
+
+def test_amanha_e_dias_da_semana_mostram_so_o_dia_solicitado(monkeypatch):
+    db, sent = _setup_calendar(monkeypatch)
+    run = lambda text: asyncio.run(ux.handle_message(db, "token", _message(text)))
+    run(ux.START)
+
+    assert run(ux.TOMORROW)
+    assert "QUARTA • 14/10/2026" in sent[-1][0]
+    assert "Remada baixa" in sent[-1][0]
+    assert "Puxada alta" not in sent[-1][0]
+
+    assert run("treino de sexta")
+    assert "SEXTA • 16/10/2026" in sent[-1][0]
+    assert "Puxada alta" in sent[-1][0]
+    assert "Agachamento" not in sent[-1][0]
+
+    assert run("qual o treino de sábado?")
+    assert "SÁBADO • 17/10/2026" in sent[-1][0]
+    assert "Agachamento" in sent[-1][0]
+    assert db.conn.execute("SELECT current_week FROM protocol_mass_state").fetchone()[0] == 1
+    assert db.count("protocol_mass_set_logs") == 0
+
+
+def test_escolher_dia_abre_teclado_e_aceita_dia_curto_apenas_no_fluxo(monkeypatch):
+    db, sent = _setup_calendar(monkeypatch)
+    run = lambda text: asyncio.run(ux.handle_message(db, "token", _message(text)))
+
+    assert run("sexta") is False
+    assert run("amanhã") is False
+    assert run(ux.CHOOSE_DAY)
+    state, _ = asyncio.run(app.get_state(db, 1))
+    assert state == ux.CHOOSE_STATE
+    assert "📅 Sexta" in _buttons(sent[-1][1])
+
+    assert run("sexta")
+    assert "Puxada alta" in sent[-1][0]
+    state, _ = asyncio.run(app.get_state(db, 1))
+    assert state is None
+
+    assert run(ux.CHOOSE_DAY)
+    assert run("⬅️ Treinos")
+    state, _ = asyncio.run(app.get_state(db, 1))
+    assert state is None
+    assert ux.CHOOSE_DAY in _buttons(sent[-1][1])
+
+
+def test_proximo_dia_da_semana_usa_proxima_ocorrencia_inclusive(monkeypatch):
+    db, sent = _setup_calendar(
+        monkeypatch,
+        reference=datetime(2026, 10, 18, 9, 0, tzinfo=app.LOCAL_TZ),  # domingo
+    )
+    run = lambda text: asyncio.run(ux.handle_message(db, "token", _message(text)))
+    assert run("treino de sábado")
+    assert "24/10/2026" in sent[-1][0]
+    assert run("treino de amanhã")
+    assert "SEGUNDA • 19/10/2026" in sent[-1][0]
+    assert "Nenhum treino cadastrado" in sent[-1][0]
+
+
+def test_consulta_generica_por_dia_nao_altera_protocolo_pessoal(monkeypatch):
+    db, sent = _setup_calendar(monkeypatch)
+    monkeypatch.setattr(ux, "is_owner", lambda _: False)
+
+    original_plan = app.workout_plan
+
+    async def generic_plan(db, uid, owner, target=None):
+        if not owner:
+            exercise = [{"name": "Elevação lateral", "sets": "3", "reps": "12", "raw": None}]
+            return app.WEEKDAY_NAMES[target.weekday()], None, 1, exercise
+        return await original_plan(db, uid, owner, target)
+
+    monkeypatch.setattr(app, "workout_plan", generic_plan)
+    run = lambda text: asyncio.run(ux.handle_message(db, "token", _message(text)))
+    assert run("treino para sexta-feira")
+    assert "Elevação lateral" in sent[-1][0]
+    assert "Semana" not in sent[-1][0]
+    assert db.conn.execute("SELECT active FROM protocol_mass_state").fetchone()[0] == 0
+
+
+def test_comandos_de_treino_nao_interrompem_fluxos_de_agenda(monkeypatch):
+    db, _ = _setup_calendar(monkeypatch)
+    asyncio.run(app.set_state(db, 1, "agenda_date", {}))
+    assert asyncio.run(ux.handle_message(db, "token", _message("amanhã"))) is False
+    assert asyncio.run(ux.handle_message(db, "token", _message("treino de sexta"))) is False
+    state, _ = asyncio.run(app.get_state(db, 1))
+    assert state == "agenda_date"
+
+
+def test_menu_legado_tambem_oferece_escolher_dia_apos_registro(monkeypatch):
+    monkeypatch.setattr(app, "WORKOUT_KB", [
+        [ux.START, ux.TODAY],
+        ["📝 Registrar série", "🔁 Substituir exercício"],
+        ["✅ Finalizar treino", "🔄 Reiniciar treinos"],
+        ["⬅️ Início"],
+    ])
+    ux.install()
+    buttons = [button for row in app.WORKOUT_KB for button in row]
+    assert ux.TOMORROW in buttons
+    assert ux.CHOOSE_DAY in buttons
+    assert ux.WEEK in buttons
+    assert ux.START not in buttons
+    assert buttons.count("📝 Registrar série") == 1
