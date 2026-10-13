@@ -410,9 +410,14 @@ async def handle_message(db, token, message):
 def install():
     # Teclados legados (inclusive resposta ao salvar uma série) nunca devem
     # continuar exibindo Começar os trabalhos após a ativação.
-    base = [row[:] for row in app.WORKOUT_KB]
-    base = [[x for x in row if x != START and x != "🔄 Reiniciar treinos"] for row in base]
+    # Respostas do fluxo guiado usam o teclado legado do app; mantenha nelas
+    # as mesmas consultas rápidas disponíveis ao abrir a área Treino.
+    replaced = {START, "🔄 Reiniciar treinos", TODAY, TOMORROW, CHOOSE_DAY,
+                WEEK, NEXT, "📝 Registrar série"}
+    base = [[item for item in row if item not in replaced] for row in app.WORKOUT_KB]
     base = [row for row in base if row]
-    if not any(WEEK in row for row in base):
-        base.insert(1, [WEEK, NEXT])
-    app.WORKOUT_KB = base
+    app.WORKOUT_KB = [
+        [TODAY, TOMORROW],
+        [CHOOSE_DAY, WEEK],
+        [NEXT, "📝 Registrar série"],
+    ] + base
