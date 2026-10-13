@@ -24,7 +24,8 @@ não se trata de suporte totalmente offline.
 
 ```text
 🏋️ Treino
-📅 Treino de hoje            🗓️ Semana completa
+📅 Treino de hoje            📅 Treino de amanhã
+🗓️ Escolher dia             🗓️ Semana completa
 📆 Próximas semanas          📝 Registrar série
 ✅ Finalizar treino          📊 Histórico de cargas
 🔁 Substituir exercício      📈 Progresso
@@ -43,8 +44,20 @@ semana 1 e apaga registros do perfil **apenas** após `APAGAR TREINOS`.
 Cancelar não altera o banco. `✅ Finalizar treino` trata somente o dia atual,
 e não encerra o protocolo.
 
-## Consulta semanal
+## Consulta por dia e por semana
 
+- `📅 Treino de amanhã` abre somente a ficha de amanhã;
+- `🗓️ Escolher dia` permite tocar em Segunda, Terça, Quarta, Quinta, Sexta,
+  Sábado ou Domingo, ou digitar o dia enquanto o seletor estiver aberto;
+- comandos livres e explícitos também funcionam: `treino de amanhã`,
+  `treino de sexta`, `qual o treino de sábado?`;
+- dias da semana usam a próxima ocorrência, incluindo o dia de hoje quando
+  coincidir; a resposta informa a data calculada;
+- `amanhã`, `sexta` ou `sábado` sem contexto de treino **não**
+  sequestram os fluxos de agenda; só são usados como resposta quando a escolha
+  de dia estiver aberta;
+- consultas de dias futuros exibem a ficha planejada, não fingem séries
+  registradas e não avançam o protocolo;
 - `🗓️ Semana completa` mostra os sete dias (inclusive sem treino);
 - `📆 Próximas semanas` lista as semanas seguintes do protocolo;
 - `📆 Semana 2` ou `semana 2` abre a ficha completa da semana escolhida;
