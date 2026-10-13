@@ -7,6 +7,9 @@ from owner_profile import is_owner
 from telegram_api import send_message
 
 TODAY = "📅 Treino de hoje"
+TOMORROW = "📅 Treino de amanhã"
+CHOOSE_DAY = "🗓️ Escolher dia"
+CHOOSE_STATE = "workout_choose_day"
 WEEK = "🗓️ Semana completa"
 NEXT = "📆 Próximas semanas"
 START = "🚀 Começar os trabalhos"
@@ -25,7 +28,8 @@ def _get(row, key, default=None):
 
 def workout_keyboard(owner, active=False, finished=False, week=None):
     rows = [
-        [TODAY, WEEK],
+        [TODAY, TOMORROW],
+        [CHOOSE_DAY, WEEK],
         [NEXT, "📝 Registrar série"],
         ["✅ Finalizar treino", "📊 Histórico de cargas"],
         ["🔁 Substituir exercício", "📈 Progresso"],
@@ -165,6 +169,72 @@ async def _today_text(db, uid, owner):
     return "\n".join(out)
 
 
+def _day_key(value):
+    """Converte um dia reconhecido em uma chave (sem inferir conversas comuns)."""
+    value = app.norm(value)
+    if value in ("hoje", "amanha"):
+        return value
+    for index, weekday in enumerate(app.WEEKDAY_NAMES):
+        if value in (app.norm(weekday), app.norm(DAY_NAMES[index])):
+            return str(index)
+    return None
+
+
+def _explicit_day_request(text):
+    """Aceita apenas comandos claramente relacionados ao treino."""
+    normalized = app.norm(text)
+    for prefix in ("qual e o ", "qual o ", "qual ", "me mostra o ",
+                   "mostra o ", "quero ver o ", "ver o "):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):]
+            break
+    match = re.fullmatch(r"treino(?: de| da| do| para| na| no)? (.+)", normalized)
+    return _day_key(match.group(1)) if match else None
+
+
+def _target_day(key, today):
+    if key == "hoje":
+        return today
+    if key == "amanha":
+        return today + timedelta(days=1)
+    return today + timedelta(days=(int(key) - today.weekday()) % 7)
+
+
+def _day_keyboard():
+    return [
+        [TOMORROW, "📅 Segunda", "📅 Terça"],
+        ["📅 Quarta", "📅 Quinta", "📅 Sexta"],
+        ["📅 Sábado", "📅 Domingo"],
+        ["⬅️ Treinos"],
+    ]
+
+
+async def show_day(db, token, chat, uid, owner, target):
+    """Consulta por data: sem salvar execução, avançar ciclo ou lançar séries."""
+    today = app.now_local().date()
+    current, active, finished = await _status(db, uid, owner)
+    if target == today:
+        content = await _today_text(db, uid, owner)
+    else:
+        weekday, week, _active, plan = await app.workout_plan(db, uid, owner, target)
+        exercises = _week_exercises(owner, current, weekday, plan)
+        header = (
+            f"🏋️ TREINO DE {DAY_NAMES[target.weekday()].upper()} • {target.strftime('%d/%m/%Y')}"
+            + (f"\n📋 Semana {current}/{len(app.WEEKS)} do protocolo (consulta)" if owner else "")
+        )
+        if exercises:
+            content = "\n".join(
+                [header, ""] + _exercise_lines(exercises)
+                + ["", "📌 Prévia da ficha; nenhum registro foi alterado."]
+            )
+        else:
+            content = header + "\n\n▫️ Nenhum treino cadastrado para este dia."
+    await send_message(
+        token, chat, content,
+        reply_markup=_kb(workout_keyboard(owner, active, finished, current)),
+    )
+
+
 async def _restart(db, uid):
     # Histórico só pode ser apagado após confirmação explícita.
     for table in ("workout_logs", "workout_set_logs", "protocol_mass_sessions", "protocol_mass_set_logs"):
@@ -183,13 +253,17 @@ async def handle_message(db, token, message):
     command = app.norm(text)
     choices = {
         app.norm("🏋️ Treino"), app.norm("🏋️ Musculação"), app.norm(TODAY),
+        app.norm(TOMORROW), app.norm(CHOOSE_DAY),
         app.norm(WEEK), app.norm(NEXT), app.norm(START), app.norm(END),
         app.norm(RESTART), app.norm("🔄 Reiniciar treinos"),
     }
     match = re.fullmatch(r"(?:semana)\s+(\d{1,2})", command)
-    # Conversas e fluxos alheios a treino não devem pagar consultas ao D1.
+    requested_day = _explicit_day_request(text)
+    bare_day = _day_key(command)
+    # Fora da seleção de dias, "sexta"/"amanhã" continuam sendo da agenda.
     confirmations = {"encerrar", "apagar treinos", "cancelar", "nao", app.norm("❌ Cancelar ação")}
-    if command not in choices and not match and command not in confirmations:
+    back = command == app.norm("⬅️ Treinos")
+    if command not in choices and not match and not requested_day and not bare_day and not confirmations and not back:
         return False
     user = await db.prepare("SELECT id FROM users WHERE telegram_chat_id=?").bind(int(chat)).first()
     if not user:
@@ -197,16 +271,36 @@ async def handle_message(db, token, message):
     uid = int(_get(user, "id"))
     state, _ = await app.get_state(db, uid)
     confirmation = state in ("workout_end_confirm", "workout_restart_confirm")
-    if not confirmation and command not in choices and not match:
+    choosing = state == CHOOSE_STATE
+    if not confirmation and command not in choices and not match and not requested_day and not choosing:
         return False
-    # "semana 2" pode ser a resposta de outro wizard: preserve-o.
-    if match and state and not confirmation:
+    # Não sequestrar respostas de outros fluxos, como uma data da agenda.
+    if state and not choosing and not confirmation and (match or requested_day):
         return False
     current, active, finished = await _status(db, uid, owner)
 
     async def send(text_to_send):
         await send_message(token, int(chat), text_to_send,
                            reply_markup=_kb(workout_keyboard(owner, active, finished, current)))
+
+    if choosing:
+        if back or command in ("cancelar", app.norm("❌ Cancelar ação")):
+            await app.clear_state(db, uid)
+            await send("🏋️ Treinos. Escolha uma das opções abaixo.")
+            return True
+        selected_day = requested_day or bare_day
+        if selected_day is not None:
+            await app.clear_state(db, uid)
+            await show_day(db, token, int(chat), uid, owner, _target_day(selected_day, app.now_local().date()))
+            return True
+        if command not in choices and not match:
+            await send_message(
+                token, int(chat),
+                "Escolha um dia no teclado ou digite segunda, terça, ... sábado, domingo.",
+                reply_markup=_kb(_day_keyboard()),
+            )
+            return True
+        await app.clear_state(db, uid)
 
     if confirmation:
         if command in (app.norm("❌ Cancelar ação"), "cancelar", "nao"):
@@ -269,8 +363,19 @@ async def handle_message(db, token, message):
             await send_message(token, int(chat), "⚠️ Reiniciar apaga todo o histórico de treino registrado neste perfil e volta para a semana 1.\n\nResponda APAGAR TREINOS ou Cancelar.",
                                reply_markup=_kb([["APAGAR TREINOS", "❌ Cancelar ação"]]))
         return True
+    if command == app.norm(CHOOSE_DAY):
+        await app.set_state(db, uid, CHOOSE_STATE, {})
+        await send_message(
+            token, int(chat), "🗓️ Qual dia você quer consultar?\nPode escolher pelo botão ou digitar o dia.",
+            reply_markup=_kb(_day_keyboard()),
+        )
+        return True
     if command == app.norm(TODAY):
         await send(await _today_text(db, uid, owner))
+        return True
+    if command == app.norm(TOMORROW) or requested_day is not None:
+        key = "amanha" if command == app.norm(TOMORROW) else requested_day
+        await show_day(db, token, int(chat), uid, owner, _target_day(key, app.now_local().date()))
         return True
     if command == app.norm(WEEK):
         await show_week(db, token, int(chat), uid, owner, current)
