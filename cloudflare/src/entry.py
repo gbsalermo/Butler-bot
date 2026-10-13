@@ -50,7 +50,9 @@ from task_context_patch import handle_message as handle_task_context, install as
 from task_emoji_patch import install as install_task_emoji_patch
 from telegram_api import send_message
 from ux_bugfixes import handle_global_navigation, install as install_ux_bugfixes
-from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress\nfrom workout_quick_log import handle_message as handle_workout_quick_log
+from workout_progress_patch import handle_message as handle_workout_progress, install as install_workout_progress
+from workout_quick_log import handle_message as handle_workout_quick_log
+from workout_experience import handle_message as handle_workout_experience, install as install_workout_experience
 
 
 install_performance_patches()
@@ -75,6 +77,7 @@ install_workout_progress()
 install_scheduled_delivery_guard()
 install_operational_menu()
 install_production_usability()
+install_workout_experience()
 
 
 BASE_BUTTONS = {
@@ -174,6 +177,14 @@ async def dispatch_message(db, token, message):
             return True
 
     if await handle_production_usability(db, token, message):
+        return True
+
+    # Ações e confirmações de treino antes dos menus/atalhos legados.
+    if await handle_workout_experience(db, token, message):
+        return True
+
+    # Cada série é independente, inclusive em reentregas do Telegram.
+    if await handle_workout_quick_log(db, token, message):
         return True
 
     if await _run_message_handlers(
