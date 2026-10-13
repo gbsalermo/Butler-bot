@@ -275,7 +275,7 @@ async def handle_message(db, token, message):
     if not confirmation and command not in choices and not match and not requested_day and not choosing:
         return False
     # Não sequestrar respostas de outros fluxos, como uma data da agenda.
-    if state and not choosing and not confirmation and (match or requested_day):
+    if state and not choosing and not confirmation and (match or (requested_day and command not in choices)):
         return False
     current, active, finished = await _status(db, uid, owner)
 
